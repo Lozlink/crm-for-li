@@ -50,6 +50,13 @@ export interface MapRegion {
   longitudeDelta: number;
 }
 
+export interface SavedSuburb {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+
 export interface PlacePrediction {
   place_id: string;
   description: string;

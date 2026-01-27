@@ -36,19 +36,6 @@ function ContactCard({ contact, onPress }: ContactCardProps) {
             )}
           </View>
 
-          {contact.email && (
-            <View style={styles.infoRow}>
-              <Icon name="email-outline" size={14} color={theme.colors.onSurfaceVariant} />
-              <Text
-                variant="bodySmall"
-                numberOfLines={1}
-                style={[styles.infoText, { color: theme.colors.onSurfaceVariant }]}
-              >
-                {contact.email}
-              </Text>
-            </View>
-          )}
-
           {contact.address && (
             <View style={styles.infoRow}>
               <Icon name="map-marker-outline" size={14} color={theme.colors.onSurfaceVariant} />
@@ -58,6 +45,19 @@ function ContactCard({ contact, onPress }: ContactCardProps) {
                 style={[styles.infoText, { color: theme.colors.onSurfaceVariant }]}
               >
                 {contact.address}
+              </Text>
+            </View>
+          )}
+
+          {contact.email && (
+            <View style={styles.infoRow}>
+              <Icon name="email-outline" size={14} color={theme.colors.onSurfaceVariant} />
+              <Text
+                variant="bodySmall"
+                numberOfLines={1}
+                style={[styles.infoText, { color: theme.colors.onSurfaceVariant }]}
+              >
+                {contact.email}
               </Text>
             </View>
           )}

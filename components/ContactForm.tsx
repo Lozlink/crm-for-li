@@ -12,6 +12,7 @@ interface ContactFormProps {
   isLoading?: boolean;
   submitLabel?: string;
   showNotes?: boolean;
+  minimalMode?: boolean; // For quick notes - only show address + notes
 }
 
 export default function ContactForm({
@@ -21,6 +22,7 @@ export default function ContactForm({
   isLoading = false,
   submitLabel = 'Save',
   showNotes = false,
+  minimalMode = false,
 }: ContactFormProps) {
   const theme = useTheme();
 
@@ -54,8 +56,14 @@ export default function ContactForm({
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof ContactFormData, string>> = {};
 
-    if (!formData.first_name.trim()) {
+    // In minimal mode, we don't require first_name - address is enough
+    if (!minimalMode && !formData.first_name.trim()) {
       newErrors.first_name = 'First name is required';
+    }
+
+    // In minimal mode, require either address or a note
+    if (minimalMode && !formData.address?.trim() && !formData.initial_note?.trim()) {
+      newErrors.address = 'Address or note is required';
     }
 
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -83,78 +91,119 @@ export default function ContactForm({
 
   return (
     <View style={styles.container}>
-      <TextInput
-        label="First Name *"
-        value={formData.first_name}
-        onChangeText={(v) => updateField('first_name', v)}
-        mode="outlined"
-        error={!!errors.first_name}
-        style={styles.input}
-      />
-      {errors.first_name && (
-        <HelperText type="error">{errors.first_name}</HelperText>
+      {/* Show address first in minimal mode, and always show notes */}
+      {minimalMode && (
+        <>
+          <AddressAutocomplete
+            value={formData.address}
+            onAddressSelect={handleAddressSelect}
+            style={styles.input}
+          />
+          {errors.address && (
+            <HelperText type="error">{errors.address}</HelperText>
+          )}
+          {formData.latitude && formData.longitude && (
+            <HelperText type="info" style={styles.coordsHelper}>
+              Coordinates: {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
+            </HelperText>
+          )}
+
+          <TextInput
+            label="Notes *"
+            value={formData.initial_note || ''}
+            onChangeText={(v) => updateField('initial_note', v)}
+            mode="outlined"
+            multiline
+            numberOfLines={4}
+            placeholder="e.g., For sale sign, owner interested, nice yard..."
+            style={styles.notesInput}
+          />
+
+          <TagPicker
+            selectedTagId={formData.tag_id}
+            onTagSelect={(tagId) => updateField('tag_id', tagId)}
+            style={styles.tagPicker}
+          />
+        </>
       )}
 
-      <TextInput
-        label="Last Name"
-        value={formData.last_name}
-        onChangeText={(v) => updateField('last_name', v)}
-        mode="outlined"
-        style={styles.input}
-      />
+      {/* Full form for regular contact creation */}
+      {!minimalMode && (
+        <>
+          <TextInput
+            label="First Name *"
+            value={formData.first_name}
+            onChangeText={(v) => updateField('first_name', v)}
+            mode="outlined"
+            error={!!errors.first_name}
+            style={styles.input}
+          />
+          {errors.first_name && (
+            <HelperText type="error">{errors.first_name}</HelperText>
+          )}
 
-      <TextInput
-        label="Email"
-        value={formData.email}
-        onChangeText={(v) => updateField('email', v)}
-        mode="outlined"
-        keyboardType="email-address"
-        autoCapitalize="none"
-        error={!!errors.email}
-        style={styles.input}
-      />
-      {errors.email && (
-        <HelperText type="error">{errors.email}</HelperText>
-      )}
+          <TextInput
+            label="Last Name"
+            value={formData.last_name}
+            onChangeText={(v) => updateField('last_name', v)}
+            mode="outlined"
+            style={styles.input}
+          />
 
-      <TextInput
-        label="Phone"
-        value={formData.phone}
-        onChangeText={(v) => updateField('phone', v)}
-        mode="outlined"
-        keyboardType="phone-pad"
-        style={styles.input}
-      />
+          <TextInput
+            label="Email"
+            value={formData.email}
+            onChangeText={(v) => updateField('email', v)}
+            mode="outlined"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            error={!!errors.email}
+            style={styles.input}
+          />
+          {errors.email && (
+            <HelperText type="error">{errors.email}</HelperText>
+          )}
 
-      <AddressAutocomplete
-        value={formData.address}
-        onAddressSelect={handleAddressSelect}
-        style={styles.input}
-      />
+          <TextInput
+            label="Phone"
+            value={formData.phone}
+            onChangeText={(v) => updateField('phone', v)}
+            mode="outlined"
+            keyboardType="phone-pad"
+            style={styles.input}
+          />
 
-      {formData.latitude && formData.longitude && (
-        <HelperText type="info" style={styles.coordsHelper}>
-          Coordinates: {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
-        </HelperText>
-      )}
+          <AddressAutocomplete
+            value={formData.address}
+            onAddressSelect={handleAddressSelect}
+            style={styles.input}
+          />
 
-      <TagPicker
-        selectedTagId={formData.tag_id}
-        onTagSelect={(tagId) => updateField('tag_id', tagId)}
-        style={styles.tagPicker}
-      />
+          {formData.latitude && formData.longitude && (
+            <HelperText type="info" style={styles.coordsHelper}>
+              Coordinates: {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
+            </HelperText>
+          )}
 
-      {showNotes && (
-        <TextInput
-          label="Notes"
-          value={formData.initial_note || ''}
-          onChangeText={(v) => updateField('initial_note', v)}
-          mode="outlined"
-          multiline
-          numberOfLines={3}
-          placeholder="e.g., For sale sign, owner interested, nice yard..."
-          style={styles.notesInput}
-        />
+          <TagPicker
+            selectedTagId={formData.tag_id}
+            onTagSelect={(tagId) => updateField('tag_id', tagId)}
+            style={styles.tagPicker}
+          />
+
+          {showNotes && (
+            <TextInput
+              label="Notes"
+              value={formData.initial_note || ''}
+              onChangeText={(v) => updateField('initial_note', v)}
+              mode="outlined"
+              multiline
+              numberOfLines={3}
+              placeholder="e.g., For sale sign, owner interested, nice yard..."
+              style={styles.notesInput}
+            />
+          )}
+        </>
       )}
 
       <View style={styles.buttonRow}>

@@ -17,8 +17,13 @@ export default function ContactsScreen() {
   const setSearchQuery = useCRMStore(state => state.setSearchQuery);
 
   // Filter contacts in component to avoid selector issues
+  // Exclude quick notes (contacts without first_name) - they show in Notes tab
   const contacts = useMemo(() => {
     return allContacts.filter(contact => {
+      // Must have a first name (not a quick note)
+      if (!contact.first_name) {
+        return false;
+      }
       if (selectedTagIds.length > 0 && !selectedTagIds.includes(contact.tag_id || '')) {
         return false;
       }

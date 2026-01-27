@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useLayoutEffect } from 'react';
 import { StyleSheet, View, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import ContactForm from '../../components/ContactForm';
 import { ContactFormData } from '../../lib/types';
 import { useCRMStore } from '../../lib/store';
@@ -9,13 +9,22 @@ import { useCRMStore } from '../../lib/store';
 export default function NewContactScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ lat?: string; lng?: string; address?: string }>();
+  const navigation = useNavigation();
+  const params = useLocalSearchParams<{ lat?: string; lng?: string; address?: string; quickNote?: string }>();
   const addContact = useCRMStore(state => state.addContact);
   const addActivity = useCRMStore(state => state.addActivity);
   const isLoading = useCRMStore(state => state.isLoading);
 
   // Check if coming from map (has coordinates)
   const isFromMap = !!(params.lat && params.lng);
+  const isQuickNote = params.quickNote === 'true';
+
+  // Update header title based on mode
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: isQuickNote ? 'Quick Note' : 'New Contact',
+    });
+  }, [navigation, isQuickNote]);
 
   // Pre-fill form if coming from map long-press
   const initialData = useMemo<ContactFormData | undefined>(() => {
@@ -72,6 +81,7 @@ export default function NewContactScreen() {
           onCancel={handleCancel}
           isLoading={isLoading}
           showNotes={isFromMap}
+          minimalMode={isQuickNote}
         />
       </ScrollView>
     </KeyboardAvoidingView>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { StyleSheet, View, FlatList, TouchableOpacity } from 'react-native';
 import { TextInput, Text, Surface, useTheme, ActivityIndicator } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -19,6 +19,13 @@ export default function AddressAutocomplete({
 }: AddressAutocompleteProps) {
   const theme = useTheme();
   const [query, setQuery] = useState(value);
+
+  // Sync with value prop when it changes (e.g., from reverse geocoding)
+  useEffect(() => {
+    if (value && value !== query) {
+      setQuery(value);
+    }
+  }, [value]);
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
@@ -32,13 +39,36 @@ export default function AddressAutocomplete({
 
     setIsLoading(true);
     try {
+      // Using Places API (New)
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(text)}&types=address&key=${GOOGLE_PLACES_API_KEY}`
+        'https://places.googleapis.com/v1/places:autocomplete',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
+          },
+          body: JSON.stringify({
+            input: text,
+            includedPrimaryTypes: ['street_address', 'premise', 'subpremise'],
+            languageCode: 'en',
+          }),
+        }
       );
       const data = await response.json();
 
-      if (data.status === 'OK') {
-        setPredictions(data.predictions);
+      if (data.suggestions) {
+        const transformed = data.suggestions
+          .filter((s: any) => s.placePrediction)
+          .map((s: any) => ({
+            place_id: s.placePrediction.placeId,
+            description: s.placePrediction.text?.text || '',
+            structured_formatting: {
+              main_text: s.placePrediction.structuredFormat?.mainText?.text || '',
+              secondary_text: s.placePrediction.structuredFormat?.secondaryText?.text || '',
+            },
+          }));
+        setPredictions(transformed);
         setShowResults(true);
       } else {
         setPredictions([]);
@@ -67,13 +97,29 @@ export default function AddressAutocomplete({
     if (!GOOGLE_PLACES_API_KEY) return null;
 
     try {
+      // Using Places API (New)
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_address,geometry&key=${GOOGLE_PLACES_API_KEY}`
+        `https://places.googleapis.com/v1/places/${placeId}`,
+        {
+          method: 'GET',
+          headers: {
+            'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
+            'X-Goog-FieldMask': 'formattedAddress,location',
+          },
+        }
       );
       const data = await response.json();
 
-      if (data.status === 'OK') {
-        return data.result;
+      if (data.location) {
+        return {
+          formatted_address: data.formattedAddress || '',
+          geometry: {
+            location: {
+              lat: data.location.latitude,
+              lng: data.location.longitude,
+            },
+          },
+        };
       }
       return null;
     } catch (error) {

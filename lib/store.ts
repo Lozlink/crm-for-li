@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Contact, Tag, Activity, MapRegion } from './types';
+import { Contact, Tag, Activity, MapRegion, SavedSuburb } from './types';
 import { supabase, isDemoMode, generateUUID } from './supabase';
 
 interface CRMState {
@@ -8,6 +8,7 @@ interface CRMState {
   contacts: Contact[];
   tags: Tag[];
   activities: Activity[];
+  savedSuburbs: SavedSuburb[];
 
   // UI State
   selectedTagIds: string[];
@@ -42,6 +43,10 @@ interface CRMState {
 
   addActivity: (activity: Omit<Activity, 'id' | 'created_at'>) => Promise<void>;
 
+  // Saved Suburbs
+  addSavedSuburb: (suburb: Omit<SavedSuburb, 'id'>) => void;
+  removeSavedSuburb: (id: string) => void;
+
   // Hydration
   hydrate: () => Promise<void>;
   persist: () => Promise<void>;
@@ -51,8 +56,8 @@ interface CRMState {
 const DEFAULT_REGION: MapRegion = {
   latitude: -33.8756,
   longitude: 150.8956,
-  latitudeDelta: 0.005,
-  longitudeDelta: 0.005,
+  latitudeDelta: 0.008,
+  longitudeDelta: 0.008,
 };
 
 export const useCRMStore = create<CRMState>()((set, get) => ({
@@ -60,6 +65,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
   contacts: [],
   tags: [],
   activities: [],
+  savedSuburbs: [],
   selectedTagIds: [],
   searchQuery: '',
   mapRegion: DEFAULT_REGION,
@@ -77,6 +83,21 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
 
+  // Saved Suburbs
+  addSavedSuburb: (suburb) => {
+    const newSuburb: SavedSuburb = {
+      ...suburb,
+      id: generateUUID(),
+    };
+    set(state => ({ savedSuburbs: [...state.savedSuburbs, newSuburb] }));
+    get().persist();
+  },
+
+  removeSavedSuburb: (id) => {
+    set(state => ({ savedSuburbs: state.savedSuburbs.filter(s => s.id !== id) }));
+    get().persist();
+  },
+
   // Hydration
   hydrate: async () => {
     try {
@@ -86,6 +107,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         set({
           contacts: parsed.contacts || [],
           tags: parsed.tags || [],
+          savedSuburbs: parsed.savedSuburbs || [],
           mapRegion: parsed.mapRegion || DEFAULT_REGION,
           isHydrated: true,
         });
@@ -100,10 +122,11 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
   persist: async () => {
     try {
-      const { contacts, tags, mapRegion } = get();
+      const { contacts, tags, savedSuburbs, mapRegion } = get();
       await AsyncStorage.setItem('crm-storage', JSON.stringify({
         contacts,
         tags,
+        savedSuburbs,
         mapRegion,
       }));
     } catch (e) {
