@@ -31,7 +31,11 @@
         "googleMaps": {
           "apiKey": "AIzaSyBWnCFEP0dM-NlUhwrQIFMWNLbg97gm5H4"
         }
-      }
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -49,7 +53,11 @@
     "extra": {
       "SUPABASE_URL": "https://hgciywuspoklovqzhpkc.supabase.co",
       "SUPABASE_ANON_KEY": "sb_secret_zZ1HrohMeBkN-4kNuLzAzA_Ho1QaQVG",
-      "GOOGLE_PLACES_API_KEY": "AIzaSyBWnCFEP0dM-NlUhwrQIFMWNLbg97gm5H4"
+      "GOOGLE_PLACES_API_KEY": "AIzaSyBWnCFEP0dM-NlUhwrQIFMWNLbg97gm5H4",
+      "router": {},
+      "eas": {
+        "projectId": "aed13454-1087-4558-a758-266f2bdddb63"
+      }
     }
   }
 }
