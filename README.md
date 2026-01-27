@@ -4,19 +4,28 @@ A mobile-first CRM application with Google Maps integration for managing real es
 
 ## Features
 
-- **Map View**: Full-screen Google Maps with clustered contact markers
+- **Map View**: Full-screen Google Maps centered on Greenfield Park, NSW with street-level zoom for canvassing properties
+- **Quick Property Add**: Long-press anywhere on the map to drop a pin, auto-fills the address via reverse geocoding, and lets you add notes immediately
 - **Contact Management**: Add, edit, and delete contacts with address autocomplete
-- **Tag System**: Color-coded tags for organizing contacts
+- **Tag System**: Color-coded tags for organizing contacts (e.g., "Hot Lead", "For Sale", "Not Interested")
 - **Activity Feed**: Log notes, calls, meetings, and emails per contact
 - **Filtering**: Filter contacts by tags on both map and list views
 - **Search**: Search contacts by name, email, or address
 
+## Workflow
+
+1. **Canvassing**: Walk/drive around your target area with the app open
+2. **Spot a property**: Long-press on the map to drop a pin
+3. **Add details**: Address auto-fills, add a note like "For sale sign, nice yard, owner John"
+4. **Tag it**: Mark as "Hot Lead", "Follow Up", etc.
+5. **Review later**: Filter by tags, view activity history, add calls/meetings
+
 ## Tech Stack
 
-- React Native + Expo SDK 52
+- React Native + Expo SDK 54
 - Expo Router (file-based routing)
 - react-native-maps + react-native-map-clustering
-- Google Places API (address autocomplete)
+- Google Places API (address autocomplete + reverse geocoding)
 - Supabase (auth, database, realtime)
 - Zustand (state management)
 - React Native Paper (Material Design 3)
