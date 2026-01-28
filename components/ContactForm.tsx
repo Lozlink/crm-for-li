@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { StyleSheet, View, Alert } from 'react-native';
 import { TextInput, Button, HelperText, useTheme } from 'react-native-paper';
 import * as Contacts from 'expo-contacts';
+import * as Linking from 'expo-linking';
 import { ContactFormData } from '../lib/types';
 import TagPicker from './TagPicker';
 import AddressAutocomplete from './AddressAutocomplete';
@@ -39,13 +40,35 @@ export default function ContactForm({
     initial_note: '',
   });
 
+  const [permissionResponse, setPermissionResponse] = useState<Contacts.PermissionResponse | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>({});
+
+  useEffect(() => {
+    const checkPermission = async () => {
+      const response = await Contacts.getPermissionsAsync();
+      setPermissionResponse(response);
+    };
+    checkPermission();
+  }, []);
+
+  const requestPermission = async () => {
+    const response = await Contacts.requestPermissionsAsync();
+    setPermissionResponse(response);
+    return response;
+  };
 
   useEffect(() => {
     if (initialData) {
       setFormData(initialData);
     }
   }, [initialData]);
+
+  // Proactively request permission if not decided yet
+  useEffect(() => {
+    if (!minimalMode && permissionResponse?.status === 'undetermined') {
+      requestPermission();
+    }
+  }, [minimalMode, permissionResponse]);
 
   const updateField = <K extends keyof ContactFormData>(key: K, value: ContactFormData[K]) => {
     setFormData(prev => ({ ...prev, [key]: value }));
@@ -92,9 +115,22 @@ export default function ContactForm({
 
   const handleImportContact = async () => {
     try {
-      const { status } = await Contacts.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Please allow contact access to use this feature.');
+      let currentStatus = permissionResponse?.status;
+
+      if (currentStatus !== 'granted') {
+        const response = await requestPermission();
+        currentStatus = response.status;
+      }
+
+      if (currentStatus !== 'granted') {
+        Alert.alert(
+          'Permission Denied',
+          'Please allow contact access in your device settings to use this feature.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() }
+          ]
+        );
         return;
       }
 
