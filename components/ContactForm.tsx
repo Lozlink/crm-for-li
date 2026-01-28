@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, Alert } from 'react-native';
 import { TextInput, Button, HelperText, useTheme } from 'react-native-paper';
+import * as Contacts from 'expo-contacts';
 import { ContactFormData } from '../lib/types';
 import TagPicker from './TagPicker';
 import AddressAutocomplete from './AddressAutocomplete';
@@ -89,8 +90,44 @@ export default function ContactForm({
     }));
   };
 
+  const handleImportContact = async () => {
+    try {
+      const { status } = await Contacts.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Please allow contact access to use this feature.');
+        return;
+      }
+
+      const contact = await Contacts.presentContactPickerAsync();
+      
+      if (contact) {
+        setFormData(prev => ({
+          ...prev,
+          first_name: contact.firstName || '',
+          last_name: contact.lastName || '',
+          email: contact.emails?.[0]?.email || '',
+          phone: contact.phoneNumbers?.[0]?.number || '',
+        }));
+      }
+    } catch (error) {
+      console.error('Error importing contact:', error);
+      Alert.alert('Error', 'Failed to import contact.');
+    }
+  };
+
   return (
     <View style={styles.container}>
+      {!minimalMode && (
+        <Button 
+          mode="outlined" 
+          onPress={handleImportContact} 
+          icon="account-import"
+          style={styles.importButton}
+        >
+          Import from Contacts
+        </Button>
+      )}
+
       {/* Show address first in minimal mode, and always show notes */}
       {minimalMode && (
         <>
@@ -235,6 +272,9 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 8,
+  },
+  importButton: {
+    marginBottom: 16,
   },
   coordsHelper: {
     marginTop: -4,
