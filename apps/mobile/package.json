@@ -13,7 +13,9 @@
     "build:production": "eas build --profile production --platform all",
     "build:ios": "eas build --profile production --platform ios",
     "build:android": "eas build --profile production --platform android",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "eas-build-pre-install": "corepack enable && corepack prepare pnpm@10.27.0 --activate"
+
   },
   "dependencies": {
     "@realestate-crm/api": "workspace:*",
