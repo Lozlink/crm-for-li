@@ -1,0 +1,21 @@
+{
+  "name": "@realestate-crm/hooks",
+  "version": "0.0.1",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@realestate-crm/api": "workspace:*",
+    "@realestate-crm/types": "workspace:*",
+    "@realestate-crm/utils": "workspace:*",
+    "react": "*",
+    "zustand": "*"
+  },
+  "devDependencies": {
+    "typescript": "*",
+    "@types/react": "*"
+  },
+  "private": true
+}

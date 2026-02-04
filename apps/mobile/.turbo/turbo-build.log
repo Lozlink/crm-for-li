@@ -1,0 +1,78 @@
+
+
+> mobile@1.0.0 build /home/mark91/realestate-crm/apps/mobile
+> dotenvx run --env-file=../../.env -- expo export --platform ios --platform android
+
+[38;5;142m[dotenvx@1.52.0] injecting env (4) from ../../.env[39m
+[2mStarting Metro Bundler[22m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  0.0% [22m[2m(0/1)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  0.0% [22m[2m(0/1)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  0.0% [22m[2m(0/1)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  2.6% [22m[2m(15/93)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓[49m[39m[47m[37m░░░░░░░░░░░░░░░[39m[49m[1m  7.1% [22m[2m( 74/278)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  2.6% [22m[2m(15/93)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓[49m[39m[47m[37m░░░░░░░░░░░░░░░[39m[49m[1m  7.1% [22m[2m( 74/278)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓[49m[39m[47m[37m░░░░░░░░░░░░░░░[39m[49m[1m 10.4% [22m[2m( 96/298)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.1% [22m[2m(216/440)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓[49m[39m[47m[37m░░░░░░░░░░░░░░░[39m[49m[1m 10.4% [22m[2m( 96/298)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.1% [22m[2m(216/440)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░[39m[49m[1m 31.0% [22m[2m(280/503)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░[39m[49m[1m 37.7% [22m[2m(399/650)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░[39m[49m[1m 31.0% [22m[2m(280/503)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░[39m[49m[1m 37.7% [22m[2m(399/650)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 36.7% [22m[2m(433/715)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 48.4% [22m[2m(609/875)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 36.7% [22m[2m(433/715)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 48.4% [22m[2m(609/875)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░[39m[49m[1m 62.9% [22m[2m( 842/1062)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░[39m[49m[1m 73.5% [22m[2m( 950/1108)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 83.1% [22m[2m(1063/1166)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 92.1% [22m[2m(1168/1217)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 92.1% [22m[2m(1272/1353)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 92.1% [22m[2m(1392/1503)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 92.1% [22m[2m(1392/1503)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 86.6% [22m[2m(1402/1507)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 92.1% [22m[2m(1392/1503)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 97.0% [22m[2m(1585/1609)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1675/1675)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 97.0% [22m[2m(1585/1609)[22m
+[308D[2A[0J[32m[1mAndroid[22m Bundled [39m[2m5205ms[22m[0m[2m apps/mobile/index.ts (1609 modules)[22m[0m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1675/1675)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 97.0% [22m[2m(1585/1609)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1675/1675)[22m
+[308D[1A[0J[32m[1miOS[22m Bundled [39m[2m8041ms[22m[0m[2m apps/mobile/index.ts (1675 modules)[22m[0m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1675/1675)[22m
+[308D[1A[0J
+[1m› Assets (33):[22m
+../../node_modules/.pnpm/@expo+vector-icons@15.0.3_expo-font@14.0.11_expo@54.0.33_react-native@0.81.5_@babel+cor_dffeba5e71c136362da807d9acd294ec/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf [90m(1.31 MB)[39m
+../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/back-icon-mask.png [90m(653 B)[39m
+../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/back-icon.png [90m(8 variations | 359 B)[39m
+../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/clear-icon.png [90m(4 variations | 425 B)[39m
+../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/close-icon.png [90m(4 variations | 235 B)[39m
+../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/search-icon.png [90m(7 variations | 592 B)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/arrow_down.png [90m(9.46 kB)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/error.png [90m(469 B)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/file.png [90m(138 B)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/forward.png [90m(188 B)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/pkg.png [90m(364 B)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/sitemap.png [90m(465 B)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/unmatched.png [90m(4.75 kB)[39m
+../../node_modules/.pnpm/react-native-paper@5.15.0_react-native-safe-area-context@5.6.2_react-native@0.81.5_@bab_41d9b5c0467b7e446469252509ed76ee/node_modules/react-native-paper/src/assets/back-chevron.png [90m(489 B)[39m
+
+[1m› android bundles (1):[22m
+_expo/static/js/android/index-419c80dd9b3ba451824d971fc1fe01f0.hbc [90m(5.1 MB)[39m
+
+[1m› ios bundles (1):[22m
+_expo/static/js/ios/index-f4a22588b3656d02af72e03c4ee6fc50.hbc [90m(5.11 MB)[39m
+
+[1m› Files (1):[22m
+metadata.json [90m(3.71 kB)[39m
+
+[92mExported: dist[39m

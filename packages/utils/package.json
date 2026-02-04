@@ -1,0 +1,17 @@
+{
+  "name": "@realestate-crm/utils",
+  "version": "0.0.1",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react-native": "*",
+    "@react-native-async-storage/async-storage": "*"
+  },
+  "devDependencies": {
+    "typescript": "*"
+  },
+  "private": true
+}

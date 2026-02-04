@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@realestate-crm/ui": ["../../packages/ui/src"],
+      "@realestate-crm/api": ["../../packages/api/src"],
+      "@realestate-crm/hooks": ["../../packages/hooks/src"],
+      "@realestate-crm/utils": ["../../packages/utils/src"],
+      "@realestate-crm/types": ["../../packages/types/src"],
+      "@realestate-crm/config": ["../../packages/config/src"]
+    }
+  }
+}

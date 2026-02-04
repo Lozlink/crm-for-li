@@ -1,6 +1,24 @@
 {
-  "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
-  }
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "jsx": "react-native",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@realestate-crm/ui": ["./packages/ui/src"],
+      "@realestate-crm/api": ["./packages/api/src"],
+      "@realestate-crm/hooks": ["./packages/hooks/src"],
+      "@realestate-crm/utils": ["./packages/utils/src"],
+      "@realestate-crm/types": ["./packages/types/src"],
+      "@realestate-crm/config": ["./packages/config/src"]
+    }
+  },
+  "exclude": ["node_modules", "dist", ".expo", ".next"]
 }

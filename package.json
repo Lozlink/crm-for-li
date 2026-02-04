@@ -1,44 +1,42 @@
 {
   "name": "realestate-crm",
   "version": "1.0.0",
-  "main": "index.ts",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
-    "web": "expo start --web"
-  },
-  "dependencies": {
-    "@react-native-async-storage/async-storage": "2.2.0",
-    "@supabase/supabase-js": "^2.91.1",
-    "expo": "~54.0.32",
-    "expo-constants": "~18.0.13",
-    "expo-contacts": "~15.0.11",
-    "expo-dev-client": "~6.0.20",
-    "expo-linking": "~8.0.11",
-    "expo-location": "~19.0.8",
-    "expo-router": "~6.0.22",
-    "expo-status-bar": "~3.0.9",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "react-native": "0.81.5",
-    "react-native-gesture-handler": "~2.28.0",
-    "react-native-map-clustering": "^4.0.0",
-    "react-native-maps": "1.20.1",
-    "react-native-paper": "^5.14.5",
-    "react-native-reanimated": "~4.1.1",
-    "react-native-safe-area-context": "~5.6.0",
-    "react-native-screens": "~4.16.0",
-    "react-native-url-polyfill": "^3.0.0",
-    "react-native-vector-icons": "^10.3.0",
-    "react-native-web": "^0.21.0",
-    "react-native-worklets": "0.5.1",
-    "zustand": "^5.0.10"
+    "dev": "turbo run dev",
+    "dev:mobile": "turbo run dev --filter=mobile",
+    "dev:web": "turbo run dev --filter=web",
+    "build": "turbo run build",
+    "build:mobile": "turbo run build --filter=mobile",
+    "build:web": "turbo run build --filter=web",
+    "type-check": "turbo run type-check",
+    "type-check:mobile": "turbo run type-check --filter=mobile",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "clean:deep": "rm -rf node_modules apps/*/node_modules packages/*/node_modules",
+    "mobile:ios": "pnpm --filter=mobile ios",
+    "mobile:android": "pnpm --filter=mobile android",
+    "mobile:start": "pnpm --filter=mobile start",
+    "mobile:build:dev": "pnpm --filter=mobile build:dev",
+    "mobile:build:preview": "pnpm --filter=mobile build:preview",
+    "mobile:build:production": "pnpm --filter=mobile build:production",
+    "install:all": "pnpm install",
+    "eas-build-pre-install": "corepack enable && corepack prepare pnpm@10.27.0 --activate"
   },
   "devDependencies": {
-    "@types/react": "~19.1.0",
-    "@types/react-native-vector-icons": "^6.4.18",
+    "turbo": "^2.8.2",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@10.27.0",
+  "dependencies": {
+    "@dotenvx/dotenvx": "^1.52.0"
+  }
 }

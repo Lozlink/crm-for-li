@@ -1,0 +1,25 @@
+{
+  "name": "@realestate-crm/ui",
+  "version": "0.0.1",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@realestate-crm/types": "workspace:*",
+    "@realestate-crm/hooks": "workspace:*",
+    "@realestate-crm/utils": "workspace:*",
+    "@realestate-crm/config": "workspace:*",
+    "react": "*",
+    "react-native": "*",
+    "react-native-paper": "*",
+    "react-native-vector-icons": "*"
+  },
+  "devDependencies": {
+    "typescript": "*",
+    "@types/react": "*",
+    "@types/react-native-vector-icons": "*"
+  },
+  "private": true
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@realestate-crm/api",
+  "version": "0.0.1",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@realestate-crm/utils": "workspace:*",
+    "@realestate-crm/types": "workspace:*",
+    "@supabase/supabase-js": "*",
+    "react-native-url-polyfill": "*",
+    "expo-constants": "*"
+  },
+  "devDependencies": {
+    "typescript": "*"
+  },
+  "private": true
+}

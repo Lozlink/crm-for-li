@@ -1,0 +1,712 @@
+# Real Estate CRM - Project Rules
+
+## Project Overview
+React Native + Expo real estate CRM application with offline-first architecture, Supabase backend, and Material Design 3 UI.
+
+## Technology Stack
+
+### Core
+- **Framework**: React Native 0.81.5 with Expo 54
+- **Language**: TypeScript 5.9.2 (strict mode enabled)
+- **State Management**: Zustand 5.0.10 (single store pattern)
+- **Backend**: Supabase (PostgreSQL with REST API)
+- **UI Library**: React Native Paper 5.14.5 (Material Design 3)
+- **Navigation**: Expo Router 6.0.22 (file-based routing)
+- **Maps**: React Native Maps + Google Maps API + Overpass API
+
+### Key Dependencies
+- @react-native-async-storage/async-storage (offline persistence)
+- expo-location, expo-contacts (device integrations)
+- react-native-map-clustering (map markers)
+- react-native-reanimated, react-native-gesture-handler (animations)
+
+## Project Structure
+
+```
+/app/                    # Screens (Expo Router)
+  /(tabs)/              # Tab navigation group
+    index.tsx           # Map screen
+    contacts.tsx        # Contacts list
+    notes.tsx           # Notes/quick notes
+    settings.tsx        # Settings & tags
+    _layout.tsx         # Tab configuration
+  /contact/
+    [id].tsx           # Contact detail page
+    new.tsx            # New contact/quick note
+  _layout.tsx          # Root layout
+/components/           # Reusable UI components
+/lib/                  # Utilities & services
+  store.ts            # Zustand state management
+  types.ts            # TypeScript type definitions
+  supabase.ts         # Supabase client
+  overpass.ts         # OpenStreetMap API
+```
+
+## Naming Conventions
+
+### Files
+- **Screens**: lowercase (e.g., `contacts.tsx`, `[id].tsx`)
+- **Components**: PascalCase (e.g., `ContactCard.tsx`, `TagManager.tsx`)
+- **Utilities**: camelCase (e.g., `overpass.ts`, `supabase.ts`)
+- **Types**: `types.ts` (centralized)
+
+### Code
+- **Functions/Methods**: camelCase (e.g., `fetchContacts()`, `updateField()`)
+- **Components**: PascalCase (e.g., `ContactCard`, `FilterSheet`)
+- **Constants**: UPPER_SNAKE_CASE (e.g., `TAG_COLORS`, `ACTIVITY_TYPES`)
+- **Interfaces**: PascalCase with descriptive suffix (e.g., `ContactCardProps`, `CRMState`)
+- **Hooks**: camelCase with 'use' prefix (e.g., `useTheme()`, `useCRMStore()`)
+- **Styles**: camelCase in StyleSheet (e.g., `container`, `inputField`, `headerText`)
+
+### Store Methods
+- **Setters**: `setFieldName` (e.g., `setContacts`, `setLoading`)
+- **Getters**: Direct property access (e.g., `contacts`, `tags`)
+- **Actions**: Verb-based (e.g., `fetchContacts`, `addContact`, `updateContact`, `deleteContact`)
+
+## Component Structure Pattern
+
+ALWAYS follow this structure for components:
+
+```typescript
+// 1. Imports (grouped: React, React Native, Libraries, Local)
+import { useState, useCallback, useMemo } from 'react';
+import { StyleSheet, View, ScrollView } from 'react-native';
+import { Button, Text, useTheme } from 'react-native-paper';
+import { useRouter } from 'expo-router';
+import { useCRMStore } from '@/lib/store';
+
+// 2. Props Interface (if component has props)
+interface ComponentNameProps {
+  prop1: Type1;
+  prop2?: Type2;  // Optional props with ?
+  onAction: (param: ParamType) => void;  // Callbacks
+}
+
+// 3. Component Definition (default export)
+export default function ComponentName({ prop1, prop2, onAction }: ComponentNameProps) {
+  // 4. Hooks (in this order)
+  const theme = useTheme();
+  const router = useRouter();
+  const storeData = useCRMStore(state => state.data);  // Selectors
+  const storeAction = useCRMStore(state => state.action);
+
+  // 5. Local State
+  const [localState, setLocalState] = useState<Type>(initialValue);
+
+  // 6. Memoized Values
+  const computedValue = useMemo(() => {
+    // Expensive computation
+    return result;
+  }, [dependencies]);
+
+  // 7. Callbacks
+  const handleAction = useCallback(() => {
+    // Handler logic
+  }, [dependencies]);
+
+  // 8. Effects (if needed)
+  useEffect(() => {
+    // Side effects
+  }, [dependencies]);
+
+  // 9. JSX Return
+  return (
+    <View style={styles.container}>
+      {/* Component content */}
+    </View>
+  );
+}
+
+// 10. Styles (at bottom, after component)
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  // ... other styles
+});
+```
+
+## TypeScript Rules
+
+### Type Safety
+- ALWAYS enable strict mode
+- ALWAYS define interfaces for component props
+- ALWAYS type function parameters and return values
+- ALWAYS type state and store values
+- NEVER use `any` except for caught errors: `catch (error: any)`
+
+### Type Definitions
+- Centralize shared types in `/lib/types.ts`
+- Use interfaces for object shapes: `interface Contact { ... }`
+- Use type aliases for unions/primitives: `type Status = 'active' | 'inactive'`
+- Export all shared types/interfaces
+
+### Example Type Definition
+```typescript
+export interface Contact {
+  id: string;
+  first_name: string;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  coordinates: { latitude: number; longitude: number } | null;
+  tag_id: string | null;
+  tag?: Tag;
+  notes: string | null;
+  created_at: string;
+}
+```
+
+## State Management with Zustand
+
+### Store Structure
+- Single source of truth: `/lib/store.ts`
+- One store for entire app (no multiple stores)
+- Group related data and actions together
+
+### Store Pattern
+```typescript
+interface CRMState {
+  // Data
+  contacts: Contact[];
+  tags: Tag[];
+
+  // UI State
+  isLoading: boolean;
+  error: string | null;
+
+  // Setters (always call persist() after)
+  setContacts: (contacts: Contact[]) => void;
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
+
+  // Async Actions (handle loading/error states)
+  fetchContacts: () => Promise<void>;
+  addContact: (contact: Omit<Contact, 'id' | 'created_at'>) => Promise<Contact | null>;
+  updateContact: (id: string, updates: Partial<Contact>) => Promise<boolean>;
+  deleteContact: (id: string) => Promise<boolean>;
+
+  // Persistence
+  persist: () => Promise<void>;
+  hydrate: () => Promise<void>;
+}
+```
+
+### Store Usage in Components
+```typescript
+// Use selectors to prevent unnecessary re-renders
+const contacts = useCRMStore(state => state.contacts);
+const addContact = useCRMStore(state => state.addContact);
+
+// AVOID: Getting entire store
+const store = useCRMStore();  // ❌ Don't do this
+```
+
+### Async Action Pattern
+ALWAYS follow this pattern for store actions:
+
+```typescript
+addContact: async (contact) => {
+  set({ isLoading: true, error: null });
+  try {
+    if (isDemoMode) {
+      // Demo mode: local operation
+      const newContact = { ...contact, id: generateUUID(), created_at: new Date().toISOString() };
+      set(state => ({
+        contacts: [newContact, ...state.contacts],
+        isLoading: false,
+      }));
+      get().persist();
+      return newContact;
+    }
+
+    // Production: Supabase operation
+    const { data, error } = await supabase
+      .from('contacts')
+      .insert(contact)
+      .select('*, tag:tags(*)')
+      .single();
+
+    if (error) throw error;
+
+    set(state => ({
+      contacts: [data, ...state.contacts],
+      isLoading: false,
+    }));
+    get().persist();
+    return data;
+  } catch (error: any) {
+    set({ error: error.message, isLoading: false });
+    return null;
+  }
+}
+```
+
+### Persistence Rules
+- ALWAYS call `persist()` after state mutations
+- Call `hydrate()` on app initialization
+- Use AsyncStorage for local persistence
+- Support demo mode (offline-first)
+
+## Styling Guidelines
+
+### Theme System
+- ALWAYS use React Native Paper's `useTheme()` hook
+- Use theme colors: `theme.colors.primary`, `theme.colors.surface`, etc.
+- Use theme variants: `bodySmall`, `bodyMedium`, `titleMedium`, etc.
+
+### StyleSheet Pattern
+```typescript
+// At bottom of file
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 16,
+  },
+  card: {
+    marginBottom: 12,
+    borderRadius: 8,
+  },
+});
+```
+
+### Dynamic Styling
+```typescript
+// Merge static and dynamic styles
+<View style={[
+  styles.card,
+  { backgroundColor: theme.colors.surface },
+  isSelected && { borderColor: theme.colors.primary, borderWidth: 2 },
+]}>
+```
+
+### Material Design 3 Compliance
+- Use Paper components: `Surface`, `Card`, `Button`, `TextInput`, `FAB`, etc.
+- Apply elevation for depth: `elevation={0}` to `elevation={3}`
+- Use standard variants for text: `<Text variant="bodyMedium">`
+- Follow Material Design spacing (4dp grid: 4, 8, 12, 16, 24, 32)
+
+### Color Usage
+```typescript
+// Use tag colors with transparency
+style={{ backgroundColor: tag.color + '20' }}  // 20% opacity
+
+// Fallback to theme colors
+backgroundColor: contact.tag?.color || theme.colors.primary
+```
+
+## API & Database Patterns
+
+### Supabase Operations
+```typescript
+// Fetch with relations
+const { data, error } = await supabase
+  .from('contacts')
+  .select('*, tag:tags(*)')
+  .order('created_at', { ascending: false });
+
+// Insert
+const { data, error } = await supabase
+  .from('contacts')
+  .insert(contact)
+  .select('*, tag:tags(*)')
+  .single();
+
+// Update
+const { error } = await supabase
+  .from('contacts')
+  .update(updates)
+  .eq('id', id);
+
+// Delete
+const { error } = await supabase
+  .from('contacts')
+  .delete()
+  .eq('id', id);
+```
+
+### Error Handling
+ALWAYS handle errors consistently:
+
+```typescript
+try {
+  // Operation
+} catch (error: any) {
+  set({ error: error.message, isLoading: false });
+  console.error('Operation failed:', error);
+}
+```
+
+### Demo Mode Support
+ALWAYS support demo mode for offline functionality:
+
+```typescript
+if (isDemoMode) {
+  // Local in-memory operation with UUID generation
+  const newItem = { ...item, id: generateUUID(), created_at: new Date().toISOString() };
+  // Update local state
+} else {
+  // Supabase operation
+}
+```
+
+### External API Integration
+```typescript
+// Google Maps API
+const response = await fetch(
+  `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${API_KEY}`
+);
+
+// Always check response.ok
+if (!response.ok) {
+  throw new Error(`API error: ${response.status}`);
+}
+
+// Overpass API (with caching and rate limiting)
+// Check lib/overpass.ts for implementation patterns
+```
+
+## Navigation Patterns
+
+### Expo Router File-based Routing
+- Screens in `/app` folder map to routes
+- `(tabs)/` = layout group (tab navigation)
+- `[id].tsx` = dynamic route parameter
+- `_layout.tsx` = layout wrapper
+
+### Navigation Code
+```typescript
+// Import
+import { useRouter, useLocalSearchParams } from 'expo-router';
+
+// In component
+const router = useRouter();
+
+// Navigate
+router.push('/contact/new');
+
+// Navigate with params
+router.push({
+  pathname: '/contact/new',
+  params: { lat: '...', lng: '...', quickNote: 'true' }
+});
+
+// Read params (typed)
+const params = useLocalSearchParams<{ id?: string; quickNote?: string }>();
+
+// Go back
+router.back();
+```
+
+### Screen Options
+```typescript
+<Stack.Screen
+  name="contact/new"
+  options={{
+    title: 'New Contact',
+    presentation: 'modal',
+    headerShown: true,
+  }}
+/>
+```
+
+## Performance Optimization
+
+### Memoization
+```typescript
+// Expensive computations
+const filteredContacts = useMemo(() => {
+  return contacts.filter(contact => {
+    // Filter logic
+  });
+}, [contacts, filters]);
+
+// Callbacks to prevent re-creation
+const handlePress = useCallback(() => {
+  // Handler logic
+}, [dependencies]);
+
+// Component optimization
+export default memo(ContactCard);
+```
+
+### Component Optimization
+- Use `React.memo()` for pure components
+- Use `useCallback()` for event handlers passed to children
+- Use `useMemo()` for expensive computations
+- Use Zustand selectors to prevent unnecessary re-renders
+
+### List Rendering
+```typescript
+// ALWAYS provide key prop
+<FlatList
+  data={contacts}
+  keyExtractor={(item) => item.id}
+  renderItem={({ item }) => <ContactCard contact={item} />}
+/>
+```
+
+## Form Handling
+
+### Form State Pattern
+```typescript
+interface FormData {
+  field1: string;
+  field2: string | null;
+}
+
+const [formData, setFormData] = useState<FormData>({
+  field1: '',
+  field2: null,
+});
+
+const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+
+// Update field (clear error on change)
+const updateField = <K extends keyof FormData>(key: K, value: FormData[K]) => {
+  setFormData(prev => ({ ...prev, [key]: value }));
+  if (errors[key]) {
+    setErrors(prev => ({ ...prev, [key]: undefined }));
+  }
+};
+```
+
+### Validation
+```typescript
+const validate = (): boolean => {
+  const newErrors: Partial<Record<keyof FormData, string>> = {};
+
+  if (!formData.field1) {
+    newErrors.field1 = 'Field is required';
+  }
+
+  setErrors(newErrors);
+  return Object.keys(newErrors).length === 0;
+};
+
+// In submit handler
+const handleSubmit = () => {
+  if (!validate()) return;
+  // Proceed with submission
+};
+```
+
+### Form Components
+```typescript
+<TextInput
+  label="Field Label"
+  value={formData.field}
+  onChangeText={(text) => updateField('field', text)}
+  error={!!errors.field}
+  disabled={isLoading}
+  mode="outlined"
+/>
+{errors.field && <Text style={{ color: theme.colors.error }}>{errors.field}</Text>}
+```
+
+## Code Quality Rules
+
+### General
+- NEVER use `any` type except for caught errors
+- ALWAYS define prop interfaces
+- ALWAYS use `useCallback` for event handlers passed to children
+- ALWAYS use `useMemo` for expensive computations
+- ALWAYS provide `key` prop in lists
+- NEVER mutate state directly (use spread operators)
+
+### Components
+- One component per file (default export)
+- Props interface defined above component
+- StyleSheet at bottom of file
+- Use functional components (no class components)
+- Keep components focused (single responsibility)
+
+### Imports
+Group imports in this order:
+1. React/React Native core
+2. Third-party libraries
+3. Local utilities/stores
+4. Local components
+5. Types (if separate file)
+
+```typescript
+import { useState } from 'react';
+import { View, StyleSheet } from 'react-native';
+import { Button, useTheme } from 'react-native-paper';
+import { useRouter } from 'expo-router';
+import { useCRMStore } from '@/lib/store';
+import { ContactCard } from '@/components/ContactCard';
+import type { Contact } from '@/lib/types';
+```
+
+### Comments
+- AVOID unnecessary comments (code should be self-documenting)
+- ONLY comment complex logic or non-obvious decisions
+- Use JSDoc for utility functions in `/lib`
+
+```typescript
+/**
+ * Fetches suburb boundaries from Overpass API
+ * Implements caching (5min TTL) and rate limiting (3s interval)
+ */
+export async function fetchSuburbBoundary(name: string): Promise<SuburbBoundary[]> {
+  // Implementation
+}
+```
+
+### Constants
+```typescript
+// At top of file or in separate constants file
+export const TAG_COLORS = [
+  '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A',
+  '#98D8C8', '#F7DC6F', '#BB8FCE', '#85929E'
+];
+
+export const ACTIVITY_TYPES = [
+  'Call', 'Email', 'Meeting', 'Note', 'Task'
+] as const;
+
+export type ActivityType = typeof ACTIVITY_TYPES[number];
+```
+
+## Testing & Debugging
+
+### Console Logging
+```typescript
+// Use descriptive messages
+console.log('Fetching contacts for tag:', tagId);
+console.error('Failed to update contact:', error);
+
+// Remove console.logs before committing (unless debugging-specific)
+```
+
+### Error States
+ALWAYS show user-friendly error messages:
+
+```typescript
+{error && (
+  <Text style={{ color: theme.colors.error, padding: 16 }}>
+    {error}
+  </Text>
+)}
+```
+
+### Loading States
+ALWAYS show loading indicators:
+
+```typescript
+{isLoading ? (
+  <ActivityIndicator size="large" color={theme.colors.primary} />
+) : (
+  <Content />
+)}
+```
+
+## Git Practices
+
+### Commits
+- Write clear, descriptive commit messages
+- Use present tense: "Add feature" not "Added feature"
+- Reference issue numbers when applicable
+
+### Branches
+- `main` = production
+- Feature branches: `feature/description`
+- Bug fixes: `fix/description`
+
+## Environment Configuration
+
+### Supabase
+```typescript
+// .env (never commit)
+EXPO_PUBLIC_SUPABASE_URL=your_url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_key
+
+// Access in code
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+```
+
+### Google Maps
+```typescript
+// app.config.ts
+export default {
+  expo: {
+    android: {
+      config: {
+        googleMaps: { apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY }
+      }
+    },
+    ios: {
+      config: {
+        googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
+      }
+    }
+  }
+};
+```
+
+## Architecture Principles
+
+### Offline-First
+- ALWAYS support demo mode (no backend)
+- Use AsyncStorage for local persistence
+- Sync with Supabase when available
+- Graceful degradation
+
+### Unidirectional Data Flow
+```
+User Action → Store Action → Database → Store State → Component Re-render
+```
+
+### Separation of Concerns
+- `/app` = Screens/routing
+- `/components` = Reusable UI
+- `/lib/store.ts` = State management
+- `/lib/types.ts` = Type definitions
+- `/lib/supabase.ts` = Database client
+- `/lib/overpass.ts` = External API
+
+### Component Hierarchy
+```
+Screen (app/*)
+  ├─ Layout Components (Surface, ScrollView)
+  ├─ Feature Components (ContactForm, TagManager)
+  └─ UI Components (ContactCard, ActivityFeed)
+```
+
+## Best Practices Summary
+
+✓ **Type Everything**: Use TypeScript strict mode, define all interfaces
+✓ **Single Store**: One Zustand store for entire app
+✓ **Theme-Aware**: Always use `useTheme()` for colors/spacing
+✓ **Memoize**: Use `useMemo`/`useCallback` for performance
+✓ **Selectors**: Use Zustand selectors to prevent re-renders
+✓ **Error Handling**: Always try/catch async operations
+✓ **Loading States**: Show loading indicators during operations
+✓ **Offline Support**: Support demo mode without backend
+✓ **Persist Data**: Call `persist()` after state mutations
+✓ **Material Design**: Use React Native Paper components consistently
+✓ **Clean Code**: Self-documenting code, minimal comments
+✓ **Consistent Structure**: Follow component structure pattern
+✓ **Validation**: Validate forms before submission
+✓ **Accessibility**: Use proper labels and ARIA attributes (when applicable)
+
+## Anti-Patterns to Avoid
+
+❌ Don't use `any` type (except caught errors)
+❌ Don't mutate state directly
+❌ Don't create multiple stores
+❌ Don't use inline styles everywhere (use StyleSheet)
+❌ Don't skip error handling
+❌ Don't forget loading states
+❌ Don't hardcode colors (use theme)
+❌ Don't create class components (use functional)
+❌ Don't forget to persist after state changes
+❌ Don't use Context API (use Zustand)
+❌ Don't skip memoization for expensive operations
+❌ Don't forget key props in lists
+❌ Don't over-comment obvious code
+❌ Don't create unnecessary abstractions
+
+---
+
+**This document is the source of truth for code style and architecture in this project. Follow these rules consistently to maintain code quality and team productivity.**
