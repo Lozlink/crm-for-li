@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { storage } from '@realestate-crm/utils';
 import type { Contact, Tag, Activity, MapRegion, SavedSuburb } from '@realestate-crm/types';
 import { supabase, isDemoMode, generateUUID } from '@realestate-crm/api';
+import { useAuthStore } from './useAuthStore';
 
 interface CRMState {
   // Data
@@ -50,6 +51,9 @@ interface CRMState {
   // Hydration
   hydrate: () => Promise<void>;
   persist: () => Promise<void>;
+
+  // Team switching
+  resetData: () => Promise<void>;
 }
 
 // 15 Hornet Street, Greenfield Park, NSW, Australia - street level zoom
@@ -59,6 +63,15 @@ const DEFAULT_REGION: MapRegion = {
   latitudeDelta: 0.008,
   longitudeDelta: 0.008,
 };
+
+function getTeamContext() {
+  const authState = useAuthStore.getState();
+  return {
+    teamId: authState.activeTeam?.id || null,
+    userId: authState.user?.id || null,
+    isDemo: authState.isDemoMode || isDemoMode,
+  };
+}
 
 export const useCRMStore = create<CRMState>()((set, get) => ({
   // Initial state
@@ -134,19 +147,41 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
     }
   },
 
+  // Reset and refetch when team switches
+  resetData: async () => {
+    set({
+      contacts: [],
+      tags: [],
+      activities: [],
+      selectedTagIds: [],
+      searchQuery: '',
+      isLoading: false,
+      error: null,
+    });
+    await get().fetchTags();
+    await get().fetchContacts();
+  },
+
   // Fetch operations
   fetchContacts: async () => {
     set({ isLoading: true, error: null });
     try {
-      if (isDemoMode) {
+      const { isDemo, teamId } = getTeamContext();
+      if (isDemo) {
         set({ isLoading: false });
         return;
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('contacts')
         .select('*, tag:tags(*)')
         .order('created_at', { ascending: false });
+
+      if (teamId) {
+        query = query.eq('team_id', teamId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       set({ contacts: data || [], isLoading: false });
@@ -158,14 +193,21 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
   fetchTags: async () => {
     try {
-      if (isDemoMode) {
+      const { isDemo, teamId } = getTeamContext();
+      if (isDemo) {
         return;
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('tags')
         .select('*')
         .order('name');
+
+      if (teamId) {
+        query = query.eq('team_id', teamId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       set({ tags: data || [] });
@@ -177,7 +219,8 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
   fetchActivities: async (contactId: string) => {
     try {
-      if (isDemoMode) {
+      const { isDemo } = getTeamContext();
+      if (isDemo) {
         return;
       }
 
@@ -198,10 +241,13 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
   addContact: async (contact) => {
     set({ isLoading: true, error: null });
     try {
-      if (isDemoMode) {
+      const { isDemo, teamId, userId } = getTeamContext();
+
+      if (isDemo) {
         const newContact: Contact = {
           ...contact,
           id: generateUUID(),
+          team_id: teamId || undefined,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
@@ -219,9 +265,13 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         return newContact;
       }
 
+      const insertData: any = { ...contact };
+      if (teamId) insertData.team_id = teamId;
+      if (userId) insertData.user_id = userId;
+
       const { data, error } = await supabase
         .from('contacts')
-        .insert(contact)
+        .insert(insertData)
         .select('*, tag:tags(*)')
         .single();
 
@@ -242,7 +292,9 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
   updateContact: async (id, contact) => {
     set({ isLoading: true, error: null });
     try {
-      if (isDemoMode) {
+      const { isDemo } = getTeamContext();
+
+      if (isDemo) {
         const tags = get().tags;
         set(state => ({
           contacts: state.contacts.map(c => {
@@ -279,7 +331,9 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
   deleteContact: async (id) => {
     set({ isLoading: true, error: null });
     try {
-      if (isDemoMode) {
+      const { isDemo } = getTeamContext();
+
+      if (isDemo) {
         set(state => ({
           contacts: state.contacts.filter(c => c.id !== id),
           activities: state.activities.filter(a => a.contact_id !== id),
@@ -309,10 +363,13 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
   // Tag CRUD
   addTag: async (tag) => {
     try {
-      if (isDemoMode) {
+      const { isDemo, teamId, userId } = getTeamContext();
+
+      if (isDemo) {
         const newTag: Tag = {
           ...tag,
           id: generateUUID(),
+          team_id: teamId || undefined,
           created_at: new Date().toISOString(),
         };
         set(state => ({ tags: [...state.tags, newTag] }));
@@ -320,9 +377,13 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         return newTag;
       }
 
+      const insertData: any = { ...tag };
+      if (teamId) insertData.team_id = teamId;
+      if (userId) insertData.user_id = userId;
+
       const { data, error } = await supabase
         .from('tags')
-        .insert(tag)
+        .insert(insertData)
         .select()
         .single();
 
@@ -339,7 +400,9 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
   updateTag: async (id, tag) => {
     try {
-      if (isDemoMode) {
+      const { isDemo } = getTeamContext();
+
+      if (isDemo) {
         set(state => ({
           tags: state.tags.map(t => t.id === id ? { ...t, ...tag } : t),
         }));
@@ -365,7 +428,9 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
   deleteTag: async (id) => {
     try {
-      if (isDemoMode) {
+      const { isDemo } = getTeamContext();
+
+      if (isDemo) {
         set(state => ({
           tags: state.tags.filter(t => t.id !== id),
           contacts: state.contacts.map(c =>
@@ -393,19 +458,26 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
   // Activity CRUD
   addActivity: async (activity) => {
     try {
-      if (isDemoMode) {
+      const { isDemo, teamId, userId } = getTeamContext();
+
+      if (isDemo) {
         const newActivity: Activity = {
           ...activity,
           id: generateUUID(),
+          team_id: teamId || undefined,
           created_at: new Date().toISOString(),
         };
         set(state => ({ activities: [newActivity, ...state.activities] }));
         return;
       }
 
+      const insertData: any = { ...activity };
+      if (teamId) insertData.team_id = teamId;
+      if (userId) insertData.user_id = userId;
+
       const { data, error } = await supabase
         .from('activities')
-        .insert(activity)
+        .insert(insertData)
         .select()
         .single();
 

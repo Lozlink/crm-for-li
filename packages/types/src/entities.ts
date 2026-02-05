@@ -3,6 +3,7 @@ export interface Tag {
   name: string;
   color: string;
   user_id?: string;
+  team_id?: string;
   created_at?: string;
 }
 
@@ -18,6 +19,7 @@ export interface Contact {
   tag_id?: string;
   tag?: Tag;
   user_id?: string;
+  team_id?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -28,6 +30,7 @@ export interface Activity {
   type: 'note' | 'call' | 'meeting' | 'email';
   content?: string;
   user_id?: string;
+  team_id?: string;
   created_at?: string;
 }
 

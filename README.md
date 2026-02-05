@@ -246,7 +246,7 @@ pnpm type-check:mobile
 
 ### Supabase Setup
 1. Create a project at [supabase.com](https://supabase.com)
-2. Run the migration in `supabase/migrations/001_initial_schema.sql`
+2. Run the migration in `supabase/migrations/001_initial_schema.sql.disabled`
 3. Copy URL and anon key to `.env`
 
 ### Google Maps Setup

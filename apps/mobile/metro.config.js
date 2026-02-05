@@ -6,8 +6,11 @@ const workspaceRoot = path.resolve(projectRoot, '../..');
 
 const config = getDefaultConfig(projectRoot);
 
-// Watch all packages in monorepo
-config.watchFolders = [workspaceRoot];
+// Watch all packages in monorepo - extend default watchFolders instead of replacing
+config.watchFolders = [
+  ...(config.watchFolders || []),
+  workspaceRoot,
+];
 
 // Let Metro know where to resolve packages
 config.resolver.nodeModulesPaths = [
