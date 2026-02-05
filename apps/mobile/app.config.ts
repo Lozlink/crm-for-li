@@ -8,11 +8,18 @@ export default {
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     scheme: "realestate-crm",
+    updates: {
+      url: "https://u.expo.dev/aed13454-1087-4558-a758-266f2bdddb63"
+    },
+    runtimeVersion: {
+      policy: "appVersion"
+    },
     splash: {
       image: "./assets/splash-icon.png",
       resizeMode: "contain",
       backgroundColor: "#6200ee"
     },
+
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.realestate-geo.crm",
@@ -60,6 +67,7 @@ export default {
         }
       ]
     ],
+
     extra: {
       SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,

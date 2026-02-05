@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { StyleSheet, View, KeyboardAvoidingView, Platform } from 'react-native';
-import { TextInput, Button, Text, useTheme, HelperText } from 'react-native-paper';
+import { StyleSheet, View, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { TextInput, Button, Text, useTheme, HelperText, Divider } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@realestate-crm/hooks';
+import { acceptInvitation } from '@realestate-crm/api';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 function slugify(text: string): string {
@@ -16,13 +17,17 @@ export default function CreateTeamScreen() {
   const theme = useTheme();
   const router = useRouter();
   const createTeam = useAuthStore(s => s.createTeam);
+  const fetchMemberships = useAuthStore(s => s.fetchMemberships);
   const authError = useAuthStore(s => s.authError);
   const setAuthError = useAuthStore(s => s.setAuthError);
 
+  const [mode, setMode] = useState<'create' | 'join'>('create');
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const handleNameChange = (text: string) => {
     setName(text);
@@ -51,65 +56,138 @@ export default function CreateTeamScreen() {
     }
   };
 
+  const handleJoin = async () => {
+    if (!inviteCode.trim()) {
+      setJoinError('Please enter an invite code');
+      return;
+    }
+    setLoading(true);
+    setJoinError(null);
+    try {
+      await acceptInvitation(inviteCode.trim().toUpperCase());
+      await fetchMemberships();
+      router.replace('/(tabs)');
+    } catch (e: any) {
+      setJoinError(e.message || 'Invalid or expired invite code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.iconRow}>
-          <Icon name="office-building" size={48} color={theme.colors.primary} />
+          <Icon name={mode === 'create' ? 'office-building' : 'account-group'} size={48} color={theme.colors.primary} />
         </View>
 
         <Text variant="titleMedium" style={{ textAlign: 'center', marginBottom: 4 }}>
-          Create your agency
+          {mode === 'create' ? 'Create your agency' : 'Join a team'}
         </Text>
         <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center', marginBottom: 24 }}>
-          Set up a team for your real estate agency
+          {mode === 'create'
+            ? 'Set up a team for your real estate agency'
+            : 'Enter the invite code you received'}
         </Text>
 
-        <TextInput
-          label="Agency Name"
-          value={name}
-          onChangeText={handleNameChange}
-          mode="outlined"
-          left={<TextInput.Icon icon="office-building" />}
-          style={styles.input}
-        />
+        {mode === 'create' ? (
+          <>
+            <TextInput
+              label="Agency Name"
+              value={name}
+              onChangeText={handleNameChange}
+              mode="outlined"
+              left={<TextInput.Icon icon="office-building" />}
+              style={styles.input}
+            />
 
-        <TextInput
-          label="Slug (URL-friendly)"
-          value={slug}
-          onChangeText={(t) => { setSlug(slugify(t)); setSlugEdited(true); setAuthError(null); }}
-          mode="outlined"
-          autoCapitalize="none"
-          left={<TextInput.Icon icon="link" />}
-          style={styles.input}
-        />
+            <TextInput
+              label="Slug (URL-friendly)"
+              value={slug}
+              onChangeText={(t) => { setSlug(slugify(t)); setSlugEdited(true); setAuthError(null); }}
+              mode="outlined"
+              autoCapitalize="none"
+              left={<TextInput.Icon icon="link" />}
+              style={styles.input}
+            />
 
-        {authError && (
-          <HelperText type="error" visible>
-            {authError}
-          </HelperText>
+            {authError && (
+              <HelperText type="error" visible>
+                {authError}
+              </HelperText>
+            )}
+
+            <Button
+              mode="contained"
+              onPress={handleCreate}
+              loading={loading}
+              disabled={loading}
+              style={styles.button}
+            >
+              Create Team
+            </Button>
+          </>
+        ) : (
+          <>
+            <TextInput
+              label="Invite Code"
+              value={inviteCode}
+              onChangeText={(t) => { setInviteCode(t.toUpperCase()); setJoinError(null); }}
+              autoCapitalize="characters"
+              mode="outlined"
+              left={<TextInput.Icon icon="key" />}
+              style={styles.input}
+              maxLength={8}
+            />
+
+            {joinError && (
+              <HelperText type="error" visible>
+                {joinError}
+              </HelperText>
+            )}
+
+            <Button
+              mode="contained"
+              onPress={handleJoin}
+              loading={loading}
+              disabled={loading}
+              style={styles.button}
+            >
+              Join Team
+            </Button>
+          </>
         )}
 
+        <View style={styles.dividerRow}>
+          <Divider style={styles.divider} />
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginHorizontal: 12 }}>
+            or
+          </Text>
+          <Divider style={styles.divider} />
+        </View>
+
         <Button
-          mode="contained"
-          onPress={handleCreate}
-          loading={loading}
-          disabled={loading}
-          style={styles.button}
+          mode="outlined"
+          onPress={() => {
+            setMode(mode === 'create' ? 'join' : 'create');
+            setAuthError(null);
+            setJoinError(null);
+          }}
+          icon={mode === 'create' ? 'key' : 'plus'}
         >
-          Create Team
+          {mode === 'create' ? 'I have an invite code' : 'Create a new team'}
         </Button>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     padding: 24,
     justifyContent: 'center',
   },
@@ -122,5 +200,13 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 12,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  divider: {
+    flex: 1,
   },
 });
