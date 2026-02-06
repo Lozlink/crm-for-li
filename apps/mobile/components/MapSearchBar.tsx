@@ -17,7 +17,7 @@ export default function MapSearchBar({ onLocationSelect }: MapSearchBarProps) {
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const savedSuburbs = useCRMStore(state => state.savedSuburbs);
   const addSavedSuburb = useCRMStore(state => state.addSavedSuburb);

@@ -135,10 +135,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         user,
         profile,
         isAuthenticated: true,
-        isLoading: false,
         isDemoMode: false,
       });
       await storage.removeItem('demo-mode');
+      await get().fetchMemberships();
+      set({ isLoading: false });
     } catch (error: any) {
       set({ authError: error.message, isLoading: false });
       throw error;
@@ -155,11 +156,16 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         user,
         profile,
         isAuthenticated: true,
-        isLoading: false,
         isDemoMode: false,
       });
       await storage.removeItem('demo-mode');
-      await get().fetchMemberships();
+      try {
+        await get().fetchMemberships();
+      } catch {
+        // fetchMemberships failed but auth succeeded — still let user in.
+        // They'll see team create screen but authError will explain why.
+      }
+      set({ isLoading: false });
     } catch (error: any) {
       set({ authError: error.message, isLoading: false });
       throw error;
@@ -238,6 +244,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       set({ activeTeam, activeRole });
     } catch (error: any) {
       console.error('Fetch memberships error:', error);
+      set({ authError: `Failed to load teams: ${error.message}` });
+      throw error;
     }
   },
 

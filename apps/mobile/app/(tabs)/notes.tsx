@@ -30,16 +30,16 @@ export default function NotesScreen() {
           a => a.contact_id === contact.id && a.type === 'note'
         );
         const latestNote = contactNotes.length > 0
-          ? contactNotes.sort((a, b) => 
-              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          ? contactNotes.sort((a, b) =>
+              new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
             )[0]
           : null;
         return { contact, notes: contactNotes, latestNote };
       })
       .filter(entry => entry.notes.length > 0 || !entry.contact.first_name) // Has notes OR is a quick note entry
       .sort((a, b) => {
-        const aDate = a.latestNote?.created_at || a.contact.created_at;
-        const bDate = b.latestNote?.created_at || b.contact.created_at;
+        const aDate = a.latestNote?.created_at || a.contact.created_at || '';
+        const bDate = b.latestNote?.created_at || b.contact.created_at || '';
         return new Date(bDate).getTime() - new Date(aDate).getTime();
       });
 
@@ -125,7 +125,7 @@ export default function NotesScreen() {
                 {latestNote.content}
               </Text>
               <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
-                {formatDate(latestNote.created_at)}
+                {latestNote.created_at ? formatDate(latestNote.created_at) : ''}
               </Text>
             </Surface>
           )}

@@ -19,8 +19,17 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const hydrate = useCRMStore(s => s.hydrate);
   const fetchContacts = useCRMStore(s => s.fetchContacts);
   const fetchTags = useCRMStore(s => s.fetchTags);
+  const clearData = useCRMStore(s => s.clearData);
 
   const [dataLoaded, setDataLoaded] = useState(false);
+
+  // Clear CRM data when user signs out (not authenticated and not demo)
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated && !isDemoMode) {
+      clearData();
+      setDataLoaded(false);
+    }
+  }, [isAuthenticated, isDemoMode, isLoading]);
 
   // Load CRM data once auth + team are resolved
   useEffect(() => {
@@ -47,7 +56,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
-    const inTeamCreate = segments[0] === 'team' && segments[1] === 'create';
+    const inTeamCreate = segments[0] === 'team' && (segments as string[])[1] === 'create';
 
     if (!isAuthenticated && !isDemoMode) {
       // Not authed, not demo — must be on auth screen
@@ -59,8 +68,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       if (!inTeamCreate) {
         router.replace('/team/create');
       }
-    } else if (inAuthGroup) {
-      // Already authed/demo but still on auth screen — redirect to app
+    } else if (inAuthGroup || inTeamCreate) {
+      // Already authed/demo with teams, or on stale team create screen — redirect to app
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, isDemoMode, isLoading, memberships.length, segments]);

@@ -29,7 +29,7 @@ export default function AddressAutocomplete({
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const searchPlaces = useCallback(async (text: string) => {
     if (!text || text.length < 3 || !GOOGLE_PLACES_API_KEY) {

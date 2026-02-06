@@ -52,8 +52,9 @@ interface CRMState {
   hydrate: () => Promise<void>;
   persist: () => Promise<void>;
 
-  // Team switching
+  // Team switching / cleanup
   resetData: () => Promise<void>;
+  clearData: () => void;
 }
 
 // 15 Hornet Street, Greenfield Park, NSW, Australia - street level zoom
@@ -111,10 +112,18 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
     get().persist();
   },
 
-  // Hydration
+  // Hydration - only loads from local storage in demo mode
   hydrate: async () => {
     try {
-      const data = await storage.getItem('crm-storage');
+      const { isDemo } = getTeamContext();
+
+      // In auth mode, data comes from Supabase - skip local hydration
+      if (!isDemo) {
+        set({ isHydrated: true });
+        return;
+      }
+
+      const data = await storage.getItem('crm-storage-demo');
       if (data) {
         const parsed = JSON.parse(data);
         set({
@@ -133,10 +142,14 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
     }
   },
 
+  // Persist - only saves to local storage in demo mode
   persist: async () => {
     try {
+      const { isDemo } = getTeamContext();
+      if (!isDemo) return;
+
       const { contacts, tags, savedSuburbs, mapRegion } = get();
-      await storage.setItem('crm-storage', JSON.stringify({
+      await storage.setItem('crm-storage-demo', JSON.stringify({
         contacts,
         tags,
         savedSuburbs,
@@ -160,6 +173,21 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
     });
     await get().fetchTags();
     await get().fetchContacts();
+  },
+
+  // Clear all data from store (used on sign out)
+  clearData: () => {
+    set({
+      contacts: [],
+      tags: [],
+      activities: [],
+      savedSuburbs: [],
+      selectedTagIds: [],
+      searchQuery: '',
+      isHydrated: false,
+      isLoading: false,
+      error: null,
+    });
   },
 
   // Fetch operations
