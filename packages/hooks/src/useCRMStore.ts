@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { storage } from '@realestate-crm/utils';
-import type { Contact, Tag, Activity, MapRegion, SavedSuburb } from '@realestate-crm/types';
+import type { Contact, Tag, Activity, ActivityWithContact, MapRegion, SavedSuburb } from '@realestate-crm/types';
 import { supabase, isDemoMode, generateUUID } from '@realestate-crm/api';
 import { useAuthStore } from './useAuthStore';
 
@@ -9,6 +9,7 @@ interface CRMState {
   contacts: Contact[];
   tags: Tag[];
   activities: Activity[];
+  recentActivities: ActivityWithContact[];
   savedSuburbs: SavedSuburb[];
 
   // UI State
@@ -33,6 +34,7 @@ interface CRMState {
   fetchContacts: () => Promise<void>;
   fetchTags: () => Promise<void>;
   fetchActivities: (contactId: string) => Promise<void>;
+  fetchRecentActivities: (limit?: number) => Promise<void>;
 
   addContact: (contact: Omit<Contact, 'id' | 'created_at' | 'updated_at'>) => Promise<Contact | null>;
   updateContact: (id: string, contact: Partial<Contact>) => Promise<void>;
@@ -42,7 +44,9 @@ interface CRMState {
   updateTag: (id: string, tag: Partial<Tag>) => Promise<void>;
   deleteTag: (id: string) => Promise<void>;
 
-  addActivity: (activity: Omit<Activity, 'id' | 'created_at'>) => Promise<void>;
+  addActivity: (activity: Omit<Activity, 'id' | 'created_at'>) => Promise<Activity | null>;
+  updateActivity: (id: string, updates: Partial<Activity>) => Promise<void>;
+  bulkAddContacts: (contacts: Omit<Contact, 'id' | 'created_at' | 'updated_at'>[]) => Promise<Contact[]>;
 
   // Saved Suburbs
   addSavedSuburb: (suburb: Omit<SavedSuburb, 'id'>) => void;
@@ -79,6 +83,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
   contacts: [],
   tags: [],
   activities: [],
+  recentActivities: [],
   savedSuburbs: [],
   selectedTagIds: [],
   searchQuery: '',
@@ -166,6 +171,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       contacts: [],
       tags: [],
       activities: [],
+      recentActivities: [],
       selectedTagIds: [],
       searchQuery: '',
       isLoading: false,
@@ -181,6 +187,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       contacts: [],
       tags: [],
       activities: [],
+      recentActivities: [],
       savedSuburbs: [],
       selectedTagIds: [],
       searchQuery: '',
@@ -260,6 +267,29 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
       if (error) throw error;
       set({ activities: data || [] });
+    } catch (error: any) {
+      set({ error: error.message });
+    }
+  },
+
+  fetchRecentActivities: async (limit = 10) => {
+    try {
+      const { isDemo, teamId } = getTeamContext();
+      if (isDemo) return;
+
+      let query = supabase
+        .from('activities')
+        .select('*, contact:contacts(first_name, last_name)')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (teamId) {
+        query = query.eq('team_id', teamId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      set({ recentActivities: (data as ActivityWithContact[]) || [] });
     } catch (error: any) {
       set({ error: error.message });
     }
@@ -496,7 +526,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
           created_at: new Date().toISOString(),
         };
         set(state => ({ activities: [newActivity, ...state.activities] }));
-        return;
+        return newActivity;
       }
 
       const insertData: any = { ...activity };
@@ -512,8 +542,86 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       if (error) throw error;
 
       set(state => ({ activities: [data, ...state.activities] }));
+      return data;
     } catch (error: any) {
       set({ error: error.message });
+      return null;
+    }
+  },
+
+  updateActivity: async (id, updates) => {
+    try {
+      const { isDemo } = getTeamContext();
+
+      if (isDemo) {
+        set(state => ({
+          activities: state.activities.map(a =>
+            a.id === id ? { ...a, ...updates } : a
+          ),
+        }));
+        return;
+      }
+
+      const { error } = await supabase
+        .from('activities')
+        .update(updates)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      set(state => ({
+        activities: state.activities.map(a =>
+          a.id === id ? { ...a, ...updates } : a
+        ),
+      }));
+    } catch (error: any) {
+      set({ error: error.message });
+    }
+  },
+
+  bulkAddContacts: async (contacts) => {
+    try {
+      const { isDemo, teamId, userId } = getTeamContext();
+
+      if (isDemo) {
+        const now = new Date().toISOString();
+        const newContacts: Contact[] = contacts.map(c => ({
+          ...c,
+          id: generateUUID(),
+          team_id: teamId || undefined,
+          created_at: now,
+          updated_at: now,
+        }));
+        set(state => ({
+          contacts: [...newContacts, ...state.contacts],
+        }));
+        get().persist();
+        return newContacts;
+      }
+
+      const insertData = contacts.map(c => {
+        const d: any = { ...c };
+        if (teamId) d.team_id = teamId;
+        if (userId) d.user_id = userId;
+        return d;
+      });
+
+      const { data, error } = await supabase
+        .from('contacts')
+        .insert(insertData)
+        .select('*, tag:tags(*)');
+
+      if (error) throw error;
+
+      const created = data || [];
+      set(state => ({
+        contacts: [...created, ...state.contacts],
+      }));
+      get().persist();
+      return created;
+    } catch (error: any) {
+      set({ error: error.message });
+      return [];
     }
   },
 }));

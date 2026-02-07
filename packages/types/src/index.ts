@@ -1,5 +1,5 @@
 // Entities
-export type { Tag, Contact, Activity, ContactFormData } from './entities';
+export type { Tag, Contact, Activity, ActivityWithContact, ContactFormData } from './entities';
 
 // Map types
 export type { MapRegion, SavedSuburb, SuburbBoundary } from './map';

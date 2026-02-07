@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { StyleSheet, View, FlatList } from 'react-native';
-import { Searchbar, FAB, useTheme, Text, ActivityIndicator } from 'react-native-paper';
+import { Searchbar, FAB, useTheme, Text, ActivityIndicator, Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useCRMStore } from '@realestate-crm/hooks';
 import { ContactCard } from '@realestate-crm/ui';
@@ -72,6 +72,15 @@ export default function ContactsScreen() {
           value={searchQuery}
           style={styles.searchbar}
         />
+        <Button
+          mode="outlined"
+          icon="import"
+          compact
+          onPress={() => router.push('/contacts/import')}
+          style={styles.importButton}
+        >
+          Import from Phone
+        </Button>
       </View>
 
       {isLoading ? (
@@ -108,6 +117,10 @@ const styles = StyleSheet.create({
   },
   searchbar: {
     elevation: 0,
+  },
+  importButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
   },
   list: {
     padding: 16,

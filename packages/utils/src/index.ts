@@ -16,4 +16,7 @@ export {
   isValidUrl,
   isNonEmptyString,
   formatPhone,
+  normalizePhone,
+  isDuplicateContact,
+  findDuplicates,
 } from './validation';

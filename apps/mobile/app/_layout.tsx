@@ -124,6 +124,13 @@ export default function RootLayout() {
               }}
             />
             <Stack.Screen
+              name="contacts/import"
+              options={{
+                title: 'Import Contacts',
+                presentation: 'modal',
+              }}
+            />
+            <Stack.Screen
               name="team/create"
               options={{
                 title: 'Create Team',
