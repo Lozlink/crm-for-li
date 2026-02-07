@@ -34,3 +34,61 @@ export function formatPhone(phone: string): string {
   }
   return phone;
 }
+
+/**
+ * Normalize a phone number: strip non-digits, take last 10 digits.
+ * Handles country codes (e.g., +61 or +1).
+ */
+export function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return digits.slice(-10);
+}
+
+interface DedupContact {
+  first_name: string;
+  last_name?: string;
+  phone?: string;
+}
+
+/**
+ * Check if an incoming contact is a duplicate of an existing one.
+ * Matches on normalized phone OR exact lowercase first+last name.
+ */
+export function isDuplicateContact(incoming: DedupContact, existing: DedupContact): boolean {
+  // Match on normalized phone
+  if (incoming.phone && existing.phone) {
+    const inPhone = normalizePhone(incoming.phone);
+    const exPhone = normalizePhone(existing.phone);
+    if (inPhone.length >= 10 && inPhone === exPhone) return true;
+  }
+
+  // Match on exact lowercase first+last name
+  const inFirst = incoming.first_name.toLowerCase().trim();
+  const exFirst = existing.first_name.toLowerCase().trim();
+  const inLast = (incoming.last_name || '').toLowerCase().trim();
+  const exLast = (existing.last_name || '').toLowerCase().trim();
+
+  if (inFirst && inFirst === exFirst && inLast === exLast) return true;
+
+  return false;
+}
+
+/**
+ * Find duplicates between a list of incoming contacts and existing contacts.
+ * Returns a Map where key = incoming index, value = matching existing contact.
+ */
+export function findDuplicates<T extends DedupContact>(
+  incoming: DedupContact[],
+  existing: T[],
+): Map<number, T> {
+  const dupes = new Map<number, T>();
+  for (let i = 0; i < incoming.length; i++) {
+    for (const ex of existing) {
+      if (isDuplicateContact(incoming[i], ex)) {
+        dupes.set(i, ex);
+        break;
+      }
+    }
+  }
+  return dupes;
+}

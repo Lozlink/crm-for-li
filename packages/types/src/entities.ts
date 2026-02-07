@@ -34,6 +34,10 @@ export interface Activity {
   created_at?: string;
 }
 
+export interface ActivityWithContact extends Activity {
+  contact: { first_name: string; last_name?: string };
+}
+
 export interface ContactFormData {
   first_name: string;
   last_name: string;

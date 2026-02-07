@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { StyleSheet, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Linking } from 'react-native';
 import { Text, Surface, useTheme, Avatar } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { Contact } from '@realestate-crm/types';
@@ -60,6 +60,26 @@ function ContactCard({ contact, onPress }: ContactCardProps) {
                 {contact.email}
               </Text>
             </View>
+          )}
+
+          {contact.phone && (
+            <TouchableOpacity
+              style={styles.infoRow}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                Linking.openURL(`tel:${contact.phone}`);
+              }}
+              activeOpacity={0.6}
+            >
+              <Icon name="phone-outline" size={14} color={theme.colors.primary} />
+              <Text
+                variant="bodySmall"
+                numberOfLines={1}
+                style={[styles.infoText, { color: theme.colors.primary }]}
+              >
+                {contact.phone}
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
 

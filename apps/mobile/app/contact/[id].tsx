@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform, Linking, AppState } from 'react-native';
 import {
   Text,
   Button,
@@ -12,6 +12,7 @@ import {
   Portal,
   Dialog,
   ActivityIndicator,
+  TextInput,
 } from 'react-native-paper';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -29,6 +30,8 @@ export default function ContactDetailScreen() {
   const contacts = useCRMStore(state => state.contacts);
   const updateContact = useCRMStore(state => state.updateContact);
   const deleteContact = useCRMStore(state => state.deleteContact);
+  const addActivity = useCRMStore(state => state.addActivity);
+  const updateActivity = useCRMStore(state => state.updateActivity);
   const fetchActivities = useCRMStore(state => state.fetchActivities);
   const isLoading = useCRMStore(state => state.isLoading);
 
@@ -38,6 +41,11 @@ export default function ContactDetailScreen() {
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [activityDialogVisible, setActivityDialogVisible] = useState(false);
 
+  // Call tracking state
+  const [callNotesVisible, setCallNotesVisible] = useState(false);
+  const [callNotes, setCallNotes] = useState('');
+  const pendingCallActivityId = useRef<string | null>(null);
+
   useEffect(() => {
     const found = contacts.find(c => c.id === id);
     setContact(found || null);
@@ -46,6 +54,45 @@ export default function ContactDetailScreen() {
       fetchActivities(id);
     }
   }, [id, contacts]);
+
+  // Listen for app returning to foreground after a call
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active' && pendingCallActivityId.current) {
+        setCallNotesVisible(true);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  const handleCall = useCallback(async () => {
+    if (!contact?.phone || !id) return;
+    const activity = await addActivity({
+      contact_id: id,
+      type: 'call',
+      content: 'Outgoing call',
+    });
+    if (activity) {
+      pendingCallActivityId.current = activity.id;
+    }
+    Linking.openURL(`tel:${contact.phone}`);
+  }, [contact, id, addActivity]);
+
+  const handleSaveCallNotes = useCallback(async () => {
+    if (pendingCallActivityId.current && callNotes.trim()) {
+      await updateActivity(pendingCallActivityId.current, { content: callNotes.trim() });
+      if (id) await fetchActivities(id);
+    }
+    pendingCallActivityId.current = null;
+    setCallNotes('');
+    setCallNotesVisible(false);
+  }, [callNotes, id, updateActivity, fetchActivities]);
+
+  const handleSkipCallNotes = useCallback(() => {
+    pendingCallActivityId.current = null;
+    setCallNotes('');
+    setCallNotesVisible(false);
+  }, []);
 
   const handleUpdate = async (data: ContactFormData) => {
     if (!id) return;
@@ -178,6 +225,19 @@ export default function ContactDetailScreen() {
                 )}
               </Surface>
 
+              {contact.phone && (
+                <Button
+                  mode="contained"
+                  icon="phone"
+                  onPress={handleCall}
+                  buttonColor="#16a34a"
+                  textColor="#fff"
+                  style={styles.callButton}
+                >
+                  Call {contact.first_name}
+                </Button>
+              )}
+
               <Divider style={styles.divider} />
 
               <View style={styles.activityHeader}>
@@ -217,6 +277,25 @@ export default function ContactDetailScreen() {
           onDismiss={() => setActivityDialogVisible(false)}
           contactId={id!}
         />
+
+        <Dialog visible={callNotesVisible} onDismiss={handleSkipCallNotes}>
+          <Dialog.Title>How did the call go?</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              mode="outlined"
+              placeholder="Add call notes..."
+              value={callNotes}
+              onChangeText={setCallNotes}
+              multiline
+              numberOfLines={4}
+              style={styles.callNotesInput}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={handleSkipCallNotes}>Skip</Button>
+            <Button onPress={handleSaveCallNotes} mode="contained">Save</Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </>
   );
@@ -261,6 +340,13 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  callButton: {
+    marginTop: 16,
+    borderRadius: 8,
+  },
+  callNotesInput: {
+    minHeight: 80,
   },
   divider: {
     marginVertical: 16,

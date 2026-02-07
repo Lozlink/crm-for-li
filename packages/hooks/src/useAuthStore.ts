@@ -287,7 +287,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       const teamMembers = await apiFetchTeamMembers(teamId);
       set({ teamMembers });
     } catch (error: any) {
-      console.error('Fetch team members error:', error);
+      console.error('Fetch team members error:', error?.message || error?.code || JSON.stringify(error));
     }
   },
 

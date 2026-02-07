@@ -52,15 +52,31 @@ export async function fetchUserTeams(): Promise<Membership[]> {
 }
 
 export async function fetchTeamMembers(teamId: string): Promise<Membership[]> {
-  const { data, error } = await supabase
+  // Fetch memberships first
+  const { data: memberships, error } = await supabase
     .from('memberships')
-    .select('*, profile:user_profiles(*)')
+    .select('*')
     .eq('team_id', teamId)
     .eq('status', 'active')
     .order('joined_at');
 
   if (error) throw error;
-  return (data || []) as Membership[];
+  if (!memberships || memberships.length === 0) return [];
+
+  // Fetch profiles for all member user_ids separately
+  // (avoids needing a FK from memberships to user_profiles)
+  const userIds = memberships.map((m) => m.user_id);
+  const { data: profiles } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .in('id', userIds);
+
+  const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+
+  return memberships.map((m) => ({
+    ...m,
+    profile: profileMap.get(m.user_id) || undefined,
+  })) as Membership[];
 }
 
 export async function updateMemberRole(membershipId: string, role: TeamRole) {
