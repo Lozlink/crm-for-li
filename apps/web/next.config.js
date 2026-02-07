@@ -1,5 +1,3 @@
-const path = require('path');
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: [
@@ -9,22 +7,13 @@ const nextConfig = {
     '@realestate-crm/api',
     '@realestate-crm/hooks',
   ],
-  webpack: (config) => {
-    // Shim react-native imports for shared packages
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      'react-native$': path.resolve(__dirname, 'src/shims/react-native.ts'),
-      '@react-native-async-storage/async-storage': path.resolve(
-        __dirname,
-        'src/shims/async-storage.ts'
-      ),
-      'expo-constants': path.resolve(__dirname, 'src/shims/expo-constants.ts'),
-      'react-native-url-polyfill/auto': path.resolve(
-        __dirname,
-        'src/shims/url-polyfill.ts'
-      ),
-    };
-    return config;
+  turbopack: {
+    resolveAlias: {
+      'react-native': './src/shims/react-native.ts',
+      '@react-native-async-storage/async-storage': './src/shims/async-storage.ts',
+      'expo-constants': './src/shims/expo-constants.ts',
+      'react-native-url-polyfill/auto': './src/shims/url-polyfill.ts',
+    },
   },
 };
 
