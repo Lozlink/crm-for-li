@@ -3,26 +3,34 @@
 import { useState, useCallback } from 'react';
 import { useCRMStore } from '@realestate-crm/hooks';
 import type { Contact } from '@realestate-crm/types';
+import AddressAutocomplete from './AddressAutocomplete';
 
 interface ContactFormDialogProps {
   contact: Contact | null;
   onClose: () => void;
+  prefillAddress?: string;
+  prefillCoords?: { lat: number; lng: number };
 }
 
 export default function ContactFormDialog({
   contact,
   onClose,
+  prefillAddress,
+  prefillCoords,
 }: ContactFormDialogProps) {
   const tags = useCRMStore((s) => s.tags);
   const addContact = useCRMStore((s) => s.addContact);
   const updateContact = useCRMStore((s) => s.updateContact);
+  const addActivity = useCRMStore((s) => s.addActivity);
 
   const [firstName, setFirstName] = useState(contact?.first_name || '');
   const [lastName, setLastName] = useState(contact?.last_name || '');
   const [email, setEmail] = useState(contact?.email || '');
   const [phone, setPhone] = useState(contact?.phone || '');
-  const [address, setAddress] = useState(contact?.address || '');
+  const [address, setAddress] = useState(contact?.address || prefillAddress || '');
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | undefined>(prefillCoords);
   const [tagId, setTagId] = useState(contact?.tag_id || '');
+  const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -50,14 +58,23 @@ export default function ContactFormDialog({
             tag_id: tagId || undefined,
           });
         } else {
-          await addContact({
+          const newContact = await addContact({
             first_name: firstName.trim(),
             last_name: lastName.trim() || undefined,
             email: email.trim() || undefined,
             phone: phone.trim() || undefined,
             address: address.trim() || undefined,
             tag_id: tagId || undefined,
+            latitude: coords?.lat,
+            longitude: coords?.lng,
           });
+          if (newContact && note.trim()) {
+            await addActivity({
+              contact_id: newContact.id,
+              type: 'note',
+              content: note.trim(),
+            });
+          }
         }
         onClose();
       } catch (err: any) {
@@ -75,14 +92,17 @@ export default function ContactFormDialog({
       tagId,
       isEditing,
       contact,
+      note,
       addContact,
+      addActivity,
       updateContact,
       onClose,
+      coords,
     ]
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
       <div className="mx-4 w-full max-w-lg rounded-xl bg-white shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
@@ -160,10 +180,13 @@ export default function ContactFormDialog({
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Address
               </label>
-              <input
-                type="text"
+              <AddressAutocomplete
                 value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                onChange={setAddress}
+                onSelect={(addr, lat, lng) => {
+                  setAddress(addr);
+                  if (lat !== 0 || lng !== 0) setCoords({ lat, lng });
+                }}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 placeholder="Street address, suburb, state"
               />
@@ -187,6 +210,22 @@ export default function ContactFormDialog({
                 ))}
               </select>
             </div>
+
+            {/* Note */}
+            {!isEditing && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Note
+                </label>
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  placeholder="Add an initial note..."
+                />
+              </div>
+            )}
 
           </div>
 

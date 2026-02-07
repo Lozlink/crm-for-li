@@ -55,6 +55,17 @@ export default function ContactDetail({ contactId }: ContactDetailProps) {
     await fetchActivities(contactId);
   }, [contactId, newActivityType, newActivityContent, addActivity, fetchActivities]);
 
+  const handleCall = useCallback(async () => {
+    if (!contact?.phone) return;
+    await addActivity({
+      contact_id: contactId,
+      type: 'call',
+      content: 'Outgoing call',
+    });
+    window.open(`tel:${contact.phone}`, '_self');
+    await fetchActivities(contactId);
+  }, [contact, contactId, addActivity, fetchActivities]);
+
   const handleDelete = useCallback(async () => {
     if (
       window.confirm(
@@ -144,6 +155,7 @@ export default function ContactDetail({ contactId }: ContactDetailProps) {
                   label="Phone"
                   value={contact.phone}
                   href={`tel:${contact.phone}`}
+                  onClick={handleCall}
                 />
               )}
               {contact.address && (
@@ -160,6 +172,14 @@ export default function ContactDetail({ contactId }: ContactDetailProps) {
 
             {/* Actions */}
             <div className="mt-6 flex gap-2">
+              {contact.phone && (
+                <button
+                  onClick={handleCall}
+                  className="flex-1 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
+                >
+                  Call
+                </button>
+              )}
               <button
                 onClick={() => setShowEditForm(true)}
                 className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -249,10 +269,12 @@ function DetailRow({
   label,
   value,
   href,
+  onClick,
 }: {
   label: string;
   value: string;
   href?: string;
+  onClick?: () => void;
 }) {
   return (
     <div>
@@ -261,6 +283,12 @@ function DetailRow({
         <a
           href={href}
           className="text-sm text-primary-500 hover:text-primary-600"
+          onClick={(e) => {
+            if (onClick) {
+              e.preventDefault();
+              onClick();
+            }
+          }}
         >
           {value}
         </a>

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useCRMStore } from '@realestate-crm/hooks';
 import type { Contact } from '@realestate-crm/types';
 import ContactFormDialog from './ContactFormDialog';
+import CSVImport from './CSVImport';
 
 type SortField = 'name' | 'email' | 'address' | 'created_at';
 type SortDir = 'asc' | 'desc';
@@ -21,6 +22,7 @@ export default function ContactsTable() {
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [showForm, setShowForm] = useState(false);
+  const [showCSVImport, setShowCSVImport] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
 
   const toggleTag = useCallback((tagId: string) => {
@@ -117,15 +119,23 @@ export default function ContactsTable() {
             {filtered.length} of {contacts.length} contacts
           </p>
         </div>
-        <button
-          onClick={() => {
-            setEditingContact(null);
-            setShowForm(true);
-          }}
-          className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600"
-        >
-          + Add Contact
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowCSVImport(true)}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Import CSV
+          </button>
+          <button
+            onClick={() => {
+              setEditingContact(null);
+              setShowForm(true);
+            }}
+            className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600"
+          >
+            + Add Contact
+          </button>
+        </div>
       </div>
 
       {/* Filters bar */}
@@ -274,6 +284,11 @@ export default function ContactsTable() {
           }}
         />
       )}
+
+      {/* CSV Import dialog */}
+      {showCSVImport && (
+        <CSVImport onClose={() => setShowCSVImport(false)} />
+      )}
     </div>
   );
 }
@@ -346,7 +361,17 @@ function ContactRow({
         {contact.email || '-'}
       </td>
       <td className="px-4 py-3 text-sm text-gray-600">
-        {contact.phone || '-'}
+        {contact.phone ? (
+          <a
+            href={`tel:${contact.phone}`}
+            className="text-primary-500 hover:text-primary-600"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {contact.phone}
+          </a>
+        ) : (
+          '-'
+        )}
       </td>
       <td className="max-w-[200px] px-4 py-3">
         <span className="block truncate text-sm text-gray-600">
