@@ -6,7 +6,12 @@ import { acceptInvitation } from '@realestate-crm/api';
 
 type Mode = 'create' | 'join';
 
-export default function TeamSetup() {
+interface TeamSetupProps {
+  /** When provided, renders as a closable modal overlay */
+  onClose?: () => void;
+}
+
+export default function TeamSetup({ onClose }: TeamSetupProps = {}) {
   const [mode, setMode] = useState<Mode>('create');
   const createTeam = useAuthStore((s) => s.createTeam);
   const fetchMemberships = useAuthStore((s) => s.fetchMemberships);
@@ -35,13 +40,14 @@ export default function TeamSetup() {
       setError('');
       try {
         await createTeam(teamName.trim(), slug || slugify(teamName));
+        onClose?.();
       } catch (err: any) {
         setError(err.message || 'Failed to create team');
       } finally {
         setSaving(false);
       }
     },
-    [teamName, slug, createTeam]
+    [teamName, slug, createTeam, onClose]
   );
 
   const handleJoin = useCallback(
@@ -53,25 +59,42 @@ export default function TeamSetup() {
       try {
         await acceptInvitation(inviteCode.toUpperCase());
         await fetchMemberships();
+        onClose?.();
       } catch (err: any) {
         setError(err.message || 'Invalid or expired invite code');
       } finally {
         setSaving(false);
       }
     },
-    [inviteCode, fetchMemberships]
+    [inviteCode, fetchMemberships, onClose]
   );
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md">
+  const content = (
+    <div className={onClose ? 'w-full max-w-md' : 'flex min-h-screen items-center justify-center bg-gray-50 px-4'}>
+      <div className={onClose ? '' : 'w-full max-w-md'}>
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary-500 text-lg font-bold text-white">
-            RE
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">Set Up Your Team</h1>
+          {onClose ? (
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-xl font-bold text-gray-900">Create or Join Team</h1>
+              <button
+                onClick={onClose}
+                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary-500 text-lg font-bold text-white">
+                RE
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900">Set Up Your Team</h1>
+            </>
+          )}
           <p className="mt-1 text-sm text-gray-500">
-            {profile?.display_name
+            {!onClose && profile?.display_name
               ? `Welcome, ${profile.display_name}! `
               : ''}
             Create a new team or join an existing one.
@@ -179,15 +202,29 @@ export default function TeamSetup() {
           )}
         </div>
 
-        <div className="mt-4 text-center">
-          <button
-            onClick={() => signOut()}
-            className="text-sm text-gray-400 hover:text-gray-600"
-          >
-            Sign out
-          </button>
-        </div>
+        {!onClose && (
+          <div className="mt-4 text-center">
+            <button
+              onClick={() => signOut()}
+              className="text-sm text-gray-400 hover:text-gray-600"
+            >
+              Sign out
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
+
+  if (onClose) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          {content}
+        </div>
+      </div>
+    );
+  }
+
+  return content;
 }

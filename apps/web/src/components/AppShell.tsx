@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuthStore, useCRMStore } from '@realestate-crm/hooks';
 import type { Membership } from '@realestate-crm/types';
+import TeamSetup from './TeamSetup';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: DashboardIcon },
@@ -27,6 +28,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const resetData = useCRMStore((s) => s.resetData);
   const [syncing, setSyncing] = useState(false);
   const [teamDropdownOpen, setTeamDropdownOpen] = useState(false);
+  const [showTeamSetup, setShowTeamSetup] = useState(false);
 
   const handleSync = useCallback(async () => {
     setSyncing(true);
@@ -69,9 +71,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {(activeTeam || isDemoMode) && (
           <div className="relative border-b border-gray-100">
             <button
-              onClick={() => !isDemoMode && memberships.length > 1 && setTeamDropdownOpen(!teamDropdownOpen)}
+              onClick={() => !isDemoMode && setTeamDropdownOpen(!teamDropdownOpen)}
               className={`flex w-full items-center gap-2 px-4 py-2.5 text-left ${
-                !isDemoMode && memberships.length > 1 ? 'hover:bg-gray-50 cursor-pointer' : ''
+                !isDemoMode ? 'hover:bg-gray-50 cursor-pointer' : ''
               }`}
             >
               <div className="min-w-0 flex-1">
@@ -84,7 +86,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   </span>
                 )}
               </div>
-              {!isDemoMode && memberships.length > 1 && (
+              {!isDemoMode && (
                 <svg className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${teamDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                 </svg>
@@ -116,6 +118,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       )}
                     </button>
                   ))}
+                  <hr className="my-1" />
+                  <button
+                    onClick={() => { setTeamDropdownOpen(false); setShowTeamSetup(true); }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-primary-600 hover:bg-gray-50"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Create or Join Team
+                  </button>
                 </div>
               </>
             )}
@@ -186,6 +198,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">{children}</main>
+
+      {/* Team create/join modal */}
+      {showTeamSetup && <TeamSetup onClose={() => setShowTeamSetup(false)} />}
     </div>
   );
 }

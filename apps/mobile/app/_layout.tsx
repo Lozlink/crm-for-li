@@ -68,8 +68,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       if (!inTeamCreate) {
         router.replace('/team/create');
       }
-    } else if (inAuthGroup || inTeamCreate) {
-      // Already authed/demo with teams, or on stale team create screen — redirect to app
+    } else if (inAuthGroup) {
+      // Already authed/demo — redirect away from auth screens to app
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, isDemoMode, isLoading, memberships.length, segments]);
