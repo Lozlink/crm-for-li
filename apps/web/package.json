@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "dotenvx run --env-file=../../.env -- next dev --port 3000",
-    "build": "dotenvx run --env-file=../../.env -- next build",
+    "build": "next build",
     "start": "next start",
     "type-check": "tsc --noEmit",
     "lint": "next lint"
