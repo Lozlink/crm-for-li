@@ -7,48 +7,186 @@
 [2mStarting Metro Bundler[22m
 [1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  0.0% [22m[2m(0/1)[22m
 [1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  0.0% [22m[2m(0/1)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  0.0% [22m[2m(0/1)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  2.6% [22m[2m(15/93)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓[49m[39m[47m[37m░░░░░░░░░░░░░░░[39m[49m[1m  7.1% [22m[2m( 74/278)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  2.6% [22m[2m(15/93)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓[49m[39m[47m[37m░░░░░░░░░░░░░░░[39m[49m[1m  7.1% [22m[2m( 74/278)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓[49m[39m[47m[37m░░░░░░░░░░░░░░░[39m[49m[1m 10.4% [22m[2m( 96/298)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.1% [22m[2m(216/440)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓[49m[39m[47m[37m░░░░░░░░░░░░░░░[39m[49m[1m 10.4% [22m[2m( 96/298)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.1% [22m[2m(216/440)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░[39m[49m[1m 31.0% [22m[2m(280/503)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░[39m[49m[1m 37.7% [22m[2m(399/650)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░[39m[49m[1m 31.0% [22m[2m(280/503)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░[39m[49m[1m 37.7% [22m[2m(399/650)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 36.7% [22m[2m(433/715)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 48.4% [22m[2m(609/875)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 36.7% [22m[2m(433/715)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 48.4% [22m[2m(609/875)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░[39m[49m[1m 62.9% [22m[2m( 842/1062)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░[39m[49m[1m 73.5% [22m[2m( 950/1108)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 83.1% [22m[2m(1063/1166)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 92.1% [22m[2m(1168/1217)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 92.1% [22m[2m(1272/1353)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 92.1% [22m[2m(1392/1503)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.7% [22m[2m(593/868)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 92.1% [22m[2m(1392/1503)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 86.6% [22m[2m(1402/1507)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 92.1% [22m[2m(1392/1503)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 97.0% [22m[2m(1585/1609)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1675/1675)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 97.0% [22m[2m(1585/1609)[22m
-[308D[2A[0J[32m[1mAndroid[22m Bundled [39m[2m5205ms[22m[0m[2m apps/mobile/index.ts (1609 modules)[22m[0m
-[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1675/1675)[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 97.0% [22m[2m(1585/1609)[22m
-[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1675/1675)[22m
-[308D[1A[0J[32m[1miOS[22m Bundled [39m[2m8041ms[22m[0m[2m apps/mobile/index.ts (1675 modules)[22m[0m
-[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1675/1675)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  1.0% [22m[2m(1/1)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  0.0% [22m[2m(0/1)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  1.0% [22m[2m(1/1)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  1.0% [22m[2m(1/2)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  4.0% [22m[2m(2/2)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  1.0% [22m[2m(1/2)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓[49m[39m[47m[37m░░░░░░░░░░░░░░[39m[49m[1m 12.8% [22m[2m( 5/14)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [47m[37m░░░░░░░░░░░░░░░░[39m[49m[1m  1.0% [22m[2m(1/2)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓[49m[39m[47m[37m░░░░░░░░░░░░░░[39m[49m[1m 12.8% [22m[2m( 5/14)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.1% [22m[2m( 8/17)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓[49m[39m[47m[37m░░░░░░░░░░░░░░[39m[49m[1m 12.8% [22m[2m(15/54)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.1% [22m[2m( 8/17)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓[49m[39m[47m[37m░░░░░░░░░░░░░░[39m[49m[1m 12.8% [22m[2m(15/54)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.1% [22m[2m(17/65)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓[49m[39m[47m[37m░░░░░░░░░░░░░░[39m[49m[1m 12.8% [22m[2m(26/81)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.1% [22m[2m(17/65)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓[49m[39m[47m[37m░░░░░░░░░░░░░░[39m[49m[1m 12.8% [22m[2m(26/81)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.1% [22m[2m(24/80)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓[49m[39m[47m[37m░░░░░░░░░░░░░░[39m[49m[1m 18.3% [22m[2m( 50/117)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.1% [22m[2m(24/80)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 19.8% [22m[2m( 57/128)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.1% [22m[2m(24/80)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.7% [22m[2m( 70/147)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.1% [22m[2m(24/80)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.7% [22m[2m( 70/147)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.1% [22m[2m( 41/106)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.7% [22m[2m( 70/147)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.5% [22m[2m( 56/118)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 22.7% [22m[2m( 70/147)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.3% [22m[2m( 68/138)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 31.7% [22m[2m( 98/174)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.3% [22m[2m( 68/138)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 31.7% [22m[2m( 98/174)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.3% [22m[2m( 86/182)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 31.7% [22m[2m(152/313)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.3% [22m[2m( 86/182)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 31.7% [22m[2m(152/313)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.3% [22m[2m(147/310)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 31.7% [22m[2m(185/357)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.3% [22m[2m(147/310)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 31.7% [22m[2m(211/383)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.3% [22m[2m(147/310)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 31.7% [22m[2m(211/383)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.3% [22m[2m(161/355)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 31.7% [22m[2m(211/383)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░░[39m[49m[1m 24.3% [22m[2m(191/400)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 31.7% [22m[2m(211/383)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░[39m[49m[1m 27.1% [22m[2m(219/421)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 31.7% [22m[2m(211/383)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 31.9% [22m[2m(257/455)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░[39m[49m[1m 31.7% [22m[2m(211/383)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░[39m[49m[1m 41.0% [22m[2m(313/489)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░[39m[49m[1m 43.5% [22m[2m(337/511)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░[39m[49m[1m 41.0% [22m[2m(313/489)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.1% [22m[2m(353/520)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░[39m[49m[1m 41.0% [22m[2m(313/489)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 53.0% [22m[2m(423/581)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░[39m[49m[1m 41.0% [22m[2m(313/489)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 53.0% [22m[2m(454/640)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░[39m[49m[1m 41.0% [22m[2m(313/489)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 53.0% [22m[2m(454/640)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 46.1% [22m[2m(391/576)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 53.0% [22m[2m(454/640)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 50.9% [22m[2m(465/652)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 53.0% [22m[2m(454/640)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 50.9% [22m[2m(498/714)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 53.0% [22m[2m(561/825)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 50.9% [22m[2m(498/714)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 53.0% [22m[2m(619/858)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 50.9% [22m[2m(498/714)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 53.0% [22m[2m(636/884)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 50.9% [22m[2m(498/714)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 53.0% [22m[2m(636/884)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 50.9% [22m[2m(556/863)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 53.0% [22m[2m(636/884)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 50.9% [22m[2m(597/886)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 56.5% [22m[2m(692/921)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 50.9% [22m[2m(597/886)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 57.8% [22m[2m(707/930)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 50.9% [22m[2m(597/886)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 58.2% [22m[2m(728/954)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 50.9% [22m[2m(597/886)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 58.2% [22m[2m(738/978)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 50.9% [22m[2m(597/886)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 58.2% [22m[2m( 761/1018)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 50.9% [22m[2m(597/886)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 58.2% [22m[2m( 761/1018)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 55.2% [22m[2m(685/922)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 58.2% [22m[2m( 770/1029)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░[39m[49m[1m 55.2% [22m[2m(685/922)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 58.2% [22m[2m( 770/1029)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 57.7% [22m[2m(721/949)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 58.2% [22m[2m( 770/1029)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 57.7% [22m[2m(737/982)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 58.2% [22m[2m( 770/1029)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 57.7% [22m[2m( 759/1019)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 58.2% [22m[2m( 770/1029)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 57.7% [22m[2m( 795/1058)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 61.7% [22m[2m( 839/1068)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 57.7% [22m[2m( 795/1058)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 61.7% [22m[2m( 839/1068)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 62.5% [22m[2m( 845/1069)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 61.7% [22m[2m( 839/1068)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░[39m[49m[1m 64.7% [22m[2m( 867/1078)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░[39m[49m[1m 71.6% [22m[2m( 941/1112)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░[39m[49m[1m 64.7% [22m[2m( 867/1078)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░[39m[49m[1m 78.0% [22m[2m( 992/1123)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░[39m[49m[1m 64.7% [22m[2m( 867/1078)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░[39m[49m[1m 78.0% [22m[2m( 992/1123)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░[39m[49m[1m 69.1% [22m[2m( 925/1113)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░[39m[49m[1m 78.0% [22m[2m( 992/1123)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░[39m[49m[1m 73.3% [22m[2m( 958/1119)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░[39m[49m[1m 78.0% [22m[2m( 992/1123)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░[39m[49m[1m 80.7% [22m[2m(1009/1123)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 84.5% [22m[2m(1072/1166)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░[39m[49m[1m 80.7% [22m[2m(1009/1123)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 84.9% [22m[2m(1102/1196)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░[39m[49m[1m 80.7% [22m[2m(1009/1123)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 84.9% [22m[2m(1102/1196)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 85.3% [22m[2m(1101/1192)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 87.3% [22m[2m(1148/1229)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 85.3% [22m[2m(1101/1192)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 87.3% [22m[2m(1148/1229)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 85.8% [22m[2m(1133/1223)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 87.3% [22m[2m(1148/1229)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1161/1226)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 92.6% [22m[2m(1203/1250)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1161/1226)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1215/1254)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1161/1226)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1229/1292)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1161/1226)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1250/1331)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1161/1226)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1278/1380)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1161/1226)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1311/1393)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1161/1226)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1311/1393)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1282/1387)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1311/1393)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1320/1419)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1372/1463)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1320/1419)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1372/1463)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1334/1423)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1372/1463)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1375/1473)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1428/1529)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1375/1473)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1458/1557)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1375/1473)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1472/1558)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1375/1473)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1500/1560)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1375/1473)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1500/1560)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1446/1550)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1500/1560)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 89.7% [22m[2m(1463/1554)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1500/1560)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 90.2% [22m[2m(1476/1554)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1500/1560)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 94.7% [22m[2m(1512/1554)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 93.9% [22m[2m(1500/1560)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 95.1% [22m[2m(1530/1569)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 96.1% [22m[2m(1586/1618)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 95.1% [22m[2m(1530/1569)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 96.5% [22m[2m(1621/1650)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 95.1% [22m[2m(1530/1569)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 96.5% [22m[2m(1621/1650)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 97.8% [22m[2m(1641/1659)[22m
+[308D[2A[0J[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 96.5% [22m[2m(1621/1650)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1680/1680)[22m
+[308D[2A[0J[32m[1miOS[22m Bundled [39m[2m12737ms[22m[0m[2m apps/mobile/index.ts (1650 modules)[22m[0m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 96.5% [22m[2m(1621/1650)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1680/1680)[22m
+[308D[2A[0J[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1680/1680)[22m
+[308D[1A[0J[32m[1mAndroid[22m Bundled [39m[2m16030ms[22m[0m[2m apps/mobile/index.ts (1680 modules)[22m[0m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1680/1680)[22m
 [308D[1A[0J
 [1m› Assets (33):[22m
 ../../node_modules/.pnpm/@expo+vector-icons@15.0.3_expo-font@14.0.11_expo@54.0.33_react-native@0.81.5_@babel+cor_dffeba5e71c136362da807d9acd294ec/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf [90m(1.31 MB)[39m
@@ -57,20 +195,20 @@
 ../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/clear-icon.png [90m(4 variations | 425 B)[39m
 ../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/close-icon.png [90m(4 variations | 235 B)[39m
 ../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/search-icon.png [90m(7 variations | 592 B)[39m
-../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/arrow_down.png [90m(9.46 kB)[39m
-../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/error.png [90m(469 B)[39m
-../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/file.png [90m(138 B)[39m
-../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/forward.png [90m(188 B)[39m
-../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/pkg.png [90m(364 B)[39m
-../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/sitemap.png [90m(465 B)[39m
-../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react@19.1.17_expo-constants@18.0.1_f13ba3b673f555e9fa551e819990eb13/node_modules/expo-router/assets/unmatched.png [90m(4.75 kB)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/arrow_down.png [90m(9.46 kB)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/error.png [90m(469 B)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/file.png [90m(138 B)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/forward.png [90m(188 B)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/pkg.png [90m(364 B)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/sitemap.png [90m(465 B)[39m
+../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/unmatched.png [90m(4.75 kB)[39m
 ../../node_modules/.pnpm/react-native-paper@5.15.0_react-native-safe-area-context@5.6.2_react-native@0.81.5_@bab_41d9b5c0467b7e446469252509ed76ee/node_modules/react-native-paper/src/assets/back-chevron.png [90m(489 B)[39m
 
-[1m› android bundles (1):[22m
-_expo/static/js/android/index-419c80dd9b3ba451824d971fc1fe01f0.hbc [90m(5.1 MB)[39m
-
 [1m› ios bundles (1):[22m
-_expo/static/js/ios/index-f4a22588b3656d02af72e03c4ee6fc50.hbc [90m(5.11 MB)[39m
+_expo/static/js/ios/index-8f55307752f6e4c8a87f3c8a67b6c7fd.hbc [90m(5.16 MB)[39m
+
+[1m› android bundles (1):[22m
+_expo/static/js/android/index-957bc9d0c71fcb682220509eb8ec9549.hbc [90m(5.16 MB)[39m
 
 [1m› Files (1):[22m
 metadata.json [90m(3.71 kB)[39m
