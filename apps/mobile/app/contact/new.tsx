@@ -46,6 +46,12 @@ export default function NewContactScreen() {
 
   const handleSubmit = async (data: ContactFormData) => {
     const { initial_note, ...contactData } = data;
+
+    // Quick notes may not have a first_name; use placeholder to satisfy NOT NULL constraint
+    if (isQuickNote && !contactData.first_name?.trim()) {
+      contactData.first_name = 'Quick Note';
+    }
+
     const contact = await addContact(contactData);
     
     if (contact) {

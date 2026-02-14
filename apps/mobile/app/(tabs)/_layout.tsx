@@ -23,6 +23,15 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
+          title: 'Contacts',
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="account-group" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="map"
+        options={{
           title: 'Map',
           tabBarIcon: ({ color, size }) => (
             <Icon name="map" size={size} color={color} />
@@ -35,15 +44,6 @@ export default function TabLayout() {
           title: 'Notes',
           tabBarIcon: ({ color, size }) => (
             <Icon name="note-text" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="contacts"
-        options={{
-          title: 'Contacts',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="account-group" size={size} color={color} />
           ),
         }}
       />

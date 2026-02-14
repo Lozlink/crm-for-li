@@ -18,6 +18,7 @@ export interface Contact {
   longitude?: number;
   tag_id?: string;
   tag?: Tag;
+  tags?: Tag[];
   user_id?: string;
   team_id?: string;
   created_at?: string;
@@ -47,5 +48,6 @@ export interface ContactFormData {
   latitude?: number;
   longitude?: number;
   tag_id?: string;
+  tag_ids?: string[];
   initial_note?: string;
 }

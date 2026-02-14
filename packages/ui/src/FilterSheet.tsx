@@ -30,12 +30,20 @@ export default function FilterSheet({ visible, onDismiss }: FilterSheetProps) {
   };
 
   const getContactCount = (tagId: string) => {
-    return contacts.filter(c => c.tag_id === tagId && c.latitude && c.longitude).length;
+    return contacts.filter(c => {
+      if (!c.latitude || !c.longitude) return false;
+      const contactTagIds = (c.tags || []).map(t => t.id);
+      return contactTagIds.includes(tagId) || c.tag_id === tagId;
+    }).length;
   };
 
   const totalMappedContacts = contacts.filter(c => c.latitude && c.longitude).length;
   const filteredCount = selectedTagIds.length > 0
-    ? contacts.filter(c => selectedTagIds.includes(c.tag_id || '') && c.latitude && c.longitude).length
+    ? contacts.filter(c => {
+        if (!c.latitude || !c.longitude) return false;
+        const contactTagIds = (c.tags || []).map(t => t.id);
+        return selectedTagIds.some(id => contactTagIds.includes(id) || c.tag_id === id);
+      }).length
     : totalMappedContacts;
 
   return (

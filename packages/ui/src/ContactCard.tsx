@@ -22,7 +22,7 @@ function ContactCard({ contact, onPress }: ContactCardProps) {
           label={initials}
           style={[
             styles.avatar,
-            { backgroundColor: contact.tag?.color || theme.colors.primary },
+            { backgroundColor: (contact.tags?.[0]?.color || contact.tag?.color || theme.colors.primary) },
           ]}
         />
 
@@ -31,9 +31,15 @@ function ContactCard({ contact, onPress }: ContactCardProps) {
             <Text variant="titleMedium" numberOfLines={1} style={styles.name}>
               {fullName}
             </Text>
-            {contact.tag && (
+            {(contact.tags && contact.tags.length > 0) ? (
+              <View style={styles.tagDots}>
+                {contact.tags.map(tag => (
+                  <View key={tag.id} style={[styles.tagDot, { backgroundColor: tag.color }]} />
+                ))}
+              </View>
+            ) : contact.tag ? (
               <View style={[styles.tagDot, { backgroundColor: contact.tag.color }]} />
-            )}
+            ) : null}
           </View>
 
           {contact.address && (
@@ -111,11 +117,15 @@ const styles = StyleSheet.create({
   name: {
     flex: 1,
   },
+  tagDots: {
+    flexDirection: 'row',
+    gap: 3,
+    marginLeft: 8,
+  },
   tagDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginLeft: 8,
   },
   infoRow: {
     flexDirection: 'row',

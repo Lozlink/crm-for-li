@@ -1,6 +1,7 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { StyleSheet, View, FlatList, Pressable } from 'react-native';
 import { Searchbar, FAB, useTheme, Text, Card, Chip, IconButton, Surface } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useCRMStore } from '@realestate-crm/hooks';
 import { Contact, Activity } from '@realestate-crm/types';
@@ -15,18 +16,27 @@ interface NoteEntry {
 export default function NotesScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const contacts = useCRMStore(state => state.contacts);
-  const activities = useCRMStore(state => state.activities);
+  const recentActivities = useCRMStore(state => state.recentActivities);
+  const fetchRecentActivities = useCRMStore(state => state.fetchRecentActivities);
   const tags = useCRMStore(state => state.tags);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Fetch all recent note activities on mount (not just for a single contact)
+  useEffect(() => {
+    fetchRecentActivities(200);
+  }, [fetchRecentActivities]);
+
   // Get all contacts with their notes, sorted by most recent activity
+  // Uses recentActivities (fetched across all contacts) instead of activities
+  // (which only holds activities for the last-viewed contact)
   const noteEntries = useMemo(() => {
     const entries: NoteEntry[] = contacts
       .filter(c => c.address) // Must have an address
       .map(contact => {
-        const contactNotes = activities.filter(
+        const contactNotes = recentActivities.filter(
           a => a.contact_id === contact.id && a.type === 'note'
         );
         const latestNote = contactNotes.length > 0
@@ -55,7 +65,7 @@ export default function NotesScreen() {
     }
 
     return entries;
-  }, [contacts, activities, searchQuery]);
+  }, [contacts, recentActivities, searchQuery]);
 
   const handleEntryPress = useCallback((contact: Contact) => {
     router.push(`/contact/${contact.id}`);
@@ -87,12 +97,14 @@ export default function NotesScreen() {
 
   const renderItem = useCallback(({ item }: { item: NoteEntry }) => {
     const { contact, notes, latestNote } = item;
-    const tag = tags.find(t => t.id === contact.tag_id);
+    const contactTags = contact.tags && contact.tags.length > 0
+      ? contact.tags
+      : contact.tag_id ? [tags.find(t => t.id === contact.tag_id)].filter(Boolean) : [];
     const isQuickNote = !contact.first_name;
 
     return (
-      <Card 
-        style={styles.card} 
+      <Card
+        style={styles.card}
         onPress={() => handleEntryPress(contact)}
         mode="elevated"
       >
@@ -108,14 +120,19 @@ export default function NotesScreen() {
                 </Text>
               )}
             </View>
-            {tag && (
-              <Chip 
-                compact 
-                style={{ backgroundColor: tag.color + '30' }}
-                textStyle={{ color: tag.color, fontSize: 11 }}
-              >
-                {tag.name}
-              </Chip>
+            {contactTags.length > 0 && (
+              <View style={styles.noteTagChips}>
+                {contactTags.map(tag => (
+                  <Chip
+                    key={tag!.id}
+                    compact
+                    style={{ backgroundColor: tag!.color + '30' }}
+                    textStyle={{ color: tag!.color, fontSize: 11 }}
+                  >
+                    {tag!.name}
+                  </Chip>
+                ))}
+              </View>
             )}
           </View>
 
@@ -172,7 +189,7 @@ export default function NotesScreen() {
 
       <FAB
         icon="note-plus"
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+        style={[styles.fab, { backgroundColor: theme.colors.primary, bottom: insets.bottom + 24 }]}
         color={theme.colors.onPrimary}
         onPress={handleAddNote}
       />
@@ -212,6 +229,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 8,
   },
+  noteTagChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    maxWidth: '40%',
+    justifyContent: 'flex-end',
+  },
   addressContainer: {
     flex: 1,
     marginRight: 8,
@@ -229,6 +253,5 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 16,
-    bottom: 24,
   },
 });

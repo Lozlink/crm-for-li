@@ -31,7 +31,20 @@ export default function ContactPreview({
       contentContainerStyle={[styles.container, { backgroundColor: theme.colors.surface }]}
     >
       <Surface style={styles.card} elevation={0}>
-        {contact.tag && (
+        {(contact.tags && contact.tags.length > 0) ? (
+          <View style={styles.tagChips}>
+            {contact.tags.map(tag => (
+              <Chip
+                key={tag.id}
+                style={[styles.tagChip, { backgroundColor: tag.color }]}
+                textStyle={{ color: '#fff' }}
+                compact
+              >
+                {tag.name}
+              </Chip>
+            ))}
+          </View>
+        ) : contact.tag ? (
           <Chip
             style={[styles.tagChip, { backgroundColor: contact.tag.color }]}
             textStyle={{ color: '#fff' }}
@@ -39,7 +52,7 @@ export default function ContactPreview({
           >
             {contact.tag.name}
           </Chip>
-        )}
+        ) : null}
 
         <Text variant="titleLarge" style={styles.name}>{fullName}</Text>
 
@@ -90,9 +103,15 @@ const styles = StyleSheet.create({
   card: {
     padding: 20,
   },
+  tagChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
   tagChip: {
     alignSelf: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 0,
   },
   name: {
     marginBottom: 12,

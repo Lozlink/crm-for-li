@@ -4,6 +4,7 @@ import { TextInput, Button, HelperText, useTheme } from 'react-native-paper';
 import * as Contacts from 'expo-contacts';
 import * as Linking from 'expo-linking';
 import { ContactFormData } from '@realestate-crm/types';
+import { useCRMStore } from '@realestate-crm/hooks';
 import TagPicker from './TagPicker';
 import AddressAutocomplete from './AddressAutocomplete';
 
@@ -27,6 +28,7 @@ export default function ContactForm({
   minimalMode = false,
 }: ContactFormProps) {
   const theme = useTheme();
+  const allTags = useCRMStore(state => state.tags);
 
   const [formData, setFormData] = useState<ContactFormData>({
     first_name: '',
@@ -37,6 +39,7 @@ export default function ContactForm({
     latitude: undefined,
     longitude: undefined,
     tag_id: undefined,
+    tag_ids: [],
     initial_note: '',
   });
 
@@ -59,7 +62,10 @@ export default function ContactForm({
 
   useEffect(() => {
     if (initialData) {
-      setFormData(initialData);
+      setFormData({
+        ...initialData,
+        tag_ids: initialData.tag_ids || (initialData.tag_id ? [initialData.tag_id] : []),
+      });
     }
   }, [initialData]);
 
@@ -100,7 +106,17 @@ export default function ContactForm({
 
   const handleSubmit = () => {
     if (validate()) {
-      onSubmit(formData);
+      // Resolve tag_ids into tags array for the store
+      const tagIds = formData.tag_ids || [];
+      const resolvedTags = tagIds
+        .map(id => allTags.find(t => t.id === id))
+        .filter(Boolean);
+      const submitData = {
+        ...formData,
+        tags: resolvedTags,
+        tag_id: tagIds[0] || undefined,
+      } as any;
+      onSubmit(submitData);
     }
   };
 
@@ -193,8 +209,8 @@ export default function ContactForm({
           />
 
           <TagPicker
-            selectedTagId={formData.tag_id}
-            onTagSelect={(tagId) => updateField('tag_id', tagId)}
+            selectedTagIds={formData.tag_ids || []}
+            onTagsChange={(tagIds) => updateField('tag_ids', tagIds)}
             style={styles.tagPicker}
           />
         </>
@@ -259,8 +275,8 @@ export default function ContactForm({
           )}
 
           <TagPicker
-            selectedTagId={formData.tag_id}
-            onTagSelect={(tagId) => updateField('tag_id', tagId)}
+            selectedTagIds={formData.tag_ids || []}
+            onTagsChange={(tagIds) => updateField('tag_ids', tagIds)}
             style={styles.tagPicker}
           />
 

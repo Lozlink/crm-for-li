@@ -31,8 +31,8 @@ interface CRMState {
   setError: (error: string | null) => void;
 
   // CRUD Operations
-  fetchContacts: () => Promise<void>;
-  fetchTags: () => Promise<void>;
+  fetchContacts: (ctx?: { teamId: string | null; userId: string | null; isDemo: boolean }) => Promise<void>;
+  fetchTags: (ctx?: { teamId: string | null; userId: string | null; isDemo: boolean }) => Promise<void>;
   fetchActivities: (contactId: string) => Promise<void>;
   fetchRecentActivities: (limit?: number) => Promise<void>;
 
@@ -76,6 +76,24 @@ function getTeamContext() {
     userId: authState.user?.id || null,
     isDemo: authState.isDemoMode || isDemoMode,
   };
+}
+
+// Helper to sync contact_tags junction table for a contact
+async function syncContactTags(contactId: string, tagIds: string[], teamId: string | null) {
+  // Remove all existing tags for this contact
+  const { error: deleteError } = await supabase.from('contact_tags').delete().eq('contact_id', contactId);
+  if (deleteError) throw deleteError;
+
+  // Insert new tag associations
+  if (tagIds.length > 0) {
+    const rows = tagIds.map(tag_id => ({
+      contact_id: contactId,
+      tag_id,
+      team_id: teamId,
+    }));
+    const { error } = await supabase.from('contact_tags').insert(rows);
+    if (error) throw error;
+  }
 }
 
 export const useCRMStore = create<CRMState>()((set, get) => ({
@@ -167,6 +185,8 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
   // Reset and refetch when team switches
   resetData: async () => {
+    // Capture team context once to avoid stale reads during sequential fetches
+    const ctx = getTeamContext();
     set({
       contacts: [],
       tags: [],
@@ -177,8 +197,8 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       isLoading: false,
       error: null,
     });
-    await get().fetchTags();
-    await get().fetchContacts();
+    await get().fetchTags(ctx);
+    await get().fetchContacts(ctx);
   },
 
   // Clear all data from store (used on sign out)
@@ -198,10 +218,10 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
   },
 
   // Fetch operations
-  fetchContacts: async () => {
+  fetchContacts: async (ctx?) => {
     set({ isLoading: true, error: null });
     try {
-      const { isDemo, teamId } = getTeamContext();
+      const { isDemo, teamId } = ctx || getTeamContext();
       if (isDemo) {
         set({ isLoading: false });
         return;
@@ -209,7 +229,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
       let query = supabase
         .from('contacts')
-        .select('*, tag:tags(*)')
+        .select('*, tag:tags!contacts_tag_id_fkey(*), contact_tags(tag:tags!contact_tags_tag_id_fkey(*))')
         .order('created_at', { ascending: false });
 
       if (teamId) {
@@ -218,17 +238,28 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
       const { data, error } = await query;
 
-      if (error) throw error;
-      set({ contacts: data || [], isLoading: false });
+      if (error) {
+        console.error('fetchContacts error:', error.message, error.details, error.hint);
+        throw error;
+      }
+
+      // Flatten nested contact_tags join into a tags array
+      const contacts = (data || []).map((c: any) => ({
+        ...c,
+        tags: (c.contact_tags || []).map((ct: any) => ct.tag).filter(Boolean),
+        contact_tags: undefined,
+      }));
+
+      set({ contacts, isLoading: false });
       get().persist();
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
     }
   },
 
-  fetchTags: async () => {
+  fetchTags: async (ctx?) => {
     try {
-      const { isDemo, teamId } = getTeamContext();
+      const { isDemo, teamId } = ctx || getTeamContext();
       if (isDemo) {
         return;
       }
@@ -302,6 +333,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       const { isDemo, teamId, userId } = getTeamContext();
 
       if (isDemo) {
+        const allTags = get().tags;
         const newContact: Contact = {
           ...contact,
           id: generateUUID(),
@@ -310,9 +342,16 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
           updated_at: new Date().toISOString(),
         };
 
-        const tags = get().tags;
+        // Support both single tag_id and multi-tag via tags array
         if (contact.tag_id) {
-          newContact.tag = tags.find(t => t.id === contact.tag_id);
+          newContact.tag = allTags.find(t => t.id === contact.tag_id);
+        }
+        if (contact.tags && contact.tags.length > 0) {
+          newContact.tags = contact.tags;
+        } else if (newContact.tag) {
+          newContact.tags = [newContact.tag];
+        } else {
+          newContact.tags = [];
         }
 
         set(state => ({
@@ -323,9 +362,17 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         return newContact;
       }
 
-      const insertData: any = { ...contact };
+      // Extract tag_ids before inserting (they go to junction table, not contacts row)
+      const { tags: tagObjects, ...contactFields } = contact as any;
+      const tagIds: string[] = tagObjects
+        ? tagObjects.map((t: Tag) => t.id)
+        : contact.tag_id ? [contact.tag_id] : [];
+
+      const insertData: any = { ...contactFields };
       if (teamId) insertData.team_id = teamId;
       if (userId) insertData.user_id = userId;
+      // Keep tag_id for backward compat (first tag or null)
+      insertData.tag_id = tagIds[0] || null;
 
       const { data, error } = await supabase
         .from('contacts')
@@ -334,6 +381,15 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         .single();
 
       if (error) throw error;
+
+      // Insert into junction table
+      if (tagIds.length > 0) {
+        await syncContactTags(data.id, tagIds, teamId);
+      }
+
+      // Attach tags array to returned contact
+      const allTags = get().tags;
+      data.tags = tagIds.map(tid => allTags.find(t => t.id === tid)).filter(Boolean);
 
       set(state => ({
         contacts: [data, ...state.contacts],
@@ -350,18 +406,22 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
   updateContact: async (id, contact) => {
     set({ isLoading: true, error: null });
     try {
-      const { isDemo } = getTeamContext();
+      const { isDemo, teamId } = getTeamContext();
 
       if (isDemo) {
-        const tags = get().tags;
+        const allTags = get().tags;
         set(state => ({
           contacts: state.contacts.map(c => {
             if (c.id === id) {
               const updated = { ...c, ...contact, updated_at: new Date().toISOString() };
               if (contact.tag_id) {
-                updated.tag = tags.find(t => t.id === contact.tag_id);
+                updated.tag = allTags.find(t => t.id === contact.tag_id);
               } else if (contact.tag_id === undefined && 'tag_id' in contact) {
                 updated.tag = undefined;
+              }
+              // Update tags array for multi-tag
+              if (contact.tags !== undefined) {
+                updated.tags = contact.tags;
               }
               return updated;
             }
@@ -373,9 +433,22 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         return;
       }
 
+      // Extract tags before updating contacts row
+      const { tags: tagObjects, ...contactFields } = contact as any;
+      const updateData: any = { ...contactFields, updated_at: new Date().toISOString() };
+
+      // If tags array is provided, sync junction table and update tag_id for compat
+      if (tagObjects !== undefined) {
+        const tagIds: string[] = tagObjects
+          ? tagObjects.map((t: Tag) => t.id)
+          : [];
+        updateData.tag_id = tagIds[0] || null;
+        await syncContactTags(id, tagIds, teamId);
+      }
+
       const { error } = await supabase
         .from('contacts')
-        .update({ ...contact, updated_at: new Date().toISOString() })
+        .update(updateData)
         .eq('id', id);
 
       if (error) throw error;
@@ -401,12 +474,14 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         return;
       }
 
-      const { error } = await supabase
+      // contact_tags rows are deleted automatically via ON DELETE CASCADE
+      const { error, count } = await supabase
         .from('contacts')
-        .delete()
+        .delete({ count: 'exact' })
         .eq('id', id);
 
       if (error) throw error;
+      if (count === 0) throw new Error('Contact could not be deleted. You may not have permission.');
 
       set(state => ({
         contacts: state.contacts.filter(c => c.id !== id),
@@ -491,22 +566,39 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       if (isDemo) {
         set(state => ({
           tags: state.tags.filter(t => t.id !== id),
-          contacts: state.contacts.map(c =>
-            c.tag_id === id ? { ...c, tag_id: undefined, tag: undefined } : c
-          ),
+          contacts: state.contacts.map(c => {
+            const hadTag = c.tag_id === id || (c.tags || []).some(t => t.id === id);
+            if (!hadTag) return c;
+            return {
+              ...c,
+              tag_id: c.tag_id === id ? undefined : c.tag_id,
+              tag: c.tag_id === id ? undefined : c.tag,
+              tags: (c.tags || []).filter(t => t.id !== id),
+            };
+          }),
         }));
         get().persist();
         return;
       }
 
-      const { error } = await supabase
+      // contact_tags rows are deleted automatically via ON DELETE CASCADE
+      const { error, count } = await supabase
         .from('tags')
-        .delete()
+        .delete({ count: 'exact' })
         .eq('id', id);
 
       if (error) throw error;
+      if (count === 0) throw new Error('Tag could not be deleted. You may not have permission.');
 
-      set(state => ({ tags: state.tags.filter(t => t.id !== id) }));
+      set(state => ({
+        tags: state.tags.filter(t => t.id !== id),
+        contacts: state.contacts.map(c => ({
+          ...c,
+          tags: (c.tags || []).filter(t => t.id !== id),
+          tag_id: c.tag_id === id ? undefined : c.tag_id,
+          tag: c.tag_id === id ? undefined : c.tag,
+        })),
+      }));
       get().persist();
     } catch (error: any) {
       set({ error: error.message });
@@ -585,13 +677,25 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
       if (isDemo) {
         const now = new Date().toISOString();
-        const newContacts: Contact[] = contacts.map(c => ({
-          ...c,
-          id: generateUUID(),
-          team_id: teamId || undefined,
-          created_at: now,
-          updated_at: now,
-        }));
+        const allTags = get().tags;
+        const newContacts: Contact[] = contacts.map(c => {
+          const nc: Contact = {
+            ...c,
+            id: generateUUID(),
+            team_id: teamId || undefined,
+            created_at: now,
+            updated_at: now,
+          };
+          // Populate tags array from tag_id for demo mode
+          if (c.tag_id) {
+            const tag = allTags.find(t => t.id === c.tag_id);
+            nc.tag = tag;
+            nc.tags = tag ? [tag] : [];
+          } else {
+            nc.tags = [];
+          }
+          return nc;
+        });
         set(state => ({
           contacts: [...newContacts, ...state.contacts],
         }));
@@ -614,6 +718,15 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       if (error) throw error;
 
       const created = data || [];
+
+      // Sync junction table for each contact that has a tag_id
+      for (const contact of created) {
+        if (contact.tag_id) {
+          await syncContactTags(contact.id, [contact.tag_id], teamId);
+        }
+        contact.tags = contact.tag ? [contact.tag] : [];
+      }
+
       set(state => ({
         contacts: [...created, ...state.contacts],
       }));

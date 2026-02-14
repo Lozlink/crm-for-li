@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { PaperProvider, MD3DarkTheme, MD3LightTheme, ActivityIndicator } from 'react-native-paper';
 import { useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '@realestate-crm/hooks';
 import { useCRMStore } from '@realestate-crm/hooks';
@@ -22,6 +23,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const clearData = useCRMStore(s => s.clearData);
 
   const [dataLoaded, setDataLoaded] = useState(false);
+  const prevTeamIdRef = useRef<string | undefined>(activeTeam?.id);
 
   // Clear CRM data when user signs out (not authenticated and not demo)
   useEffect(() => {
@@ -43,13 +45,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       };
       loadData();
     }
-  }, [isDemoMode, isAuthenticated, activeTeam]);
+  }, [isDemoMode, isAuthenticated, activeTeam, dataLoaded]);
 
-  // Reset data loaded flag when team changes
+  // Reset data loaded flag when team actually changes to a different team
   useEffect(() => {
-    if (dataLoaded && activeTeam) {
+    const currentId = activeTeam?.id;
+    if (prevTeamIdRef.current !== undefined && currentId !== prevTeamIdRef.current) {
       setDataLoaded(false);
     }
+    prevTeamIdRef.current = currentId;
   }, [activeTeam?.id]);
 
   useEffect(() => {
@@ -97,6 +101,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
       <PaperProvider theme={theme}>
         <StatusBar style="auto" />
         <AuthGate>
@@ -159,6 +164,7 @@ export default function RootLayout() {
           </Stack>
         </AuthGate>
       </PaperProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

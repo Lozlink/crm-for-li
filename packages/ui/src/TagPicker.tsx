@@ -1,17 +1,27 @@
 import { useState } from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
-import { Text, useTheme, Surface, Portal, Dialog, TextInput, Button } from 'react-native-paper';
+import { Text, useTheme, Surface, Portal, Dialog, TextInput, Button, Chip } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCRMStore } from '@realestate-crm/hooks';
 import { TAG_COLORS } from '@realestate-crm/types';
 
 interface TagPickerProps {
+  /** @deprecated Use selectedTagIds for multi-tag support */
   selectedTagId?: string;
-  onTagSelect: (tagId?: string) => void;
+  /** @deprecated Use onTagsChange for multi-tag support */
+  onTagSelect?: (tagId?: string) => void;
+  selectedTagIds?: string[];
+  onTagsChange?: (tagIds: string[]) => void;
   style?: object;
 }
 
-export default function TagPicker({ selectedTagId, onTagSelect, style }: TagPickerProps) {
+export default function TagPicker({
+  selectedTagId,
+  onTagSelect,
+  selectedTagIds: selectedTagIdsProp,
+  onTagsChange,
+  style,
+}: TagPickerProps) {
   const theme = useTheme();
   const tags = useCRMStore(state => state.tags);
   const addTag = useCRMStore(state => state.addTag);
@@ -20,11 +30,41 @@ export default function TagPicker({ selectedTagId, onTagSelect, style }: TagPick
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState(TAG_COLORS[0]);
 
+  // Support both single and multi-select modes
+  const isMultiMode = onTagsChange !== undefined;
+  const selectedIds: string[] = isMultiMode
+    ? (selectedTagIdsProp || [])
+    : selectedTagId ? [selectedTagId] : [];
+
+  const handleToggleTag = (tagId: string) => {
+    if (isMultiMode) {
+      const newIds = selectedIds.includes(tagId)
+        ? selectedIds.filter(id => id !== tagId)
+        : [...selectedIds, tagId];
+      onTagsChange!(newIds);
+    } else {
+      // Single mode: toggle off if already selected
+      onTagSelect?.(selectedTagId === tagId ? undefined : tagId);
+    }
+  };
+
+  const handleClearAll = () => {
+    if (isMultiMode) {
+      onTagsChange!([]);
+    } else {
+      onTagSelect?.(undefined);
+    }
+  };
+
   const handleCreateTag = async () => {
     if (!newTagName.trim()) return;
     const tag = await addTag({ name: newTagName.trim(), color: newTagColor });
     if (tag) {
-      onTagSelect(tag.id); // Auto-select the new tag
+      if (isMultiMode) {
+        onTagsChange!([...selectedIds, tag.id]);
+      } else {
+        onTagSelect?.(tag.id);
+      }
     }
     setDialogVisible(false);
     setNewTagName('');
@@ -33,36 +73,62 @@ export default function TagPicker({ selectedTagId, onTagSelect, style }: TagPick
 
   return (
     <View style={[styles.container, style]}>
-      <Text variant="labelLarge" style={styles.label}>Tag</Text>
+      <Text variant="labelLarge" style={styles.label}>
+        {isMultiMode ? 'Tags' : 'Tag'}
+      </Text>
+
+      {/* Show selected tags as chips in multi-mode */}
+      {isMultiMode && selectedIds.length > 0 && (
+        <View style={styles.selectedChips}>
+          {selectedIds.map(id => {
+            const tag = tags.find(t => t.id === id);
+            if (!tag) return null;
+            return (
+              <Chip
+                key={tag.id}
+                mode="flat"
+                compact
+                onClose={() => handleToggleTag(tag.id)}
+                style={[styles.selectedChip, { backgroundColor: tag.color }]}
+                textStyle={{ color: '#fff', fontSize: 12 }}
+                closeIconAccessibilityLabel={`Remove ${tag.name}`}
+              >
+                {tag.name}
+              </Chip>
+            );
+          })}
+        </View>
+      )}
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <TouchableOpacity
-          onPress={() => onTagSelect(undefined)}
-          activeOpacity={0.7}
-        >
-          <Surface
-            style={[
-              styles.tagItem,
-              !selectedTagId && styles.tagSelected,
-              { borderColor: theme.colors.outline },
-            ]}
-            elevation={0}
+        {selectedIds.length > 0 && (
+          <TouchableOpacity
+            onPress={handleClearAll}
+            activeOpacity={0.7}
           >
-            <Text
-              variant="labelMedium"
-              style={{ color: theme.colors.onSurfaceVariant }}
+            <Surface
+              style={[
+                styles.tagItem,
+                { borderColor: theme.colors.outline },
+              ]}
+              elevation={0}
             >
-              None
-            </Text>
-          </Surface>
-        </TouchableOpacity>
+              <Text
+                variant="labelMedium"
+                style={{ color: theme.colors.onSurfaceVariant }}
+              >
+                None
+              </Text>
+            </Surface>
+          </TouchableOpacity>
+        )}
 
         {tags.map(tag => {
-          const isSelected = selectedTagId === tag.id;
+          const isSelected = selectedIds.includes(tag.id);
           return (
             <TouchableOpacity
               key={tag.id}
-              onPress={() => onTagSelect(tag.id)}
+              onPress={() => handleToggleTag(tag.id)}
               activeOpacity={0.7}
             >
               <Surface
@@ -159,6 +225,15 @@ const styles = StyleSheet.create({
   container: {},
   label: {
     marginBottom: 8,
+  },
+  selectedChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  selectedChip: {
+    marginRight: 0,
   },
   tagItem: {
     flexDirection: 'row',

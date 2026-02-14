@@ -53,6 +53,9 @@ interface AuthState {
   hasRole: (requiredRole: TeamRole) => boolean;
 }
 
+// Track the auth subscription outside the store to prevent multiple listeners
+let authSubscription: { unsubscribe: () => void } | null = null;
+
 export const useAuthStore = create<AuthState>()((set, get) => ({
   session: null,
   user: null,
@@ -98,23 +101,26 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         await get().fetchMemberships();
       }
 
-      // Listen for auth changes
-      onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_OUT') {
-          set({
-            session: null,
-            user: null,
-            profile: null,
-            isAuthenticated: false,
-            activeTeam: null,
-            activeRole: null,
-            memberships: [],
-            teamMembers: [],
-          });
-        } else if (session?.user) {
-          set({ session, user: session.user, isAuthenticated: true });
-        }
-      });
+      // Listen for auth changes (only set up once)
+      if (!authSubscription) {
+        const { data } = onAuthStateChange(async (event, session) => {
+          if (event === 'SIGNED_OUT') {
+            set({
+              session: null,
+              user: null,
+              profile: null,
+              isAuthenticated: false,
+              activeTeam: null,
+              activeRole: null,
+              memberships: [],
+              teamMembers: [],
+            });
+          } else if (session?.user) {
+            set({ session, user: session.user, isAuthenticated: true });
+          }
+        });
+        authSubscription = data.subscription;
+      }
     } catch (error: any) {
       console.error('Auth init error:', error);
       set({ authError: error.message });

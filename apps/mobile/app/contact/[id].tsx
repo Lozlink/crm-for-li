@@ -175,6 +175,7 @@ export default function ContactDetailScreen() {
                 latitude: contact.latitude,
                 longitude: contact.longitude,
                 tag_id: contact.tag_id,
+                tag_ids: (contact.tags || []).map(t => t.id),
               }}
               onSubmit={handleUpdate}
               onCancel={() => setIsEditing(false)}
@@ -184,14 +185,27 @@ export default function ContactDetailScreen() {
           ) : (
             <>
               <Surface style={styles.infoCard} elevation={1}>
-                {contact.tag && (
+                {(contact.tags && contact.tags.length > 0) ? (
+                  <View style={styles.tagChips}>
+                    {contact.tags.map(tag => (
+                      <Chip
+                        key={tag.id}
+                        style={[styles.tagChip, { backgroundColor: tag.color }]}
+                        textStyle={{ color: '#fff' }}
+                        compact
+                      >
+                        {tag.name}
+                      </Chip>
+                    ))}
+                  </View>
+                ) : contact.tag ? (
                   <Chip
                     style={[styles.tagChip, { backgroundColor: contact.tag.color }]}
                     textStyle={{ color: '#fff' }}
                   >
                     {contact.tag.name}
                   </Chip>
-                )}
+                ) : null}
 
                 <Text variant="headlineSmall" style={styles.name}>{fullName}</Text>
 
@@ -319,9 +333,15 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
   },
+  tagChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 12,
+  },
   tagChip: {
     alignSelf: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 0,
   },
   name: {
     marginBottom: 16,
