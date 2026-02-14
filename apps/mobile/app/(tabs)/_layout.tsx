@@ -48,6 +48,24 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="routes"
+        options={{
+          title: 'Routes',
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="routes" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="stats"
+        options={{
+          title: 'Stats',
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="chart-bar" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',

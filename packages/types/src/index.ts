@@ -1,5 +1,6 @@
 // Entities
 export type { Tag, Contact, Activity, ActivityWithContact, ContactFormData } from './entities';
+export type { Route, RouteStop, RouteStatus, RouteMode, StopStatus, StreetStats } from './entities';
 
 // Map types
 export type { MapRegion, SavedSuburb, SuburbBoundary } from './map';

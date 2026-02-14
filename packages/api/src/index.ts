@@ -27,3 +27,7 @@ export {
   deleteTeam,
   fetchTeamInvitations,
 } from './teams';
+
+// Directions
+export { fetchOptimizedRoute, decodePolyline } from './directions';
+export type { DirectionsResult, DirectionsLeg } from './directions';

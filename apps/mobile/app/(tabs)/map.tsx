@@ -3,10 +3,10 @@ import { StyleSheet, View, Dimensions } from 'react-native';
 import { FAB, Portal, useTheme, Chip, Surface, Text, Dialog, Button } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import MapView, { Marker, Polygon, PROVIDER_GOOGLE, MapPressEvent, LongPressEvent, Region } from 'react-native-maps';
+import MapView, { Marker, Polygon, Circle, PROVIDER_GOOGLE, MapPressEvent, LongPressEvent, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
-import { useCRMStore } from '@realestate-crm/hooks';
+import { useCRMStore, useStreetStats } from '@realestate-crm/hooks';
 import { Contact, SuburbBoundary  } from '@realestate-crm/types';
 import { fetchSuburbByName} from '@realestate-crm/api';
 import { FilterSheet } from '@realestate-crm/ui';
@@ -29,6 +29,10 @@ export default function MapScreen() {
   const setMapRegion = useCRMStore(state => state.setMapRegion);
   const selectedTagIds = useCRMStore(state => state.selectedTagIds);
   const tags = useCRMStore(state => state.tags);
+
+  const [showStats, setShowStats] = useState(false);
+
+  const streetStats = useStreetStats();
 
   const [filterVisible, setFilterVisible] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -200,6 +204,12 @@ export default function MapScreen() {
     return contact.tags?.[0]?.color || contact.tag?.color || theme.colors.primary;
   }, [theme.colors.primary]);
 
+  const getStatsColor = useCallback((daysSinceLastContact: number | null): string => {
+    if (daysSinceLastContact === null || daysSinceLastContact > 30) return 'rgba(239, 68, 68, 0.4)';
+    if (daysSinceLastContact > 7) return 'rgba(234, 179, 8, 0.4)';
+    return 'rgba(34, 197, 94, 0.4)';
+  }, []);
+
   const handleSearchLocationSelect = useCallback((lat: number, lng: number, name: string) => {
     const newRegion = {
       latitude: lat,
@@ -298,6 +308,19 @@ export default function MapScreen() {
             fillColor="rgba(0, 0, 0, 0.03)"
           />
         )}
+        {showStats && streetStats.map((stat) => (
+          <Circle
+            key={`${stat.streetName}-${stat.suburb}`}
+            center={{
+              latitude: stat.averageLatitude,
+              longitude: stat.averageLongitude,
+            }}
+            radius={Math.max(30, stat.contactCount * 15)}
+            fillColor={getStatsColor(stat.daysSinceLastContact)}
+            strokeColor={getStatsColor(stat.daysSinceLastContact).replace('0.4', '0.8')}
+            strokeWidth={1}
+          />
+        ))}
       </MapView>
 
       <MapSearchBar onLocationSelect={handleSearchLocationSelect} />
@@ -326,6 +349,17 @@ export default function MapScreen() {
         style={[styles.locationFab, { backgroundColor: theme.colors.surface, bottom: insets.bottom + 190 }]}
         color={theme.colors.primary}
         onPress={handleCenterOnUser}
+        size="small"
+      />
+
+      <FAB
+        icon={showStats ? 'chart-bar' : 'chart-bar'}
+        style={[styles.statsFab, {
+          backgroundColor: showStats ? theme.colors.primaryContainer : theme.colors.surface,
+          bottom: insets.bottom + 250
+        }]}
+        color={showStats ? theme.colors.onPrimaryContainer : theme.colors.primary}
+        onPress={() => setShowStats(!showStats)}
         size="small"
       />
 
@@ -400,6 +434,10 @@ const styles = StyleSheet.create({
   map: {
     width,
     height,
+  },
+  statsFab: {
+    position: 'absolute',
+    right: 16,
   },
   locationFab: {
     position: 'absolute',

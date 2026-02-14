@@ -161,6 +161,19 @@ export default function RootLayout() {
               name="team/[teamId]/settings"
               options={{ title: 'Team Settings' }}
             />
+            <Stack.Screen
+              name="route/[id]"
+              options={{
+                title: 'Route',
+              }}
+            />
+            <Stack.Screen
+              name="route/new"
+              options={{
+                title: 'New Route',
+                presentation: 'modal',
+              }}
+            />
           </Stack>
         </AuthGate>
       </PaperProvider>
