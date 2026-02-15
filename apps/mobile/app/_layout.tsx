@@ -5,7 +5,7 @@ import { useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useAuthStore } from '@realestate-crm/hooks';
+import { useAuthStore, useCallerIdSync, useCallLogSync } from '@realestate-crm/hooks';
 import { useCRMStore } from '@realestate-crm/hooks';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
@@ -99,6 +99,9 @@ export default function RootLayout() {
     initialize();
   }, []);
 
+  useCallerIdSync();
+  useCallLogSync();
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
@@ -172,6 +175,12 @@ export default function RootLayout() {
               options={{
                 title: 'New Route',
                 presentation: 'modal',
+              }}
+            />
+            <Stack.Screen
+              name="settings/caller-id"
+              options={{
+                title: 'Caller ID',
               }}
             />
           </Stack>

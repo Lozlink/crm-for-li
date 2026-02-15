@@ -65,7 +65,8 @@ export default {
         {
           contactsPermission: "Allow $(PRODUCT_NAME) to access your contacts."
         }
-      ]
+      ],
+      "../../modules/caller-id/app.plugin.js"
     ],
 
     extra: {

@@ -43,10 +43,16 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# generated native folders
+# generated native folders (prebuild output)
 **/ios
 **/android
+# but keep native source in local modules
+!modules/**/ios
+!modules/**/ios/**
+!modules/**/android
+!modules/**/android/**
 /docs/
 
 /.turbo/**
 **/.turbo/**
+/.claude/

@@ -137,6 +137,21 @@ export default function SettingsScreen() {
 
       <Divider style={styles.divider} />
 
+      {/* Integrations */}
+      <Surface style={styles.integrationsCard} elevation={1}>
+        <Text variant="titleMedium" style={styles.sectionTitle}>Integrations</Text>
+        <List.Item
+          title="Caller ID"
+          description="Show contact names on incoming calls"
+          left={props => <List.Icon {...props} icon="phone-check" />}
+          right={props => <List.Icon {...props} icon="chevron-right" />}
+          onPress={() => router.push('/settings/caller-id')}
+          style={styles.listItem}
+        />
+      </Surface>
+
+      <Divider style={styles.divider} />
+
       <Surface style={styles.infoCard} elevation={1}>
         <Text variant="titleMedium" style={styles.sectionTitle}>About</Text>
         <List.Item
@@ -214,6 +229,12 @@ const styles = StyleSheet.create({
   },
   divider: {
     marginVertical: 4,
+  },
+  integrationsCard: {
+    margin: 16,
+    marginTop: 8,
+    padding: 16,
+    borderRadius: 12,
   },
   infoCard: {
     margin: 16,
