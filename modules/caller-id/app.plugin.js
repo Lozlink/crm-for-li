@@ -299,11 +299,11 @@ function withCallerIdXcodeProject(config) {
           xcodeProject.pbxXCBuildConfigurationSection()[buildConfigUuid];
         if (buildConfig && buildConfig.buildSettings) {
           buildConfig.buildSettings.PRODUCT_BUNDLE_IDENTIFIER =
-            `"${extensionBundleId}"`;
+            extensionBundleId;
           buildConfig.buildSettings.INFOPLIST_FILE =
-            `"${EXTENSION_NAME}/Info.plist"`;
+            `${EXTENSION_NAME}/Info.plist`;
           buildConfig.buildSettings.CODE_SIGN_ENTITLEMENTS =
-            `"${EXTENSION_NAME}/${EXTENSION_NAME}.entitlements"`;
+            `${EXTENSION_NAME}/${EXTENSION_NAME}.entitlements`;
           buildConfig.buildSettings.CODE_SIGN_STYLE = "Automatic";
           buildConfig.buildSettings.SWIFT_VERSION = "5.0";
           buildConfig.buildSettings.TARGETED_DEVICE_FAMILY =
