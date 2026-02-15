@@ -298,12 +298,19 @@ function withCallerIdXcodeProject(config) {
         const buildConfig =
           xcodeProject.pbxXCBuildConfigurationSection()[buildConfigUuid];
         if (buildConfig && buildConfig.buildSettings) {
+          // IMPORTANT: The xcode library's pbxWriter writes values
+          // verbatim with `%s = %s;\n`. In .pbxproj format, strings
+          // containing characters like hyphens MUST be wrapped in
+          // double quotes or they will be misinterpreted by the parser.
+          // The xcode library itself wraps PRODUCT_BUNDLE_IDENTIFIER
+          // in embedded quotes ('"value"') when set via addTarget().
+          // We must follow the same convention here.
           buildConfig.buildSettings.PRODUCT_BUNDLE_IDENTIFIER =
-            extensionBundleId;
+            `"${extensionBundleId}"`;
           buildConfig.buildSettings.INFOPLIST_FILE =
-            `${EXTENSION_NAME}/Info.plist`;
+            `"${EXTENSION_NAME}/Info.plist"`;
           buildConfig.buildSettings.CODE_SIGN_ENTITLEMENTS =
-            `${EXTENSION_NAME}/${EXTENSION_NAME}.entitlements`;
+            `"${EXTENSION_NAME}/${EXTENSION_NAME}.entitlements"`;
           buildConfig.buildSettings.CODE_SIGN_STYLE = "Automatic";
           buildConfig.buildSettings.SWIFT_VERSION = "5.0";
           buildConfig.buildSettings.TARGETED_DEVICE_FAMILY =
@@ -322,17 +329,9 @@ function withCallerIdXcodeProject(config) {
       }
     }
 
-    // ------------------------------------------------------------------
-    // 7. Add target dependency from main app to extension
-    // ------------------------------------------------------------------
-    // addTarget already embeds the .appex into the main app via a
-    // CopyFiles build phase, but it does NOT add a target dependency.
-    // Without the dependency, Xcode may not build the extension before
-    // the main app tries to embed it.
-    const mainTargetUuid = appTarget?.uuid;
-    if (mainTargetUuid) {
-      xcodeProject.addTargetDependency(mainTargetUuid, [targetUuid]);
-    }
+    // NOTE: addTarget() with type "app_extension" already calls
+    // addTargetDependency() internally (see xcode@3.0.1 pbxProject.js
+    // line 1547), so we do NOT need to add it again here.
 
     return config;
   });
