@@ -214,16 +214,42 @@ function withCallerIdXcodeProject(config) {
     // 2. Create the native target for the extension
     // ------------------------------------------------------------------
     // addTarget with type "app_extension" automatically:
-    //   - Creates Debug/Release build configurations
+    //   - Creates Debug/Release build configurations (with PRODUCT_BUNDLE_IDENTIFIER when bundleId is passed)
     //   - Creates the .appex product reference
     //   - Adds a "Copy Files" embed phase to the first (main) target
     //   - Registers the target in PBXProject targets list
+    //   - Adds a target dependency from the main app to the extension
     const targetResult = xcodeProject.addTarget(
       EXTENSION_NAME,
       "app_extension",
-      EXTENSION_NAME
+      EXTENSION_NAME,
+      extensionBundleId
     );
     const targetUuid = targetResult.uuid;
+
+    // ------------------------------------------------------------------
+    // 2b. Add CodeSignOnCopy attribute to the embedded .appex
+    // ------------------------------------------------------------------
+    // The xcode library's addTarget creates a PBXBuildFile entry for the
+    // .appex in the "Copy Files" phase, but does NOT add the
+    // CodeSignOnCopy / RemoveHeadersOnCopy attributes. Without these,
+    // the embedded extension is not re-signed during the copy step,
+    // causing ValidateEmbeddedBinary to fail.
+    const buildFileSection = xcodeProject.pbxBuildFileSection();
+    for (const bfKey of Object.keys(buildFileSection)) {
+      if (bfKey.endsWith("_comment")) continue;
+      const bf = buildFileSection[bfKey];
+      if (
+        bf.fileRef === targetResult.pbxNativeTarget.productReference &&
+        bf.fileRef_comment &&
+        bf.fileRef_comment.endsWith(".appex")
+      ) {
+        bf.settings = {
+          ATTRIBUTES: ["RemoveHeadersOnCopy", "CodeSignOnCopy"],
+        };
+        break;
+      }
+    }
 
     // ------------------------------------------------------------------
     // 3. Add source build phase (Sources) for the Swift file
@@ -317,7 +343,7 @@ function withCallerIdXcodeProject(config) {
             '"1,2"';
           buildConfig.buildSettings.IPHONEOS_DEPLOYMENT_TARGET =
             deploymentTarget;
-          buildConfig.buildSettings.GENERATE_INFOPLIST_FILE = "NO";
+          buildConfig.buildSettings.GENERATE_INFOPLIST_FILE = "YES";
           buildConfig.buildSettings.CURRENT_PROJECT_VERSION = "1";
           buildConfig.buildSettings.MARKETING_VERSION = "1.0";
           buildConfig.buildSettings.SKIP_INSTALL = "YES";
