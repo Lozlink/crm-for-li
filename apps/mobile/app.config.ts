@@ -24,7 +24,8 @@ export default {
       supportsTablet: true,
       bundleIdentifier: "com.realestate-geo.crm",
       infoPlist: {
-        NSContactsUsageDescription: "Allow $(PRODUCT_NAME) to access your contacts."
+        NSContactsUsageDescription: "Allow $(PRODUCT_NAME) to access your contacts.",
+        UIBackgroundModes: ["location"],
       },
       config: {
         googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
@@ -45,7 +46,10 @@ export default {
       permissions: [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.READ_CONTACTS"
+        "android.permission.READ_CONTACTS",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
     web: {

@@ -1,11 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View, FlatList } from 'react-native';
-import { FAB, useTheme, Text, Chip, ActivityIndicator, Surface } from 'react-native-paper';
+import { FAB, useTheme, Text, Chip, ActivityIndicator, Surface, Button } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { useRouteStore } from '@realestate-crm/hooks';
+import { useRouteStore, useTrackingStore } from '@realestate-crm/hooks';
 import type { Route } from '@realestate-crm/types';
+import type { TrackingSession } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const STATUS_LABELS: Record<Route['status'], string> = {
@@ -23,19 +24,46 @@ export default function RoutesScreen() {
   const isLoading = useRouteStore(state => state.isLoading);
   const fetchRoutes = useRouteStore(state => state.fetchRoutes);
 
+  const activeSession = useTrackingStore(state => state.activeSession);
+  const sessions = useTrackingStore(state => state.sessions);
+  const startSession = useTrackingStore(state => state.startSession);
+  const stopSession = useTrackingStore(state => state.stopSession);
+  const fetchSessions = useTrackingStore(state => state.fetchSessions);
+
   const [refreshing, setRefreshing] = useState(false);
+  const [elapsed, setElapsed] = useState('00:00');
+  const [stoppingSession, setStoppingSession] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       fetchRoutes();
-    }, [fetchRoutes])
+      fetchSessions();
+    }, [fetchRoutes, fetchSessions])
   );
+
+  useEffect(() => {
+    if (!activeSession) return;
+    const interval = setInterval(() => {
+      const diff = Math.floor(
+        (Date.now() - new Date(activeSession.started_at).getTime()) / 1000
+      );
+      const hrs = Math.floor(diff / 3600);
+      const mins = Math.floor((diff % 3600) / 60);
+      const secs = diff % 60;
+      setElapsed(
+        hrs > 0
+          ? `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+          : `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+      );
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeSession]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchRoutes();
+    await Promise.all([fetchRoutes(), fetchSessions()]);
     setRefreshing(false);
-  }, [fetchRoutes]);
+  }, [fetchRoutes, fetchSessions]);
 
   const handleRoutePress = useCallback((route: Route) => {
     router.push(`/route/${route.id}`);
@@ -43,6 +71,23 @@ export default function RoutesScreen() {
 
   const handleAddRoute = () => {
     router.push('/route/new');
+  };
+
+  const handleStartTracking = async () => {
+    await startSession();
+  };
+
+  const handleStopTracking = async () => {
+    setStoppingSession(true);
+    const session = await stopSession();
+    setStoppingSession(false);
+    if (session) {
+      router.push(`/tracking/${session.id}`);
+    }
+  };
+
+  const handleSessionPress = (session: TrackingSession) => {
+    router.push(`/tracking/${session.id}`);
   };
 
   const getStatusChipStyle = (status: Route['status']) => {
@@ -150,6 +195,145 @@ export default function RoutesScreen() {
     </View>
   );
 
+  const formatSessionDuration = (seconds: number): string => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    return `${mins}m`;
+  };
+
+  const formatSessionDistance = (meters: number): string => {
+    if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+    return `${Math.round(meters)} m`;
+  };
+
+  const formatSessionDate = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+  };
+
+  const renderTrackingBanner = () => (
+    <Surface
+      style={[
+        styles.trackingBanner,
+        activeSession
+          ? { backgroundColor: theme.colors.primaryContainer }
+          : undefined,
+      ]}
+      elevation={activeSession ? 2 : 1}
+    >
+      {activeSession ? (
+        <View style={styles.trackingBannerContent}>
+          <View style={styles.trackingInfo}>
+            <Icon name="record-circle-outline" size={20} color={theme.colors.error} style={{ marginRight: 8 }} />
+            <View>
+              <Text variant="titleSmall" style={{ color: theme.colors.onPrimaryContainer }}>
+                Tracking Active
+              </Text>
+              <Text variant="bodySmall" style={{ color: theme.colors.onPrimaryContainer }}>
+                {elapsed}
+              </Text>
+            </View>
+          </View>
+          <Button
+            mode="contained"
+            buttonColor={theme.colors.error}
+            textColor={theme.colors.onError}
+            onPress={handleStopTracking}
+            loading={stoppingSession}
+            disabled={stoppingSession}
+            compact
+          >
+            Stop
+          </Button>
+        </View>
+      ) : (
+        <Button
+          mode="contained-tonal"
+          icon="map-marker-path"
+          onPress={handleStartTracking}
+          style={{ alignSelf: 'stretch' }}
+        >
+          Start Tracking
+        </Button>
+      )}
+    </Surface>
+  );
+
+  const renderSessionHistory = () => {
+    const completedSessions = sessions
+      .filter(s => s.completed_at != null)
+      .slice(0, 5);
+
+    if (completedSessions.length === 0) return null;
+
+    return (
+      <View style={{ marginTop: 16 }}>
+        <Text
+          variant="titleSmall"
+          style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}
+        >
+          Recent Sessions
+        </Text>
+        {completedSessions.map(session => (
+          <Surface key={session.id} style={styles.card} elevation={1}>
+            <View
+              style={styles.cardTouchable}
+              onTouchEnd={() => handleSessionPress(session)}
+              accessible
+              accessibilityRole="button"
+              accessibilityLabel={`Session: ${formatSessionDate(session.started_at)}`}
+            >
+              <View style={styles.cardContent}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.titleRow}>
+                    <Icon
+                      name="map-marker-path"
+                      size={20}
+                      color={theme.colors.onSurfaceVariant}
+                      style={styles.modeIcon}
+                    />
+                    <Text variant="titleMedium" numberOfLines={1} style={styles.routeName}>
+                      {formatSessionDate(session.started_at)}
+                    </Text>
+                  </View>
+                  <Chip
+                    compact
+                    style={{ backgroundColor: theme.colors.tertiaryContainer }}
+                    textStyle={{ color: theme.colors.onTertiaryContainer, fontSize: 11 }}
+                  >
+                    Session
+                  </Chip>
+                </View>
+
+                <View style={styles.metaRow}>
+                  {session.duration_seconds != null && (
+                    <View style={styles.metaItem}>
+                      <Icon name="clock-outline" size={14} color={theme.colors.onSurfaceVariant} />
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginLeft: 4 }}>
+                        {formatSessionDuration(session.duration_seconds)}
+                      </Text>
+                    </View>
+                  )}
+                  {session.total_distance_meters != null && (
+                    <View style={styles.metaItem}>
+                      <Icon name="map-marker-distance" size={14} color={theme.colors.onSurfaceVariant} />
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginLeft: 4 }}>
+                        {formatSessionDistance(session.total_distance_meters)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+          </Surface>
+        ))}
+      </View>
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {isLoading && !refreshing ? (
@@ -161,6 +345,8 @@ export default function RoutesScreen() {
           data={routes}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          ListHeaderComponent={renderTrackingBanner}
+          ListFooterComponent={renderSessionHistory}
           ListEmptyComponent={renderEmpty}
           contentContainerStyle={routes.length === 0 ? styles.emptyList : styles.list}
           refreshing={refreshing}
@@ -240,5 +426,19 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 16,
+  },
+  trackingBanner: {
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 12,
+  },
+  trackingBannerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  trackingInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });

@@ -5,7 +5,7 @@ import { useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useAuthStore, useCallerIdSync, useCallLogSync } from '@realestate-crm/hooks';
+import { useAuthStore, useCallerIdSync, useCallLogSync, useTrackingStore } from '@realestate-crm/hooks';
 import { useCRMStore } from '@realestate-crm/hooks';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
@@ -99,6 +99,12 @@ export default function RootLayout() {
     initialize();
   }, []);
 
+  const recoverOrphanedSession = useTrackingStore(s => s.recoverOrphanedSession);
+
+  useEffect(() => {
+    recoverOrphanedSession();
+  }, []);
+
   useCallerIdSync();
   useCallLogSync();
 
@@ -181,6 +187,12 @@ export default function RootLayout() {
               name="settings/caller-id"
               options={{
                 title: 'Caller ID',
+              }}
+            />
+            <Stack.Screen
+              name="tracking/[id]"
+              options={{
+                title: 'Tracking Session',
               }}
             />
           </Stack>

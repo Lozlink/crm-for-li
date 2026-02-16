@@ -29,5 +29,5 @@ export {
 } from './teams';
 
 // Directions
-export { fetchOptimizedRoute, decodePolyline } from './directions';
+export { fetchOptimizedRoute, decodePolyline, encodePolyline } from './directions';
 export type { DirectionsResult, DirectionsLeg } from './directions';

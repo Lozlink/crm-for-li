@@ -5,3 +5,4 @@ export { useRouteStore } from './useRouteStore';
 export { useStreetStats } from './useStreetStats';
 export { useCallerIdSync } from './useCallerIdSync';
 export { useCallLogSync } from './useCallLogSync';
+export { useTrackingStore } from './useTrackingStore';

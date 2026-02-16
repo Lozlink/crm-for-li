@@ -99,3 +99,30 @@ export interface StreetStats {
   averageLatitude: number;
   averageLongitude: number;
 }
+
+// --- Activity Tracking ---
+
+export interface TrackingSession {
+  id: string;
+  user_id?: string;
+  team_id?: string;
+  status: 'active' | 'completed';
+  started_at: string;
+  completed_at?: string;
+  total_distance_meters?: number;
+  duration_seconds?: number;
+  polyline?: string;
+  created_at?: string;
+}
+
+export interface TrackingBreadcrumb {
+  id: string;
+  session_id: string;
+  latitude: number;
+  longitude: number;
+  altitude?: number;
+  speed?: number;
+  heading?: number;
+  accuracy?: number;
+  recorded_at: string;
+}

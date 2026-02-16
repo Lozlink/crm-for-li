@@ -177,3 +177,37 @@ export function decodePolyline(encoded: string): LatLng[] {
 
   return points;
 }
+
+/**
+ * Encode an array of lat/lng points into a Google encoded polyline string.
+ * Inverse of decodePolyline.
+ */
+export function encodePolyline(points: LatLng[]): string {
+  let encoded = '';
+  let prevLat = 0;
+  let prevLng = 0;
+
+  for (const point of points) {
+    const lat = Math.round(point.latitude * 1e5);
+    const lng = Math.round(point.longitude * 1e5);
+
+    encoded += encodeSignedValue(lat - prevLat);
+    encoded += encodeSignedValue(lng - prevLng);
+
+    prevLat = lat;
+    prevLng = lng;
+  }
+
+  return encoded;
+}
+
+function encodeSignedValue(value: number): string {
+  let v = value < 0 ? ~(value << 1) : value << 1;
+  let encoded = '';
+  while (v >= 0x20) {
+    encoded += String.fromCharCode((0x20 | (v & 0x1f)) + 63);
+    v >>= 5;
+  }
+  encoded += String.fromCharCode(v + 63);
+  return encoded;
+}
