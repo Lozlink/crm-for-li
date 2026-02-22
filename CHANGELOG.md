@@ -1,5 +1,68 @@
 # Changelog
 
+## [Unreleased] - 2026-02-22
+
+### Added
+
+#### Field Notes & Annotation System
+
+- **Tracking annotations table** (`supabase/migrations/007_tracking_annotations.sql`)
+  - `tracking_annotations` table with session_id, lat/lng, note, contact_id
+  - Team-scoped RLS policies
+- **`TrackingAnnotation` type** added to shared types package
+- **Annotation CRUD in tracking store** (`packages/hooks/src/useTrackingStore.ts`)
+  - `fetchAnnotations`, `createAnnotation`, `updateAnnotation`, `deleteAnnotation`, `linkAnnotationContact`
+  - Demo mode support, team context scoping
+- **Route stop notes & contact linking** (`packages/hooks/src/useRouteStore.ts`)
+  - `updateStopNotes(stopId, notes)` — edit notes without changing stop status
+  - `linkStopContact(stopId, contactId)` — link a contact to a route stop
+
+#### Mobile — Tracking Enhancements
+
+- **Drop Note FAB** (`app/(tabs)/routes.tsx`) — amber floating button during active tracking to capture GPS-tagged annotations
+- **Tracking session detail** (`app/tracking/[id].tsx`) — annotation markers (amber pins) on map, annotations merged into chronological timeline
+
+#### Web Dashboard — Route Detail
+
+- **RouteDetail** (`apps/web/src/components/RouteDetail.tsx`)
+  - Collapsible stop cards with chevron toggle
+  - Editable notes on visited/skipped stops (edit → textarea → save/cancel)
+  - Contact linking: search dropdown + "Create Contact" with pre-filled address/coords
+  - Activity timeline per stop showing last 5 activities, quick-add note input
+
+#### Web Dashboard — Tracking Detail
+
+- **TrackingDetail** (`apps/web/src/components/TrackingDetail.tsx`)
+  - Annotation markers (amber pins) on Google Map
+  - Nearby contacts overlay (green markers within 100m of route)
+  - Click polyline to add new annotation
+  - Edit/delete annotations in overlay panel, link contacts
+  - Map legend overlay
+- **TrackingList** (`apps/web/src/components/TrackingList.tsx`) — rows now clickable to navigate to detail view
+
+#### Web Dashboard — Shims & Build Support
+
+- **expo-modules-core shim** (`apps/web/src/shims/expo-modules-core.ts`) — `requireNativeModule`, `NativeModule`, `EventEmitter` stubs
+- **react-native shim** — added `AppState` export and `AppStateStatus` type
+- **expo-location shim** — added `LocationObject` and `LocationObjectCoords` interfaces
+- **expo-task-manager shim** — added `TaskManagerTaskBody` interface
+
+### Changed
+
+- `apps/web/next.config.js` — added `expo-modules-core` to turbopack resolveAlias
+- `apps/web/tsconfig.json` — added `downlevelIteration: true`
+- `apps/web/src/shims/expo-constants.ts` — added `GOOGLE_MAPS_API_KEY` (UPPER_SNAKE_CASE)
+
+### Fixed
+
+- **MapView tag filter** — fixed to use `contact.tags` array instead of only `tag_id` for multi-tag filtering
+- **MapView** — added `useSearchParams` for Stats → Map navigation
+- **NewRoute coordinate check** — `lat == null || lng == null` instead of `!lat && !lng` (stops at 0,0 were incorrectly filtered)
+- **RoutesTable** — added error handling to delete, fixed type cast
+- **NotesView** — fixed `Map.entries()` iteration for es5 target with `Array.from()`
+
+---
+
 ## [Unreleased] - 2026-02-15
 
 ### Added
