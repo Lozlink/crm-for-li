@@ -82,9 +82,15 @@ export default function Dashboard() {
   const pipeline = useMemo(() => {
     const tagCounts = tags.map((tag) => ({
       ...tag,
-      count: contacts.filter((c) => c.tag_id === tag.id).length,
+      count: contacts.filter((c) => {
+        const contactTagIds = c.tags?.map((t) => t.id) || (c.tag_id ? [c.tag_id] : []);
+        return contactTagIds.includes(tag.id);
+      }).length,
     }));
-    const untagged = contacts.filter((c) => !c.tag_id).length;
+    const untagged = contacts.filter((c) => {
+      const hasTags = (c.tags && c.tags.length > 0) || c.tag_id;
+      return !hasTags;
+    }).length;
     const total = contacts.length || 1; // avoid division by zero
     return { tagCounts, untagged, total };
   }, [contacts, tags]);

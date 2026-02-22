@@ -127,17 +127,20 @@ export default function ContactDetail({ contactId }: ContactDetailProps) {
                 <h1 className="text-xl font-bold text-gray-900">
                   {displayName || 'Unnamed'}
                 </h1>
-                {contact.tag && (
+                {(contact.tags && contact.tags.length > 0
+                  ? contact.tags
+                  : contact.tag
+                    ? [contact.tag]
+                    : []
+                ).map((tag) => (
                   <span
-                    className="mt-1 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium"
-                    style={{
-                      backgroundColor: contact.tag.color + '20',
-                      color: contact.tag.color,
-                    }}
+                    key={tag.id}
+                    className="mt-1 mr-1 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium"
+                    style={{ backgroundColor: tag.color + '20', color: tag.color }}
                   >
-                    {contact.tag.name}
+                    {tag.name}
                   </span>
-                )}
+                ))}
               </div>
             </div>
 

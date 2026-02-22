@@ -3,6 +3,7 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useCRMStore } from '@realestate-crm/hooks';
 import { fetchSuburbByName } from '@realestate-crm/api';
 import type { Contact, SuburbBoundary } from '@realestate-crm/types';
@@ -57,6 +58,25 @@ export default function MapView() {
 
   const mapRef = useRef<GoogleMapHandle>(null);
   const addContact = useCRMStore((s) => s.addContact);
+  const searchParams = useSearchParams();
+
+  // Fly to location from query params (e.g. from Stats page)
+  useEffect(() => {
+    const lat = searchParams.get('lat');
+    const lng = searchParams.get('lng');
+    const zoom = searchParams.get('zoom');
+    if (lat && lng) {
+      const latNum = parseFloat(lat);
+      const lngNum = parseFloat(lng);
+      const zoomNum = zoom ? parseInt(zoom, 10) : 17;
+      if (!isNaN(latNum) && !isNaN(lngNum)) {
+        // Small delay to ensure map is loaded
+        setTimeout(() => {
+          mapRef.current?.flyTo(latNum, lngNum, zoomNum);
+        }, 500);
+      }
+    }
+  }, [searchParams]);
 
   // Request geolocation on mount
   useEffect(() => {
@@ -77,9 +97,10 @@ export default function MapView() {
   const mappableContacts = useMemo(() => {
     let result = contacts.filter((c) => c.latitude && c.longitude);
     if (selectedTagIds.length > 0) {
-      result = result.filter(
-        (c) => c.tag_id && selectedTagIds.includes(c.tag_id)
-      );
+      result = result.filter((c) => {
+        const contactTagIds = c.tags?.map((t) => t.id) || (c.tag_id ? [c.tag_id] : []);
+        return contactTagIds.some((id) => selectedTagIds.includes(id));
+      });
     }
     return result;
   }, [contacts, selectedTagIds]);
@@ -93,8 +114,11 @@ export default function MapView() {
   const tagContactCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     contacts.forEach((c) => {
-      if (c.latitude && c.longitude && c.tag_id) {
-        counts[c.tag_id] = (counts[c.tag_id] || 0) + 1;
+      if (c.latitude && c.longitude) {
+        const tagIds = c.tags?.map((t) => t.id) || (c.tag_id ? [c.tag_id] : []);
+        tagIds.forEach((id) => {
+          counts[id] = (counts[id] || 0) + 1;
+        });
       }
     });
     return counts;

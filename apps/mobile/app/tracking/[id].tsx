@@ -9,7 +9,7 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, Stack } from 'expo-router';
-import MapView, { Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Polyline, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import Constants from 'expo-constants';
 import { useTrackingStore } from '@realestate-crm/hooks';
 import { decodePolyline } from '@realestate-crm/api';
@@ -96,6 +96,9 @@ interface TimelineEntry {
   isFirst: boolean;
   isLast: boolean;
   isLoading: boolean;
+  type: 'breadcrumb' | 'annotation';
+  note?: string;
+  sortTime: number;
 }
 
 // ---- Component ----
@@ -111,6 +114,8 @@ export default function TrackingSessionDetailScreen() {
   const fetchSessionBreadcrumbs = useTrackingStore(
     (s) => s.fetchSessionBreadcrumbs,
   );
+  const annotations = useTrackingStore((s) => s.annotations);
+  const fetchAnnotations = useTrackingStore((s) => s.fetchAnnotations);
 
   const session: TrackingSession | undefined = useMemo(
     () => sessions.find((s) => s.id === id),
@@ -141,16 +146,19 @@ export default function TrackingSessionDetailScreen() {
     return [];
   }, [session?.polyline, breadcrumbs]);
 
-  // Load breadcrumbs
+  // Load breadcrumbs and annotations
   useEffect(() => {
     if (!id) return;
 
     let cancelled = false;
     setBreadcrumbsLoading(true);
 
-    fetchSessionBreadcrumbs(id).then((data) => {
+    Promise.all([
+      fetchSessionBreadcrumbs(id),
+      fetchAnnotations(id),
+    ]).then(([breadcrumbData]) => {
       if (!cancelled) {
-        setBreadcrumbs(data);
+        setBreadcrumbs(breadcrumbData);
         setBreadcrumbsLoading(false);
       }
     });
@@ -158,23 +166,29 @@ export default function TrackingSessionDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, fetchSessionBreadcrumbs]);
+  }, [id, fetchSessionBreadcrumbs, fetchAnnotations]);
 
-  // Fit map to path
+  // Fit map to path and annotation markers
   useEffect(() => {
-    if (pathCoordinates.length > 0 && mapRef.current) {
+    const annotationCoords = annotations.map((a) => ({
+      latitude: a.latitude,
+      longitude: a.longitude,
+    }));
+    const allCoords = [...pathCoordinates, ...annotationCoords];
+
+    if (allCoords.length > 0 && mapRef.current) {
       setTimeout(() => {
-        mapRef.current?.fitToCoordinates(pathCoordinates, {
+        mapRef.current?.fitToCoordinates(allCoords, {
           edgePadding: { top: 40, right: 40, bottom: 40, left: 40 },
           animated: true,
         });
       }, 300);
     }
-  }, [pathCoordinates]);
+  }, [pathCoordinates, annotations]);
 
   // Build timeline entries and reverse geocode
   useEffect(() => {
-    if (breadcrumbsLoading || breadcrumbs.length === 0) {
+    if (breadcrumbsLoading || (breadcrumbs.length === 0 && annotations.length === 0)) {
       setTimelineEntries([]);
       return;
     }
@@ -182,26 +196,69 @@ export default function TrackingSessionDetailScreen() {
     let cancelled = false;
     const sampled = sampleBreadcrumbs(breadcrumbs);
 
-    // Initialize entries with loading state
-    const initial: TimelineEntry[] = sampled.map((b, i) => ({
+    // Initialize breadcrumb entries with loading state
+    const breadcrumbEntries: TimelineEntry[] = sampled.map((b, i) => ({
       id: b.id,
       time: formatTime(b.recorded_at),
       address: null,
       isFirst: i === 0,
       isLast: i === sampled.length - 1,
       isLoading: true,
+      type: 'breadcrumb' as const,
+      sortTime: new Date(b.recorded_at).getTime(),
     }));
-    setTimelineEntries(initial);
+
+    // Create annotation entries
+    const annotationEntries: TimelineEntry[] = annotations.map((a) => ({
+      id: `annotation-${a.id}`,
+      time: a.created_at ? formatTime(a.created_at) : '--:--',
+      address: null,
+      isFirst: false,
+      isLast: false,
+      isLoading: false,
+      type: 'annotation' as const,
+      note: a.note,
+      sortTime: a.created_at ? new Date(a.created_at).getTime() : 0,
+    }));
+
+    // Merge and sort by time
+    const merged = [...breadcrumbEntries, ...annotationEntries].sort(
+      (a, b) => a.sortTime - b.sortTime,
+    );
+
+    // Re-assign isFirst/isLast based on merged order (only for breadcrumbs)
+    const breadcrumbIndices = merged
+      .map((entry, idx) => (entry.type === 'breadcrumb' ? idx : -1))
+      .filter((idx) => idx !== -1);
+    if (breadcrumbIndices.length > 0) {
+      merged[breadcrumbIndices[0]].isFirst = true;
+      merged[breadcrumbIndices[breadcrumbIndices.length - 1]].isLast = true;
+    }
+
+    // Mark the actual last entry in the list for the timeline line rendering
+    merged.forEach((entry, i) => {
+      if (entry.type === 'breadcrumb') {
+        entry.isFirst = i === breadcrumbIndices[0];
+        entry.isLast = i === breadcrumbIndices[breadcrumbIndices.length - 1];
+      }
+    });
+
+    setTimelineEntries(merged);
     setGeocodingComplete(false);
 
-    // Reverse geocode each sampled point
+    // Reverse geocode each sampled breadcrumb point
     const geocode = async () => {
-      const results: TimelineEntry[] = [...initial];
+      const results: TimelineEntry[] = [...merged];
 
-      for (let i = 0; i < sampled.length; i++) {
+      for (let i = 0; i < results.length; i++) {
         if (cancelled) return;
+        if (results[i].type !== 'breadcrumb') continue;
 
-        const b = sampled[i];
+        // Find the corresponding sampled breadcrumb
+        const sampledIdx = breadcrumbEntries.findIndex((be) => be.id === results[i].id);
+        if (sampledIdx === -1) continue;
+
+        const b = sampled[sampledIdx];
         let address = `${b.latitude.toFixed(4)}, ${b.longitude.toFixed(4)}`;
 
         if (GOOGLE_MAPS_API_KEY) {
@@ -238,7 +295,7 @@ export default function TrackingSessionDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [breadcrumbs, breadcrumbsLoading]);
+  }, [breadcrumbs, breadcrumbsLoading, annotations]);
 
   // Derive stat values
   const durationLabel = useMemo(() => {
@@ -274,10 +331,12 @@ export default function TrackingSessionDetailScreen() {
 
   const renderTimelineItem = useCallback(
     ({ item, index }: { item: TimelineEntry; index: number }) => {
-      const isLast = item.isLast;
+      const isLastInList = index === timelineEntries.length - 1;
+      const isAnnotation = item.type === 'annotation';
 
       let dotColor = theme.colors.onSurfaceVariant;
-      if (item.isFirst) dotColor = theme.colors.primary;
+      if (isAnnotation) dotColor = '#F59E0B';
+      else if (item.isFirst) dotColor = theme.colors.primary;
       else if (item.isLast) dotColor = theme.colors.error;
 
       return (
@@ -294,8 +353,14 @@ export default function TrackingSessionDetailScreen() {
 
           {/* Dot + line column */}
           <View style={styles.timelineDot}>
-            <View style={[styles.dot, { backgroundColor: dotColor }]} />
-            {!isLast && (
+            {isAnnotation ? (
+              <View style={[styles.annotationDot, { backgroundColor: '#F59E0B' }]}>
+                <Icon name="note-edit-outline" size={10} color="#FFFFFF" />
+              </View>
+            ) : (
+              <View style={[styles.dot, { backgroundColor: dotColor }]} />
+            )}
+            {!isLastInList && (
               <View
                 style={[
                   styles.line,
@@ -305,49 +370,82 @@ export default function TrackingSessionDetailScreen() {
             )}
           </View>
 
-          {/* Address column */}
+          {/* Content column */}
           <View style={styles.timelineRight}>
-            {item.isLoading ? (
-              <ActivityIndicator size={14} style={{ alignSelf: 'flex-start' }} />
+            {isAnnotation ? (
+              <Surface
+                style={[
+                  styles.annotationBubble,
+                  { backgroundColor: '#FEF3C7' },
+                ]}
+                elevation={0}
+              >
+                <View style={styles.annotationHeader}>
+                  <Icon name="note-edit-outline" size={14} color="#D97706" />
+                  <Text
+                    variant="labelSmall"
+                    style={{
+                      color: '#D97706',
+                      fontWeight: '600',
+                      marginLeft: 4,
+                    }}
+                  >
+                    Note
+                  </Text>
+                </View>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: '#92400E', marginTop: 2 }}
+                  numberOfLines={3}
+                >
+                  {item.note}
+                </Text>
+              </Surface>
             ) : (
-              <Text
-                variant="bodySmall"
-                style={{ color: theme.colors.onSurface }}
-                numberOfLines={2}
-              >
-                {item.address}
-              </Text>
-            )}
+              <>
+                {item.isLoading ? (
+                  <ActivityIndicator size={14} style={{ alignSelf: 'flex-start' }} />
+                ) : (
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: theme.colors.onSurface }}
+                    numberOfLines={2}
+                  >
+                    {item.address}
+                  </Text>
+                )}
 
-            {item.isFirst && (
-              <Text
-                variant="labelSmall"
-                style={{
-                  color: theme.colors.primary,
-                  marginTop: 2,
-                  fontWeight: '600',
-                }}
-              >
-                Start
-              </Text>
-            )}
-            {item.isLast && (
-              <Text
-                variant="labelSmall"
-                style={{
-                  color: theme.colors.error,
-                  marginTop: 2,
-                  fontWeight: '600',
-                }}
-              >
-                End
-              </Text>
+                {item.isFirst && (
+                  <Text
+                    variant="labelSmall"
+                    style={{
+                      color: theme.colors.primary,
+                      marginTop: 2,
+                      fontWeight: '600',
+                    }}
+                  >
+                    Start
+                  </Text>
+                )}
+                {item.isLast && (
+                  <Text
+                    variant="labelSmall"
+                    style={{
+                      color: theme.colors.error,
+                      marginTop: 2,
+                      fontWeight: '600',
+                    }}
+                  >
+                    End
+                  </Text>
+                )}
+              </>
             )}
           </View>
         </View>
       );
     },
-    [theme],
+    [theme, timelineEntries.length],
   );
 
   // ---- Loading state ----
@@ -408,6 +506,18 @@ export default function TrackingSessionDetailScreen() {
                 strokeWidth={4}
               />
             )}
+            {annotations.map((annotation) => (
+              <Marker
+                key={`annotation-marker-${annotation.id}`}
+                coordinate={{
+                  latitude: annotation.latitude,
+                  longitude: annotation.longitude,
+                }}
+                pinColor="#F59E0B"
+                title="Note"
+                description={annotation.note}
+              />
+            ))}
           </MapView>
 
           {/* Map overlay gradient (subtle bottom fade) */}
@@ -633,5 +743,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 48,
     paddingHorizontal: 32,
+  },
+  annotationDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  annotationBubble: {
+    borderRadius: 8,
+    padding: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#F59E0B',
+  },
+  annotationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });

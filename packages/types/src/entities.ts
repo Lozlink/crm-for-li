@@ -126,3 +126,17 @@ export interface TrackingBreadcrumb {
   accuracy?: number;
   recorded_at: string;
 }
+
+export interface TrackingAnnotation {
+  id: string;
+  session_id: string;
+  latitude: number;
+  longitude: number;
+  note: string;
+  contact_id?: string;
+  contact?: Contact;
+  user_id?: string;
+  team_id?: string;
+  created_at?: string;
+  updated_at?: string;
+}

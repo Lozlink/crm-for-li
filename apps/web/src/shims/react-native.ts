@@ -1,5 +1,5 @@
 /**
- * Lightweight shim for react-native Platform module.
+ * Lightweight shim for react-native modules.
  * Only the subset used by shared packages.
  */
 export const Platform = {
@@ -8,4 +8,13 @@ export const Platform = {
     options.web ?? options.default,
 };
 
-export default { Platform };
+export type AppStateStatus = 'active' | 'background' | 'inactive';
+
+export const AppState = {
+  currentState: 'active' as AppStateStatus,
+  addEventListener: (_type: string, _handler: (state: AppStateStatus) => void) => ({
+    remove: () => {},
+  }),
+};
+
+export default { Platform, AppState };

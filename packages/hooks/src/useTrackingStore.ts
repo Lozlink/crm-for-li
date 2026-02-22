@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { TrackingSession, TrackingBreadcrumb } from '@realestate-crm/types';
+import type { TrackingSession, TrackingBreadcrumb, TrackingAnnotation } from '@realestate-crm/types';
 import { supabase, isDemoMode, generateUUID, encodePolyline } from '@realestate-crm/api';
 import { useAuthStore } from './useAuthStore';
 
@@ -13,6 +13,7 @@ const ACTIVE_SESSION_KEY = 'tracking_active_session_id';
 interface TrackingState {
   activeSession: TrackingSession | null;
   sessions: TrackingSession[];
+  annotations: TrackingAnnotation[];
   isLoading: boolean;
   error: string | null;
 
@@ -21,6 +22,12 @@ interface TrackingState {
   fetchSessions: () => Promise<void>;
   fetchSessionBreadcrumbs: (sessionId: string) => Promise<TrackingBreadcrumb[]>;
   recoverOrphanedSession: () => Promise<void>;
+
+  fetchAnnotations: (sessionId: string) => Promise<void>;
+  createAnnotation: (annotation: { session_id: string; latitude: number; longitude: number; note: string }) => Promise<TrackingAnnotation | null>;
+  updateAnnotation: (id: string, note: string) => Promise<void>;
+  deleteAnnotation: (id: string) => Promise<void>;
+  linkAnnotationContact: (id: string, contactId: string) => Promise<void>;
 }
 
 function getTeamContext() {
@@ -84,6 +91,7 @@ TaskManager.defineTask(TRACKING_TASK_NAME, async ({ data, error }) => {
 export const useTrackingStore = create<TrackingState>()((set, get) => ({
   activeSession: null,
   sessions: [],
+  annotations: [],
   isLoading: false,
   error: null,
 
@@ -324,6 +332,133 @@ export const useTrackingStore = create<TrackingState>()((set, get) => ({
       await AsyncStorage.removeItem(ACTIVE_SESSION_KEY);
     } catch (e) {
       console.error('Error recovering tracking session:', e);
+    }
+  },
+
+  fetchAnnotations: async (sessionId: string) => {
+    try {
+      const { isDemo } = getTeamContext();
+      if (isDemo) {
+        set({ annotations: [] });
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('tracking_annotations')
+        .select('*, contact:contacts(id, first_name, last_name, address)')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      set({ annotations: data || [] });
+    } catch (error: any) {
+      console.error('Error fetching annotations:', error);
+      set({ annotations: [] });
+    }
+  },
+
+  createAnnotation: async (annotation) => {
+    try {
+      const { isDemo, teamId, userId } = getTeamContext();
+
+      if (isDemo) {
+        const newAnnotation: TrackingAnnotation = {
+          id: generateUUID(),
+          ...annotation,
+          user_id: userId || undefined,
+          team_id: teamId || undefined,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        set({ annotations: [...get().annotations, newAnnotation] });
+        return newAnnotation;
+      }
+
+      const insertData: any = { ...annotation };
+      if (teamId) insertData.team_id = teamId;
+      if (userId) insertData.user_id = userId;
+
+      const { data, error } = await supabase
+        .from('tracking_annotations')
+        .insert(insertData)
+        .select('*, contact:contacts(id, first_name, last_name, address)')
+        .single();
+
+      if (error) throw error;
+      set({ annotations: [...get().annotations, data] });
+      return data;
+    } catch (error: any) {
+      console.error('Error creating annotation:', error);
+      return null;
+    }
+  },
+
+  updateAnnotation: async (id: string, note: string) => {
+    try {
+      const { isDemo } = getTeamContext();
+
+      if (isDemo) {
+        set({
+          annotations: get().annotations.map((a) =>
+            a.id === id ? { ...a, note, updated_at: new Date().toISOString() } : a
+          ),
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('tracking_annotations')
+        .update({ note, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) throw error;
+      set({
+        annotations: get().annotations.map((a) =>
+          a.id === id ? { ...a, note, updated_at: new Date().toISOString() } : a
+        ),
+      });
+    } catch (error: any) {
+      console.error('Error updating annotation:', error);
+    }
+  },
+
+  deleteAnnotation: async (id: string) => {
+    try {
+      const { isDemo } = getTeamContext();
+
+      if (!isDemo) {
+        const { error } = await supabase
+          .from('tracking_annotations')
+          .delete()
+          .eq('id', id);
+        if (error) throw error;
+      }
+
+      set({ annotations: get().annotations.filter((a) => a.id !== id) });
+    } catch (error: any) {
+      console.error('Error deleting annotation:', error);
+    }
+  },
+
+  linkAnnotationContact: async (id: string, contactId: string) => {
+    try {
+      const { isDemo } = getTeamContext();
+
+      if (!isDemo) {
+        const { error } = await supabase
+          .from('tracking_annotations')
+          .update({ contact_id: contactId, updated_at: new Date().toISOString() })
+          .eq('id', id);
+        if (error) throw error;
+      }
+
+      set({
+        annotations: get().annotations.map((a) =>
+          a.id === id ? { ...a, contact_id: contactId, updated_at: new Date().toISOString() } : a
+        ),
+      });
+    } catch (error: any) {
+      console.error('Error linking annotation contact:', error);
     }
   },
 }));

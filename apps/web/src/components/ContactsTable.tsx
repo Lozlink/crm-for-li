@@ -63,9 +63,10 @@ export default function ContactsTable() {
 
     // Tag filter
     if (selectedTagIds.length > 0) {
-      result = result.filter(
-        (c) => c.tag_id && selectedTagIds.includes(c.tag_id)
-      );
+      result = result.filter((c) => {
+        const contactTagIds = c.tags?.map((t) => t.id) || (c.tag_id ? [c.tag_id] : []);
+        return contactTagIds.some((id) => selectedTagIds.includes(id));
+      });
     }
 
     // Sort
@@ -379,19 +380,22 @@ function ContactRow({
         </span>
       </td>
       <td className="px-4 py-3">
-        {contact.tag ? (
-          <span
-            className="inline-block rounded-full px-2 py-0.5 text-xs font-medium"
-            style={{
-              backgroundColor: contact.tag.color + '20',
-              color: contact.tag.color,
-            }}
-          >
-            {contact.tag.name}
-          </span>
-        ) : (
-          <span className="text-xs text-gray-400">-</span>
-        )}
+        <div className="flex flex-wrap gap-1">
+          {(contact.tags && contact.tags.length > 0
+            ? contact.tags
+            : contact.tag
+              ? [contact.tag]
+              : []
+          ).map((tag) => (
+            <span
+              key={tag.id}
+              className="inline-block rounded-full px-2 py-0.5 text-xs font-medium"
+              style={{ backgroundColor: tag.color + '20', color: tag.color }}
+            >
+              {tag.name}
+            </span>
+          ))}
+        </div>
       </td>
       <td className="px-4 py-3 text-xs text-gray-500">
         {new Date(contact.created_at || '').toLocaleDateString()}

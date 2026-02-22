@@ -15,6 +15,8 @@ interface RouteState {
   createRoute: (route: Omit<Route, 'id' | 'created_at' | 'updated_at'>, stops: Omit<RouteStop, 'id' | 'route_id'>[]) => Promise<Route | null>;
   updateRouteStatus: (routeId: string, status: Route['status']) => Promise<void>;
   updateStopStatus: (stopId: string, status: StopStatus, notes?: string) => Promise<void>;
+  updateStopNotes: (stopId: string, notes: string) => Promise<void>;
+  linkStopContact: (stopId: string, contactId: string) => Promise<void>;
   reorderStops: (routeId: string, stops: RouteStop[]) => Promise<void>;
   deleteRoute: (routeId: string) => Promise<void>;
   clearActiveRoute: () => void;
@@ -211,6 +213,50 @@ export const useRouteStore = create<RouteState>()((set, get) => ({
 
       set(state => ({
         activeStops: state.activeStops.map(s => s.id === stopId ? { ...s, ...updates } : s),
+      }));
+    } catch (error: any) {
+      set({ error: error.message });
+    }
+  },
+
+  updateStopNotes: async (stopId, notes) => {
+    try {
+      const { isDemo } = getTeamContext();
+
+      if (isDemo) {
+        set(state => ({
+          activeStops: state.activeStops.map(s => s.id === stopId ? { ...s, notes } : s),
+        }));
+        return;
+      }
+
+      const { error } = await supabase.from('route_stops').update({ notes }).eq('id', stopId);
+      if (error) throw error;
+
+      set(state => ({
+        activeStops: state.activeStops.map(s => s.id === stopId ? { ...s, notes } : s),
+      }));
+    } catch (error: any) {
+      set({ error: error.message });
+    }
+  },
+
+  linkStopContact: async (stopId, contactId) => {
+    try {
+      const { isDemo } = getTeamContext();
+
+      if (isDemo) {
+        set(state => ({
+          activeStops: state.activeStops.map(s => s.id === stopId ? { ...s, contact_id: contactId } : s),
+        }));
+        return;
+      }
+
+      const { error } = await supabase.from('route_stops').update({ contact_id: contactId }).eq('id', stopId);
+      if (error) throw error;
+
+      set(state => ({
+        activeStops: state.activeStops.map(s => s.id === stopId ? { ...s, contact_id: contactId } : s),
       }));
     } catch (error: any) {
       set({ error: error.message });

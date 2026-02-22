@@ -29,7 +29,10 @@ export default function ContactFormDialog({
   const [phone, setPhone] = useState(contact?.phone || '');
   const [address, setAddress] = useState(contact?.address || prefillAddress || '');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | undefined>(prefillCoords);
-  const [tagId, setTagId] = useState(contact?.tag_id || '');
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    contact?.tags?.map((t) => t.id) || (contact?.tag_id ? [contact.tag_id] : [])
+  );
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -55,7 +58,8 @@ export default function ContactFormDialog({
             email: email.trim() || undefined,
             phone: phone.trim() || undefined,
             address: address.trim() || undefined,
-            tag_id: tagId || undefined,
+            tag_id: selectedTags[0] || undefined,
+            tags: tags.filter((t) => selectedTags.includes(t.id)),
           });
         } else {
           const newContact = await addContact({
@@ -64,7 +68,8 @@ export default function ContactFormDialog({
             email: email.trim() || undefined,
             phone: phone.trim() || undefined,
             address: address.trim() || undefined,
-            tag_id: tagId || undefined,
+            tag_id: selectedTags[0] || undefined,
+            tags: tags.filter((t) => selectedTags.includes(t.id)),
             latitude: coords?.lat,
             longitude: coords?.lng,
           });
@@ -89,7 +94,8 @@ export default function ContactFormDialog({
       email,
       phone,
       address,
-      tagId,
+      selectedTags,
+      tags,
       isEditing,
       contact,
       note,
@@ -192,23 +198,71 @@ export default function ContactFormDialog({
               />
             </div>
 
-            {/* Tag */}
+            {/* Tags (multi-select) */}
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                Tag
+                Tags
               </label>
-              <select
-                value={tagId}
-                onChange={(e) => setTagId(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              >
-                <option value="">No tag</option>
-                {tags.map((tag) => (
-                  <option key={tag.id} value={tag.id}>
-                    {tag.name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setTagDropdownOpen(!tagDropdownOpen)}
+                  className="flex w-full items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                >
+                  <span className="flex flex-wrap gap-1">
+                    {selectedTags.length === 0 ? (
+                      <span className="text-gray-400">No tags</span>
+                    ) : (
+                      selectedTags.map((id) => {
+                        const tag = tags.find((t) => t.id === id);
+                        return tag ? (
+                          <span
+                            key={id}
+                            className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                            style={{ backgroundColor: tag.color + '20', color: tag.color }}
+                          >
+                            {tag.name}
+                          </span>
+                        ) : null;
+                      })
+                    )}
+                  </span>
+                  <svg className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${tagDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </button>
+                {tagDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setTagDropdownOpen(false)} />
+                    <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                      {tags.map((tag) => (
+                        <label
+                          key={tag.id}
+                          className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-gray-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedTags.includes(tag.id)}
+                            onChange={() =>
+                              setSelectedTags((prev) =>
+                                prev.includes(tag.id)
+                                  ? prev.filter((id) => id !== tag.id)
+                                  : [...prev, tag.id]
+                              )
+                            }
+                            className="rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+                          />
+                          <span
+                            className="h-3 w-3 rounded-full"
+                            style={{ backgroundColor: tag.color }}
+                          />
+                          <span className="text-sm text-gray-700">{tag.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Note */}

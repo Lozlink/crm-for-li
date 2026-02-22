@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View, FlatList } from 'react-native';
-import { FAB, useTheme, Text, Chip, ActivityIndicator, Surface, Button } from 'react-native-paper';
+import { FAB, useTheme, Text, Chip, ActivityIndicator, Surface, Button, Portal, Dialog, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
+import * as Location from 'expo-location';
 import { useRouteStore, useTrackingStore } from '@realestate-crm/hooks';
 import type { Route } from '@realestate-crm/types';
 import type { TrackingSession } from '@realestate-crm/types';
@@ -29,10 +30,16 @@ export default function RoutesScreen() {
   const startSession = useTrackingStore(state => state.startSession);
   const stopSession = useTrackingStore(state => state.stopSession);
   const fetchSessions = useTrackingStore(state => state.fetchSessions);
+  const createAnnotation = useTrackingStore(state => state.createAnnotation);
 
   const [refreshing, setRefreshing] = useState(false);
   const [elapsed, setElapsed] = useState('00:00');
   const [stoppingSession, setStoppingSession] = useState(false);
+
+  // Drop Note dialog state
+  const [noteDialogVisible, setNoteDialogVisible] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -83,6 +90,41 @@ export default function RoutesScreen() {
     setStoppingSession(false);
     if (session) {
       router.push(`/tracking/${session.id}`);
+    }
+  };
+
+  const handleDropNote = () => {
+    setNoteText('');
+    setNoteDialogVisible(true);
+  };
+
+  const handleNoteCancel = () => {
+    setNoteText('');
+    setNoteDialogVisible(false);
+  };
+
+  const handleNoteSave = async () => {
+    if (!noteText.trim() || !activeSession) return;
+
+    setNoteSaving(true);
+    try {
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      await createAnnotation({
+        session_id: activeSession.id,
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        note: noteText.trim(),
+      });
+
+      setNoteText('');
+      setNoteDialogVisible(false);
+    } catch (error) {
+      console.error('Error dropping note:', error);
+    } finally {
+      setNoteSaving(false);
     }
   };
 
@@ -237,17 +279,29 @@ export default function RoutesScreen() {
               </Text>
             </View>
           </View>
-          <Button
-            mode="contained"
-            buttonColor={theme.colors.error}
-            textColor={theme.colors.onError}
-            onPress={handleStopTracking}
-            loading={stoppingSession}
-            disabled={stoppingSession}
-            compact
-          >
-            Stop
-          </Button>
+          <View style={styles.trackingActions}>
+            <Button
+              mode="contained"
+              buttonColor="#F59E0B"
+              textColor="#FFFFFF"
+              onPress={handleDropNote}
+              compact
+              icon="note-edit-outline"
+            >
+              Note
+            </Button>
+            <Button
+              mode="contained"
+              buttonColor={theme.colors.error}
+              textColor={theme.colors.onError}
+              onPress={handleStopTracking}
+              loading={stoppingSession}
+              disabled={stoppingSession}
+              compact
+            >
+              Stop
+            </Button>
+          </View>
         </View>
       ) : (
         <Button
@@ -354,12 +408,57 @@ export default function RoutesScreen() {
         />
       )}
 
+      {activeSession && (
+        <FAB
+          icon="note-edit-outline"
+          label="Drop Note"
+          style={[styles.dropNoteFab, { bottom: insets.bottom + 88 }]}
+          color="#FFFFFF"
+          onPress={handleDropNote}
+        />
+      )}
+
       <FAB
         icon="plus"
         style={[styles.fab, { backgroundColor: theme.colors.primary, bottom: insets.bottom + 24 }]}
         color={theme.colors.onPrimary}
         onPress={handleAddRoute}
       />
+
+      <Portal>
+        <Dialog visible={noteDialogVisible} onDismiss={handleNoteCancel}>
+          <Dialog.Title>Drop Note</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
+              Pin a note at your current location.
+            </Text>
+            <TextInput
+              mode="outlined"
+              label="Note"
+              placeholder="What did you observe here?"
+              value={noteText}
+              onChangeText={setNoteText}
+              multiline
+              numberOfLines={3}
+              autoFocus
+              style={{ maxHeight: 120 }}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={handleNoteCancel} disabled={noteSaving}>Cancel</Button>
+            <Button
+              mode="contained"
+              buttonColor="#F59E0B"
+              textColor="#FFFFFF"
+              onPress={handleNoteSave}
+              loading={noteSaving}
+              disabled={!noteText.trim() || noteSaving}
+            >
+              Save
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 }
@@ -437,8 +536,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  trackingActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   trackingInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  dropNoteFab: {
+    position: 'absolute',
+    right: 16,
+    backgroundColor: '#F59E0B',
   },
 });

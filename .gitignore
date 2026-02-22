@@ -56,3 +56,5 @@ yarn-error.*
 /.turbo/**
 **/.turbo/**
 /.claude/
+/supabase/.temp/
+/.aiassistant/
