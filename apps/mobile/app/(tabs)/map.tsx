@@ -287,17 +287,7 @@ export default function MapScreen() {
             opacity={0.7}
           />
         )}
-        {/* User location marker */}
-        {userLocation && (
-          <Marker
-            coordinate={userLocation}
-            anchor={{ x: 0.5, y: 0.5 }}
-          >
-            <View style={styles.userMarker}>
-              <View style={styles.userMarkerDot} />
-            </View>
-          </Marker>
-        )}
+        {/* User location shown via showsUserLocation prop on MapView */}
         {/* Current suburb boundary polygon */}
         {currentSuburbBoundary && (
           <Polygon
@@ -475,21 +465,5 @@ const styles = StyleSheet.create({
   },
   chip: {
     marginRight: 4,
-  },
-  userMarker: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(66, 133, 244, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#4285F4',
-  },
-  userMarkerDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#4285F4',
   },
 });

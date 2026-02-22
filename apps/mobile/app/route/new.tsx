@@ -435,6 +435,7 @@ export default function NewRouteScreen() {
                 description={contact.address}
                 pinColor={isSelected ? '#4CAF50' : '#F44336'}
                 onPress={() => handleMarkerPress(contact)}
+                tracksViewChanges={false}
               >
                 {isSelected && stopNum != null && (
                   <View style={styles.numberedMarker}>
@@ -457,6 +458,7 @@ export default function NewRouteScreen() {
                 coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
                 title={stop.label}
                 description={stop.address}
+                tracksViewChanges={false}
               >
                 <View style={styles.numberedMarker}>
                   <View style={[styles.markerCircle, { backgroundColor: '#2196F3' }]}>
@@ -468,18 +470,7 @@ export default function NewRouteScreen() {
             );
           })}
 
-          {/* User location marker */}
-          {userLocation && (
-            <Marker
-              coordinate={userLocation}
-              anchor={{ x: 0.5, y: 0.5 }}
-              title="Your Location (Start/End)"
-            >
-              <View style={styles.userMarker}>
-                <View style={styles.userMarkerDot} />
-              </View>
-            </Marker>
-          )}
+          {/* User location shown via showsUserLocation prop on MapView */}
 
           {/* Optimized route polyline */}
           {isOptimized && polylineCoords.length > 0 && (
@@ -878,22 +869,5 @@ const styles = StyleSheet.create({
     padding: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(0,0,0,0.1)',
-  },
-  // User location marker (same pattern as map.tsx)
-  userMarker: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(66, 133, 244, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#4285F4',
-  },
-  userMarkerDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#4285F4',
   },
 });

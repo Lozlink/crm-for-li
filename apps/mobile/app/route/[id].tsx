@@ -298,6 +298,7 @@ export default function RouteDetailScreen() {
                   title={getStopDisplayName(stop)}
                   description={stop.address}
                   anchor={{ x: 0.5, y: 0.5 }}
+                  tracksViewChanges={false}
                 >
                   <View
                     style={[
