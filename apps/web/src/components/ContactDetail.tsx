@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCRMStore } from '@realestate-crm/hooks';
+import { useCRMStore, useEmailCampaignStore } from '@realestate-crm/hooks';
 import { ACTIVITY_TYPES } from '@realestate-crm/config';
 import type { Activity } from '@realestate-crm/types';
 import ContactFormDialog from './ContactFormDialog';
@@ -20,6 +20,10 @@ export default function ContactDetail({ contactId }: ContactDetailProps) {
   const deleteContact = useCRMStore((s) => s.deleteContact);
   const router = useRouter();
 
+  const fetchSubscription = useEmailCampaignStore((s) => s.fetchSubscription);
+  const updateSubscription = useEmailCampaignStore((s) => s.updateSubscription);
+  const [emailSubscribed, setEmailSubscribed] = useState(true);
+
   const [showEditForm, setShowEditForm] = useState(false);
   const [newActivityType, setNewActivityType] = useState<string>('note');
   const [newActivityContent, setNewActivityContent] = useState('');
@@ -33,8 +37,11 @@ export default function ContactDetail({ contactId }: ContactDetailProps) {
   useEffect(() => {
     if (contactId) {
       fetchActivities(contactId);
+      fetchSubscription(contactId).then((sub) => {
+        if (sub) setEmailSubscribed(sub.subscribed);
+      });
     }
-  }, [contactId, fetchActivities]);
+  }, [contactId, fetchActivities, fetchSubscription]);
 
   const contactActivities = useMemo(
     () => activities.filter((a) => a.contact_id === contactId),
@@ -172,6 +179,34 @@ export default function ContactDetail({ contactId }: ContactDetailProps) {
                 )}
               />
             </div>
+
+            {/* Email subscription */}
+            {contact.email && (
+              <div className="mt-4 flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Email Campaigns</p>
+                  <p className="text-xs text-gray-500">
+                    {emailSubscribed ? 'Subscribed' : 'Unsubscribed'}
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    const next = !emailSubscribed;
+                    setEmailSubscribed(next);
+                    await updateSubscription(contactId, next);
+                  }}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    emailSubscribed ? 'bg-green-500' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      emailSubscribed ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="mt-6 flex gap-2">

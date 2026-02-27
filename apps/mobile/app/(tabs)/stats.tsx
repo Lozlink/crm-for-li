@@ -1,197 +1,399 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { StyleSheet, View, FlatList } from 'react-native';
-import { Searchbar, useTheme, Text, Surface, SegmentedButtons } from 'react-native-paper';
-import { useRouter } from 'expo-router';
-import { useStreetStats, useCRMStore } from '@realestate-crm/hooks';
-import type { StreetStats } from '@realestate-crm/types';
+import { useCallback, useMemo, useState } from 'react';
+import { StyleSheet, View, ScrollView } from 'react-native';
+import { useTheme, Text, Chip, ActivityIndicator, Surface } from 'react-native-paper';
+import { useFocusEffect } from 'expo-router';
+import {
+  usePropertyStore,
+  useInspectionStore,
+  useTaskStore,
+  useCRMStore,
+} from '@realestate-crm/hooks';
+import type { PropertyStatus } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-type SortKey = 'score' | 'contactCount' | 'daysSinceLastContact';
+type DateRange = 'week' | 'month' | 'quarter' | 'fy';
 
-const SORT_BUTTONS = [
-  { value: 'score', label: 'Score' },
-  { value: 'contactCount', label: 'Contacts' },
-  { value: 'daysSinceLastContact', label: 'Staleness' },
+const DATE_RANGE_FILTERS: { label: string; value: DateRange }[] = [
+  { label: 'This Week', value: 'week' },
+  { label: 'This Month', value: 'month' },
+  { label: 'This Quarter', value: 'quarter' },
+  { label: 'This FY', value: 'fy' },
 ];
 
-function getFreshnessDotColor(daysSinceLastContact: number | null): string {
-  if (daysSinceLastContact === null || daysSinceLastContact > 30) return '#EF4444';
-  if (daysSinceLastContact <= 7) return '#22C55E';
-  return '#EAB308';
+const STATUS_COLORS: Record<PropertyStatus, string> = {
+  appraisal: '#6366f1',
+  available: '#16a34a',
+  under_offer: '#f59e0b',
+  exchanged: '#2563eb',
+  settled: '#059669',
+  leased: '#0d9488',
+  withdrawn: '#9ca3af',
+};
+
+const STATUS_LABELS: Record<PropertyStatus, string> = {
+  appraisal: 'Appraisal',
+  available: 'Listed',
+  under_offer: 'Under Offer',
+  exchanged: 'Exchanged',
+  settled: 'Settled',
+  leased: 'Leased',
+  withdrawn: 'Withdrawn',
+};
+
+function getDateRangeBounds(range: DateRange): { start: Date; end: Date } {
+  const now = new Date();
+  const end = now;
+  let start: Date;
+
+  switch (range) {
+    case 'week': {
+      start = new Date(now);
+      const day = start.getDay();
+      const diff = day === 0 ? 6 : day - 1;
+      start.setDate(start.getDate() - diff);
+      start.setHours(0, 0, 0, 0);
+      break;
+    }
+    case 'month': {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      break;
+    }
+    case 'quarter': {
+      const qMonth = Math.floor(now.getMonth() / 3) * 3;
+      start = new Date(now.getFullYear(), qMonth, 1);
+      break;
+    }
+    case 'fy': {
+      const fyYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+      start = new Date(fyYear, 6, 1);
+      break;
+    }
+  }
+
+  return { start, end };
+}
+
+function formatCurrency(value: number): string {
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (value >= 1_000) {
+    return `$${(value / 1_000).toFixed(0)}K`;
+  }
+  return `$${Math.round(value)}`;
 }
 
 export default function StatsScreen() {
   const theme = useTheme();
-  const router = useRouter();
+  const [dateRange, setDateRange] = useState<DateRange>('month');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const streetStats = useStreetStats();
-  const setMapRegion = useCRMStore(state => state.setMapRegion);
+  const properties = usePropertyStore(state => state.properties);
+  const fetchProperties = usePropertyStore(state => state.fetchProperties);
+  const inspections = useInspectionStore(state => state.inspections);
+  const fetchInspections = useInspectionStore(state => state.fetchInspections);
+  const tasks = useTaskStore(state => state.tasks);
+  const fetchTasks = useTaskStore(state => state.fetchTasks);
+  const contacts = useCRMStore(state => state.contacts);
+  const fetchContacts = useCRMStore(state => state.fetchContacts);
+  const fetchRecentActivities = useCRMStore(state => state.fetchRecentActivities);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('score');
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const refresh = async () => {
+        setIsRefreshing(true);
+        await Promise.all([
+          fetchProperties(),
+          fetchInspections(),
+          fetchTasks(),
+          fetchContacts(),
+          fetchRecentActivities(500),
+        ]);
+        if (!cancelled) setIsRefreshing(false);
+      };
+      refresh();
+      return () => { cancelled = true; };
+    }, [fetchProperties, fetchInspections, fetchTasks, fetchContacts, fetchRecentActivities])
+  );
 
-  // Load activity data when screen mounts
-  useEffect(() => {
-    useCRMStore.getState().fetchRecentActivities();
-  }, []);
+  // 1. Active Listings
+  const activeListings = useMemo(() => {
+    return properties.filter(p =>
+      ['available', 'under_offer'].includes(p.status)
+    );
+  }, [properties]);
 
-  // Filter by suburb search and sort by selected key
-  const filteredStats = useMemo(() => {
-    let results = streetStats;
+  const activeListingsCount = activeListings.length;
+  const activeListingsValue = useMemo(() => {
+    return activeListings.reduce((sum, p) => sum + (p.advertised_price || 0), 0);
+  }, [activeListings]);
 
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      results = results.filter(
-        (stat) =>
-          stat.suburb.toLowerCase().includes(query) ||
-          stat.streetName.toLowerCase().includes(query)
-      );
+  // 2. Conversion Rate
+  const conversionRate = useMemo(() => {
+    if (properties.length === 0) return 0;
+    const converted = properties.filter(p =>
+      ['exchanged', 'settled', 'leased'].includes(p.status)
+    ).length;
+    return (converted / properties.length) * 100;
+  }, [properties]);
+
+  // 3. Avg Days on Market
+  const avgDaysOnMarket = useMemo(() => {
+    const relevant = properties.filter(
+      p => ['settled', 'leased'].includes(p.status) && p.listed_at && p.settled_at
+    );
+    if (relevant.length === 0) return null;
+    const totalDays = relevant.reduce((sum, p) => {
+      const listed = new Date(p.listed_at!).getTime();
+      const settled = new Date(p.settled_at!).getTime();
+      return sum + (settled - listed) / (1000 * 60 * 60 * 24);
+    }, 0);
+    return Math.round(totalDays / relevant.length);
+  }, [properties]);
+
+  // 4. Commission Forecast
+  const commissionForecast = useMemo(() => {
+    return activeListings.reduce((sum, p) => {
+      const price = p.advertised_price || 0;
+      const rate = p.commission_percent || 2;
+      return sum + (price * rate) / 100;
+    }, 0);
+  }, [activeListings]);
+
+  // 5. Inspections Held
+  const completedInspections = useMemo(() => {
+    return inspections.filter(i => i.status === 'completed');
+  }, [inspections]);
+
+  const avgAttendees = useMemo(() => {
+    if (completedInspections.length === 0) return 0;
+    const total = completedInspections.reduce((sum, i) => {
+      const count = Array.isArray(i.attendees)
+        ? i.attendees.length
+        : (typeof i.attendees === 'object' && i.attendees !== null && 'count' in (i.attendees as Record<string, unknown>))
+          ? ((i.attendees as unknown as { count: number }).count || 0)
+          : 0;
+      return sum + count;
+    }, 0);
+    return Math.round(total / completedInspections.length * 10) / 10;
+  }, [completedInspections]);
+
+  // 6. Tasks Overdue
+  const overdueTasks = useMemo(() => {
+    const now = new Date();
+    return tasks.filter(
+      t => t.status === 'pending' && t.due_at && new Date(t.due_at) < now
+    );
+  }, [tasks]);
+
+  // 7. Pipeline by Stage
+  const pipelineByStage = useMemo(() => {
+    const counts: Record<PropertyStatus, number> = {
+      appraisal: 0,
+      available: 0,
+      under_offer: 0,
+      exchanged: 0,
+      settled: 0,
+      leased: 0,
+      withdrawn: 0,
+    };
+    for (const p of properties) {
+      counts[p.status] = (counts[p.status] || 0) + 1;
     }
+    return counts;
+  }, [properties]);
 
-    const sorted = [...results].sort((a, b) => {
-      switch (sortKey) {
-        case 'score':
-          return b.score - a.score;
-        case 'contactCount':
-          return b.contactCount - a.contactCount;
-        case 'daysSinceLastContact': {
-          // Null means never contacted -- treat as most stale (highest value)
-          const aDays = a.daysSinceLastContact ?? 9999;
-          const bDays = b.daysSinceLastContact ?? 9999;
-          return bDays - aDays;
-        }
-        default:
-          return 0;
-      }
-    });
+  // 8. Contact Activity
+  const contactActivity = useMemo(() => {
+    const now = new Date();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-    return sorted;
-  }, [streetStats, searchQuery, sortKey]);
+    const thisMonth = contacts.filter(
+      c => c.created_at && new Date(c.created_at) >= thisMonthStart
+    ).length;
+    const lastMonth = contacts.filter(
+      c =>
+        c.created_at &&
+        new Date(c.created_at) >= lastMonthStart &&
+        new Date(c.created_at) < thisMonthStart
+    ).length;
 
-  const handleStreetPress = useCallback(
-    (stat: StreetStats) => {
-      // Set the map region to center on this street's average coordinates
-      setMapRegion({
-        latitude: stat.averageLatitude,
-        longitude: stat.averageLongitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      });
-      // Navigate to the map tab
-      router.push({
-        pathname: '/(tabs)/map',
-        params: {
-          lat: stat.averageLatitude.toString(),
-          lng: stat.averageLongitude.toString(),
-          street: stat.streetName,
-        },
-      });
-    },
-    [router, setMapRegion]
+    return { thisMonth, lastMonth };
+  }, [contacts]);
+
+  const renderMetricCard = (
+    iconName: string,
+    iconColor: string,
+    title: string,
+    value: string,
+    subtitle: string,
+    highlight?: boolean,
+  ) => (
+    <Surface style={styles.metricCard} elevation={1}>
+      <View style={styles.metricCardContent}>
+        <View style={[styles.iconCircle, { backgroundColor: iconColor + '18' }]}>
+          <Icon name={iconName} size={24} color={iconColor} />
+        </View>
+        <View style={styles.metricText}>
+          <Text
+            variant="bodySmall"
+            style={{ color: theme.colors.onSurfaceVariant }}
+          >
+            {title}
+          </Text>
+          <Text
+            variant="headlineSmall"
+            style={{
+              fontWeight: 'bold',
+              color: highlight ? '#EF4444' : theme.colors.onSurface,
+            }}
+          >
+            {value}
+          </Text>
+          <Text
+            variant="bodySmall"
+            style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}
+          >
+            {subtitle}
+          </Text>
+        </View>
+      </View>
+    </Surface>
   );
 
-  const renderItem = useCallback(
-    ({ item }: { item: StreetStats }) => {
-      const dotColor = getFreshnessDotColor(item.daysSinceLastContact);
-
-      return (
-        <Surface
-          style={[styles.card, { backgroundColor: theme.colors.surface }]}
-          elevation={1}
-        >
-          <View style={styles.cardContent} onTouchEnd={() => handleStreetPress(item)}>
-            <View style={styles.cardLeft}>
-              <View style={styles.streetRow}>
-                <View style={[styles.freshnessDot, { backgroundColor: dotColor }]} />
-                <Text variant="titleMedium" style={{ fontWeight: 'bold', flex: 1 }}>
-                  {item.streetName}
-                </Text>
-              </View>
-              <Text
-                variant="bodySmall"
-                style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}
-              >
-                {item.suburb}
-              </Text>
-            </View>
-
-            <View style={styles.cardRight}>
-              <View
-                style={[
-                  styles.contactBadge,
-                  { backgroundColor: theme.colors.primaryContainer },
-                ]}
-              >
-                <Text
-                  variant="labelMedium"
-                  style={{ color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }}
-                >
-                  {item.contactCount}
-                </Text>
-              </View>
-              <Text
-                variant="labelSmall"
-                style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}
-              >
-                Score: {item.score}
-              </Text>
-            </View>
-          </View>
-        </Surface>
-      );
-    },
-    [theme, handleStreetPress]
-  );
-
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Icon
-        name="chart-bar"
-        size={48}
-        color={theme.colors.onSurfaceVariant}
-        style={{ marginBottom: 16 }}
-      />
-      <Text variant="bodyLarge" style={{ color: theme.colors.onSurfaceVariant }}>
-        No street data
-      </Text>
-      <Text
-        variant="bodyMedium"
-        style={{ color: theme.colors.onSurfaceVariant, marginTop: 8, textAlign: 'center' }}
-      >
-        Add contacts with addresses to see street statistics
-      </Text>
-    </View>
-  );
+  if (isRefreshing && properties.length === 0) {
+    return (
+      <View style={[styles.container, styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <View style={styles.searchContainer}>
-        <Searchbar
-          placeholder="Filter by suburb or street..."
-          onChangeText={setSearchQuery}
-          value={searchQuery}
-          style={styles.searchbar}
-        />
-      </View>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Date Range Filter */}
+        <View style={styles.filterRow}>
+          {DATE_RANGE_FILTERS.map(filter => (
+            <Chip
+              key={filter.value}
+              selected={dateRange === filter.value}
+              onPress={() => setDateRange(filter.value)}
+              style={styles.filterChip}
+              compact
+            >
+              {filter.label}
+            </Chip>
+          ))}
+        </View>
 
-      <View style={styles.sortContainer}>
-        <SegmentedButtons
-          value={sortKey}
-          onValueChange={(value) => setSortKey(value as SortKey)}
-          buttons={SORT_BUTTONS}
-          style={styles.segmentedButtons}
-        />
-      </View>
+        {/* Metric Cards */}
+        {renderMetricCard(
+          'home-city',
+          '#16a34a',
+          'Active Listings',
+          String(activeListingsCount),
+          activeListingsValue > 0
+            ? `${formatCurrency(activeListingsValue)} total value`
+            : 'No listed value',
+        )}
 
-      <FlatList
-        data={filteredStats}
-        keyExtractor={(item) => `${item.streetName}|${item.suburb}`}
-        renderItem={renderItem}
-        ListEmptyComponent={renderEmpty}
-        contentContainerStyle={
-          filteredStats.length === 0 ? styles.emptyList : styles.list
-        }
-      />
+        {renderMetricCard(
+          'swap-horizontal-bold',
+          '#2563eb',
+          'Conversion Rate',
+          `${conversionRate.toFixed(1)}%`,
+          `${properties.filter(p => ['exchanged', 'settled', 'leased'].includes(p.status)).length} of ${properties.length} properties`,
+        )}
+
+        {renderMetricCard(
+          'clock-outline',
+          '#f59e0b',
+          'Avg Days on Market',
+          avgDaysOnMarket !== null ? `${avgDaysOnMarket} days` : '\u2014 days',
+          avgDaysOnMarket !== null
+            ? 'Settled/leased properties'
+            : 'No settled properties yet',
+        )}
+
+        {renderMetricCard(
+          'currency-usd',
+          '#059669',
+          'Commission Forecast',
+          formatCurrency(commissionForecast),
+          `From ${activeListingsCount} active listing${activeListingsCount !== 1 ? 's' : ''}`,
+        )}
+
+        {renderMetricCard(
+          'door-open',
+          '#6366f1',
+          'Inspections Held',
+          String(completedInspections.length),
+          completedInspections.length > 0
+            ? `Avg ${avgAttendees} attendees per inspection`
+            : 'No completed inspections',
+        )}
+
+        {renderMetricCard(
+          'alert-circle-outline',
+          overdueTasks.length > 0 ? '#EF4444' : '#9ca3af',
+          'Tasks Overdue',
+          String(overdueTasks.length),
+          overdueTasks.length > 0
+            ? 'Require attention'
+            : 'All tasks on track',
+          overdueTasks.length > 0,
+        )}
+
+        {/* Pipeline by Stage */}
+        <Surface style={styles.metricCard} elevation={1}>
+          <View style={styles.pipelineContent}>
+            <View style={styles.pipelineHeader}>
+              <Icon name="chart-bar" size={24} color={theme.colors.primary} />
+              <Text variant="titleMedium" style={{ fontWeight: 'bold', marginLeft: 8 }}>
+                Pipeline by Stage
+              </Text>
+            </View>
+            <View style={styles.pipelineChips}>
+              {(Object.keys(STATUS_COLORS) as PropertyStatus[]).map(status => {
+                const count = pipelineByStage[status];
+                if (count === 0) return null;
+                return (
+                  <Chip
+                    key={status}
+                    compact
+                    style={{ backgroundColor: STATUS_COLORS[status], marginRight: 6, marginBottom: 6 }}
+                    textStyle={{ color: '#fff', fontSize: 12 }}
+                  >
+                    {STATUS_LABELS[status]}: {count}
+                  </Chip>
+                );
+              })}
+              {properties.length === 0 && (
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  No properties in pipeline
+                </Text>
+              )}
+            </View>
+          </View>
+        </Surface>
+
+        {/* Contact Activity */}
+        {renderMetricCard(
+          'account-plus',
+          '#0d9488',
+          'Contact Activity',
+          String(contactActivity.thisMonth),
+          contactActivity.lastMonth > 0
+            ? `vs ${contactActivity.lastMonth} last month`
+            : 'Contacts added this month',
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -200,64 +402,53 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  searchContainer: {
-    padding: 16,
-    paddingBottom: 8,
-  },
-  searchbar: {
-    elevation: 0,
-  },
-  sortContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  segmentedButtons: {
-    // Default styling from Paper is sufficient
-  },
-  list: {
-    padding: 16,
-    paddingTop: 0,
-  },
-  emptyList: {
-    flex: 1,
+  loadingContainer: {
     justifyContent: 'center',
-  },
-  emptyContainer: {
     alignItems: 'center',
-    padding: 32,
   },
-  card: {
-    marginBottom: 8,
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  filterChip: {
+    marginBottom: 0,
+  },
+  metricCard: {
+    marginBottom: 12,
     borderRadius: 12,
-    overflow: 'hidden',
   },
-  cardContent: {
+  metricCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
   },
-  cardLeft: {
-    flex: 1,
-    marginRight: 12,
-  },
-  streetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  freshnessDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 8,
-  },
-  cardRight: {
-    alignItems: 'center',
-  },
-  contactBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 16,
+  },
+  metricText: {
+    flex: 1,
+  },
+  pipelineContent: {
+    padding: 16,
+  },
+  pipelineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  pipelineChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
 });

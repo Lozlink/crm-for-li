@@ -1,9 +1,11 @@
-import { StyleSheet, View, ScrollView } from 'react-native';
-import { List, Divider, useTheme, Text, Surface, Button, Avatar } from 'react-native-paper';
+import { StyleSheet, View, ScrollView, Alert, TextInput as RNTextInput } from 'react-native';
+import { List, Divider, useTheme, Text, Surface, Button, Avatar, TextInput, Dialog, Portal, RadioButton } from 'react-native-paper';
 import { useRouter } from 'expo-router';
-import { useCRMStore, useAuthStore, usePermissions } from '@realestate-crm/hooks';
+import { useState, useEffect, useCallback } from 'react';
+import { useCRMStore, useAuthStore, usePermissions, useOrganisationStore } from '@realestate-crm/hooks';
 import { isDemoMode } from '@realestate-crm/api';
 import { TagManager, RoleBadge } from '@realestate-crm/ui';
+import type { OrgRole } from '@realestate-crm/types';
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -20,12 +22,60 @@ export default function SettingsScreen() {
   const signOut = useAuthStore(s => s.signOut);
   const { canManageMembers } = usePermissions();
 
+  const organisations = useOrganisationStore(s => s.organisations);
+  const orgMemberships = useOrganisationStore(s => s.orgMemberships);
+  const orgTeams = useOrganisationStore(s => s.orgTeams);
+  const fetchUserOrgs = useOrganisationStore(s => s.fetchUserOrgs);
+  const createOrg = useOrganisationStore(s => s.createOrg);
+  const fetchOrgTeams = useOrganisationStore(s => s.fetchOrgTeams);
+
+  const [showCreateOrg, setShowCreateOrg] = useState(false);
+  const [newOrgName, setNewOrgName] = useState('');
+  const [creatingOrg, setCreatingOrg] = useState(false);
+  const [showOrgTeams, setShowOrgTeams] = useState(false);
+
+  useEffect(() => {
+    if (!isDemo) {
+      fetchUserOrgs();
+    }
+  }, [isDemo, fetchUserOrgs]);
+
   const displayName = profile?.display_name || user?.email || 'Demo User';
   const initials = displayName.slice(0, 2).toUpperCase();
 
   const handleSignOut = async () => {
     await signOut();
   };
+
+  const handleCreateOrg = useCallback(async () => {
+    if (!newOrgName.trim()) return;
+    setCreatingOrg(true);
+    try {
+      const org = await createOrg(newOrgName.trim());
+      if (org) {
+        setNewOrgName('');
+        setShowCreateOrg(false);
+        await fetchUserOrgs();
+      }
+    } catch (err) {
+      console.error('Create org error:', err);
+    } finally {
+      setCreatingOrg(false);
+    }
+  }, [newOrgName, createOrg, fetchUserOrgs]);
+
+  const handleViewOrgTeams = useCallback((orgId: string) => {
+    fetchOrgTeams(orgId);
+    setShowOrgTeams(true);
+  }, [fetchOrgTeams]);
+
+  const activeOrg = organisations.length > 0 ? organisations[0] : null;
+  const activeOrgMembership = activeOrg
+    ? orgMemberships.find(m => m.organisation_id === activeOrg.id && m.user_id === user?.id)
+    : null;
+  const orgMemberCount = activeOrg
+    ? orgMemberships.filter(m => m.organisation_id === activeOrg.id).length
+    : 0;
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCRMStore } from '@realestate-crm/hooks';
+import { useCRMStore, useSavedSearchStore } from '@realestate-crm/hooks';
 import type { Contact } from '@realestate-crm/types';
 import ContactFormDialog from './ContactFormDialog';
 import CSVImport from './CSVImport';
@@ -11,11 +11,30 @@ import CSVImport from './CSVImport';
 type SortField = 'name' | 'email' | 'address' | 'created_at';
 type SortDir = 'asc' | 'desc';
 
+interface ContactAdvancedFilters {
+  hasEmail: boolean;
+  hasPhone: boolean;
+  createdAfter: string;
+  createdBefore: string;
+}
+
+const DEFAULT_CONTACT_FILTERS: ContactAdvancedFilters = {
+  hasEmail: false,
+  hasPhone: false,
+  createdAfter: '',
+  createdBefore: '',
+};
+
 export default function ContactsTable() {
   const contacts = useCRMStore((s) => s.contacts);
   const tags = useCRMStore((s) => s.tags);
   const deleteContact = useCRMStore((s) => s.deleteContact);
   const router = useRouter();
+
+  const savedSearches = useSavedSearchStore((s) => s.savedSearches);
+  const fetchSavedSearches = useSavedSearchStore((s) => s.fetchSavedSearches);
+  const createSavedSearch = useSavedSearchStore((s) => s.createSavedSearch);
+  const deleteSavedSearch = useSavedSearchStore((s) => s.deleteSavedSearch);
 
   const [search, setSearch] = useState('');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
@@ -24,6 +43,75 @@ export default function ContactsTable() {
   const [showForm, setShowForm] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [advanced, setAdvanced] = useState<ContactAdvancedFilters>(DEFAULT_CONTACT_FILTERS);
+  const [showSaveInput, setShowSaveInput] = useState(false);
+  const [saveSearchName, setSaveSearchName] = useState('');
+
+  const contactSavedSearches = useMemo(
+    () => savedSearches.filter((s) => s.entity_type === 'contact'),
+    [savedSearches]
+  );
+
+  useEffect(() => {
+    fetchSavedSearches('contact');
+  }, [fetchSavedSearches]);
+
+  const hasActiveAdvanced = advanced.hasEmail || advanced.hasPhone || advanced.createdAfter !== '' || advanced.createdBefore !== '';
+  const hasAnyActiveFilters = selectedTagIds.length > 0 || hasActiveAdvanced;
+
+  const collectFiltersRecord = (): Record<string, unknown> => {
+    const record: Record<string, unknown> = {};
+    if (selectedTagIds.length > 0) record.tagIds = selectedTagIds;
+    if (advanced.hasEmail) record.hasEmail = true;
+    if (advanced.hasPhone) record.hasPhone = true;
+    if (advanced.createdAfter) record.createdAfter = advanced.createdAfter;
+    if (advanced.createdBefore) record.createdBefore = advanced.createdBefore;
+    return record;
+  };
+
+  const applyFromRecord = (record: Record<string, unknown>) => {
+    setSelectedTagIds((record.tagIds as string[]) || []);
+    setAdvanced({
+      hasEmail: !!record.hasEmail,
+      hasPhone: !!record.hasPhone,
+      createdAfter: (record.createdAfter as string) || '',
+      createdBefore: (record.createdBefore as string) || '',
+    });
+  };
+
+  const clearAllFilters = () => {
+    setSelectedTagIds([]);
+    setAdvanced({ ...DEFAULT_CONTACT_FILTERS });
+  };
+
+  const handleSaveSearch = async () => {
+    if (!saveSearchName.trim()) return;
+    await createSavedSearch({
+      name: saveSearchName.trim(),
+      entity_type: 'contact',
+      filters: collectFiltersRecord(),
+      is_shared: false,
+    });
+    setSaveSearchName('');
+    setShowSaveInput(false);
+  };
+
+  const handleDeleteSavedSearch = async (id: string) => {
+    if (window.confirm('Delete this saved search?')) {
+      await deleteSavedSearch(id);
+    }
+  };
+
+  const activeFilterPills = useMemo(() => {
+    const pills: string[] = [];
+    if (selectedTagIds.length > 0) pills.push(`${selectedTagIds.length} tag(s)`);
+    if (advanced.hasEmail) pills.push('Has email');
+    if (advanced.hasPhone) pills.push('Has phone');
+    if (advanced.createdAfter) pills.push(`After ${advanced.createdAfter}`);
+    if (advanced.createdBefore) pills.push(`Before ${advanced.createdBefore}`);
+    return pills;
+  }, [selectedTagIds, advanced]);
 
   const toggleTag = useCallback((tagId: string) => {
     setSelectedTagIds((prev) =>
@@ -69,6 +157,20 @@ export default function ContactsTable() {
       });
     }
 
+    // Advanced filters
+    if (advanced.hasEmail) {
+      result = result.filter((c) => !!c.email);
+    }
+    if (advanced.hasPhone) {
+      result = result.filter((c) => !!c.phone);
+    }
+    if (advanced.createdAfter) {
+      result = result.filter((c) => (c.created_at || '') >= advanced.createdAfter);
+    }
+    if (advanced.createdBefore) {
+      result = result.filter((c) => (c.created_at || '') <= advanced.createdBefore);
+    }
+
     // Sort
     result.sort((a, b) => {
       let aVal: string;
@@ -99,7 +201,7 @@ export default function ContactsTable() {
     });
 
     return result;
-  }, [contacts, search, selectedTagIds, sortField, sortDir]);
+  }, [contacts, search, selectedTagIds, advanced, sortField, sortDir]);
 
   const handleDelete = useCallback(
     async (id: string, name: string) => {
@@ -138,6 +240,32 @@ export default function ContactsTable() {
           </button>
         </div>
       </div>
+
+      {/* Saved Searches */}
+      {contactSavedSearches.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-gray-500 uppercase">Saved:</span>
+          {contactSavedSearches.map((s) => (
+            <div key={s.id} className="inline-flex items-center gap-1">
+              <button
+                onClick={() => applyFromRecord(s.filters)}
+                className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+              >
+                {s.name}
+              </button>
+              <button
+                onClick={() => handleDeleteSavedSearch(s.id)}
+                className="rounded-full p-0.5 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                title="Delete saved search"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Filters bar */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -194,7 +322,93 @@ export default function ContactsTable() {
             </button>
           )}
         </div>
+
+        {/* Filters toggle */}
+        <button
+          onClick={() => setShowFilterPanel(!showFilterPanel)}
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+            showFilterPanel || hasActiveAdvanced
+              ? 'border-primary-500 bg-primary-50 text-primary-700'
+              : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+          </svg>
+          Filters
+        </button>
+
+        {/* Save search */}
+        {hasAnyActiveFilters && (
+          <>
+            {showSaveInput ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={saveSearchName}
+                  onChange={(e) => setSaveSearchName(e.target.value)}
+                  placeholder="Search name..."
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveSearch();
+                    if (e.key === 'Escape') setShowSaveInput(false);
+                  }}
+                  autoFocus
+                />
+                <button onClick={handleSaveSearch} disabled={!saveSearchName.trim()} className="rounded-lg bg-primary-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50">Save</button>
+                <button onClick={() => setShowSaveInput(false)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowSaveInput(true)}
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+                </svg>
+                Save Search
+              </button>
+            )}
+          </>
+        )}
       </div>
+
+      {/* Advanced filter panel */}
+      {showFilterPanel && (
+        <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={advanced.hasEmail} onChange={(e) => setAdvanced((p) => ({ ...p, hasEmail: e.target.checked }))} className="rounded border-gray-300" />
+              Has email
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={advanced.hasPhone} onChange={(e) => setAdvanced((p) => ({ ...p, hasPhone: e.target.checked }))} className="rounded border-gray-300" />
+              Has phone
+            </label>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Created after</label>
+              <input type="date" value={advanced.createdAfter} onChange={(e) => setAdvanced((p) => ({ ...p, createdAfter: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Created before</label>
+              <input type="date" value={advanced.createdBefore} onChange={(e) => setAdvanced((p) => ({ ...p, createdBefore: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+            </div>
+          </div>
+          <div className="mt-3 flex justify-end">
+            <button onClick={() => setAdvanced({ ...DEFAULT_CONTACT_FILTERS })} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-white">Clear</button>
+          </div>
+        </div>
+      )}
+
+      {/* Active filter pills */}
+      {activeFilterPills.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {activeFilterPills.map((pill, idx) => (
+            <span key={idx} className="inline-flex items-center rounded-full bg-primary-50 px-2.5 py-0.5 text-xs font-medium text-primary-700">{pill}</span>
+          ))}
+          <button onClick={clearAllFilters} className="rounded-full px-2 py-0.5 text-xs text-gray-400 hover:text-red-500">Clear all</button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">

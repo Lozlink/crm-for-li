@@ -31,3 +31,7 @@ export {
 // Directions
 export { fetchOptimizedRoute, decodePolyline, encodePolyline } from './directions';
 export type { DirectionsResult, DirectionsLeg } from './directions';
+
+// Email
+export { applyMergeFields } from './email';
+export type { SendEmailParams, SendBulkEmailParams } from './email';

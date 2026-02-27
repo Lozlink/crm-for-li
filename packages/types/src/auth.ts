@@ -21,6 +21,7 @@ export interface Team {
   settings: Record<string, unknown>;
   plan: TeamPlan;
   status: TeamStatus;
+  organisation_id?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -50,4 +51,27 @@ export interface Invitation {
   expires_at: string;
   accepted_at: string | null;
   created_at?: string;
+}
+
+// --- Organisations ---
+
+export type OrgRole = 'org_admin' | 'member';
+
+export interface Organisation {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  settings: Record<string, unknown>;
+  owner_id: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface OrganisationMembership {
+  id: string;
+  user_id: string;
+  organisation_id: string;
+  role: OrgRole;
+  created_at?: string;
+  organisation?: Organisation;
 }

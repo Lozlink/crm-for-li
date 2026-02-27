@@ -487,7 +487,6 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: 12,
     borderRadius: 12,
-    overflow: 'hidden',
   },
   cardTouchable: {
     padding: 16,

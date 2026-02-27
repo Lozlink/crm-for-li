@@ -171,6 +171,37 @@ export default function RootLayout() {
               options={{ title: 'Team Settings' }}
             />
             <Stack.Screen
+              name="property/new"
+              options={{
+                title: 'New Property',
+                presentation: 'modal',
+              }}
+            />
+            <Stack.Screen
+              name="property/[id]"
+              options={{
+                title: 'Property Details',
+              }}
+            />
+            <Stack.Screen
+              name="inspection/[id]"
+              options={{
+                title: 'Inspection',
+              }}
+            />
+            <Stack.Screen
+              name="campaigns/index"
+              options={{
+                title: 'Campaigns',
+              }}
+            />
+            <Stack.Screen
+              name="campaigns/[id]"
+              options={{
+                title: 'Campaign',
+              }}
+            />
+            <Stack.Screen
               name="route/[id]"
               options={{
                 title: 'Route',
