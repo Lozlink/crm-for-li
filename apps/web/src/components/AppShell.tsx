@@ -1,19 +1,23 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useAuthStore, useCRMStore } from '@realestate-crm/hooks';
-import type { Membership } from '@realestate-crm/types';
+import { useAuthStore, useCRMStore, useOrganisationStore } from '@realestate-crm/hooks';
+import type { Membership, Organisation } from '@realestate-crm/types';
 import TeamSetup from './TeamSetup';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: DashboardIcon },
+  { href: '/properties', label: 'Properties', icon: PropertiesIcon },
+  { href: '/pipeline', label: 'Pipeline', icon: PipelineIcon },
   { href: '/contacts', label: 'Contacts', icon: ContactsIcon },
+  { href: '/tasks', label: 'Tasks', icon: TasksIcon },
   { href: '/map', label: 'Map', icon: MapIcon },
   { href: '/routes', label: 'Routes', icon: RoutesIcon },
   { href: '/notes', label: 'Notes', icon: NotesIcon },
-  { href: '/stats', label: 'Stats', icon: StatsIcon },
+  { href: '/reports', label: 'Reports', icon: ReportsIcon },
+  { href: '/campaigns', label: 'Campaigns', icon: CampaignsIcon },
   { href: '/tracking', label: 'Tracking', icon: TrackingIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
@@ -30,9 +34,54 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const fetchContacts = useCRMStore((s) => s.fetchContacts);
   const fetchTags = useCRMStore((s) => s.fetchTags);
   const resetData = useCRMStore((s) => s.resetData);
+  const organisations = useOrganisationStore((s) => s.organisations);
+  const fetchUserOrgs = useOrganisationStore((s) => s.fetchUserOrgs);
+
   const [syncing, setSyncing] = useState(false);
   const [teamDropdownOpen, setTeamDropdownOpen] = useState(false);
   const [showTeamSetup, setShowTeamSetup] = useState(false);
+
+  useEffect(() => {
+    if (!isDemoMode) {
+      fetchUserOrgs();
+    }
+  }, [isDemoMode, fetchUserOrgs]);
+
+  // Group memberships by organisation for the team dropdown
+  const groupedTeams = useMemo(() => {
+    const orgMap = new Map<string, Organisation>();
+    for (const org of organisations) {
+      orgMap.set(org.id, org);
+    }
+
+    const grouped: { org: Organisation; members: Membership[] }[] = [];
+    const independent: Membership[] = [];
+
+    const orgBuckets = new Map<string, Membership[]>();
+
+    for (const m of memberships) {
+      const orgId = m.team?.organisation_id;
+      if (orgId && orgMap.has(orgId)) {
+        const bucket = orgBuckets.get(orgId) || [];
+        bucket.push(m);
+        orgBuckets.set(orgId, bucket);
+      } else {
+        independent.push(m);
+      }
+    }
+
+    for (const [orgId, members] of orgBuckets) {
+      const org = orgMap.get(orgId);
+      if (org) {
+        grouped.push({ org, members });
+      }
+    }
+
+    // Sort org groups by name
+    grouped.sort((a, b) => a.org.name.localeCompare(b.org.name));
+
+    return { grouped, independent };
+  }, [memberships, organisations]);
 
   const handleSync = useCallback(async () => {
     setSyncing(true);
@@ -100,28 +149,76 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {teamDropdownOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setTeamDropdownOpen(false)} />
-                <div className="absolute left-2 right-2 top-full z-20 mt-1 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
-                  {memberships.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => handleSwitchTeam(m.team_id)}
-                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-50 ${
-                        m.team_id === activeTeam?.id ? 'bg-primary-50' : ''
-                      }`}
-                    >
-                      <span className="min-w-0 flex-1 truncate text-gray-900">
-                        {m.team?.name || 'Unknown'}
-                      </span>
-                      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${ROLE_COLORS[m.role] || ''}`}>
-                        {m.role}
-                      </span>
-                      {m.team_id === activeTeam?.id && (
-                        <svg className="h-4 w-4 shrink-0 text-primary-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                <div className="absolute left-2 right-2 top-full z-20 mt-1 max-h-80 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                  {/* Organisation-grouped teams */}
+                  {groupedTeams.grouped.map(({ org, members }) => (
+                    <div key={org.id}>
+                      <div className="flex items-center gap-1.5 px-3 pb-1 pt-2.5">
+                        <svg className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
                         </svg>
-                      )}
-                    </button>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                          {org.name}
+                        </span>
+                      </div>
+                      {members.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => handleSwitchTeam(m.team_id)}
+                          className={`flex w-full items-center gap-2 px-3 py-2 pl-7 text-left text-sm hover:bg-gray-50 ${
+                            m.team_id === activeTeam?.id ? 'bg-primary-50' : ''
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1 truncate text-gray-900">
+                            {m.team?.name || 'Unknown'}
+                          </span>
+                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${ROLE_COLORS[m.role] || ''}`}>
+                            {m.role}
+                          </span>
+                          {m.team_id === activeTeam?.id && (
+                            <svg className="h-4 w-4 shrink-0 text-primary-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   ))}
+
+                  {/* Independent teams (no organisation) */}
+                  {groupedTeams.independent.length > 0 && (
+                    <div>
+                      {groupedTeams.grouped.length > 0 && (
+                        <div className="flex items-center gap-1.5 px-3 pb-1 pt-2.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                            Independent Teams
+                          </span>
+                        </div>
+                      )}
+                      {groupedTeams.independent.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => handleSwitchTeam(m.team_id)}
+                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-50 ${
+                            m.team_id === activeTeam?.id ? 'bg-primary-50' : ''
+                          } ${groupedTeams.grouped.length > 0 ? 'pl-7' : ''}`}
+                        >
+                          <span className="min-w-0 flex-1 truncate text-gray-900">
+                            {m.team?.name || 'Unknown'}
+                          </span>
+                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${ROLE_COLORS[m.role] || ''}`}>
+                            {m.role}
+                          </span>
+                          {m.team_id === activeTeam?.id && (
+                            <svg className="h-4 w-4 shrink-0 text-primary-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   <hr className="my-1" />
                   <button
                     onClick={() => { setTeamDropdownOpen(false); setShowTeamSetup(true); }}
@@ -219,6 +316,14 @@ function DashboardIcon({ className }: { className?: string }) {
   );
 }
 
+function PropertiesIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-1.636M18.75 3l-1.5.545m0 6.205l3 1m1.5.5l-1.5-.5M6.75 7.364V3h-3v18m3-13.636l10.5-3.819" />
+    </svg>
+  );
+}
+
 function ContactsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -276,10 +381,34 @@ function NotesIcon({ className }: { className?: string }) {
   );
 }
 
-function StatsIcon({ className }: { className?: string }) {
+function ReportsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+    </svg>
+  );
+}
+
+function PipelineIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
+    </svg>
+  );
+}
+
+function TasksIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function CampaignsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
     </svg>
   );
 }

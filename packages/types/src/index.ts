@@ -2,6 +2,25 @@
 export type { Tag, Contact, Activity, ActivityWithContact, ContactFormData } from './entities';
 export type { Route, RouteStop, RouteStatus, RouteMode, StopStatus, StreetStats } from './entities';
 export type { TrackingSession, TrackingBreadcrumb, TrackingAnnotation } from './entities';
+export type {
+  Property, PropertyContact, PropertyFormData,
+  PropertyType, PropertyCategory, PropertyForType, PropertyStatus, PropertyContactRole,
+} from './entities';
+export type {
+  ContactRequirement, MatchStrength, BuyerMatch,
+} from './entities';
+export type {
+  Inspection, InspectionAttendee,
+  InspectionType, InspectionStatus, AttendeeSource, InterestLevel,
+} from './entities';
+export type {
+  Task, TaskType, TaskStatus, TaskPriority,
+} from './entities';
+export type { SavedSearch } from './entities';
+export type {
+  EmailCampaign, EmailRecipient, ContactSubscription,
+  CampaignStatus, RecipientStatus,
+} from './entities';
 
 // Map types
 export type { MapRegion, SavedSuburb, SuburbBoundary } from './map';
@@ -19,6 +38,9 @@ export type {
   Team,
   Membership,
   Invitation,
+  OrgRole,
+  Organisation,
+  OrganisationMembership,
 } from './auth';
 
 // Permissions

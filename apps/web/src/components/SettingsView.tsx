@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import { useCRMStore, useAuthStore } from '@realestate-crm/hooks';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useCRMStore, useAuthStore, useOrganisationStore } from '@realestate-crm/hooks';
 import { TAG_COLORS } from '@realestate-crm/config';
 import {
   updateProfile,
@@ -12,7 +12,7 @@ import {
   createInvitation,
   fetchTeamInvitations,
 } from '@realestate-crm/api';
-import type { Tag, TeamRole, Membership, Invitation } from '@realestate-crm/types';
+import type { Tag, TeamRole, Membership, Invitation, Organisation, OrgRole, OrganisationMembership } from '@realestate-crm/types';
 
 // --- Role badge colors ---
 const ROLE_COLORS: Record<string, string> = {
@@ -47,6 +47,18 @@ export default function SettingsView() {
   const signOut = useAuthStore((s) => s.signOut);
   const hasPermission = useAuthStore((s) => s.hasPermission);
 
+  const organisations = useOrganisationStore((s) => s.organisations);
+  const orgMemberships = useOrganisationStore((s) => s.orgMemberships);
+  const orgTeams = useOrganisationStore((s) => s.orgTeams);
+  const fetchUserOrgs = useOrganisationStore((s) => s.fetchUserOrgs);
+  const createOrg = useOrganisationStore((s) => s.createOrg);
+  const updateOrgAction = useOrganisationStore((s) => s.updateOrg);
+  const addTeamToOrg = useOrganisationStore((s) => s.addTeamToOrg);
+  const fetchOrgTeams = useOrganisationStore((s) => s.fetchOrgTeams);
+  const inviteToOrg = useOrganisationStore((s) => s.inviteToOrg);
+  const removeFromOrg = useOrganisationStore((s) => s.removeFromOrg);
+  const memberships = useAuthStore((s) => s.memberships);
+
   const canManageTeam = hasPermission('team.settings');
   const canManageMembers = hasPermission('team.members.manage');
   const canInvite = hasPermission('team.members.invite');
@@ -58,6 +70,13 @@ export default function SettingsView() {
       fetchTeamMembers(activeTeam.id);
     }
   }, [activeTeam, isDemoMode, fetchTeamMembers]);
+
+  // Load organisations on mount
+  useEffect(() => {
+    if (!isDemoMode) {
+      fetchUserOrgs();
+    }
+  }, [isDemoMode, fetchUserOrgs]);
 
   // Stats
   const totalContacts = contacts.length;
@@ -95,6 +114,24 @@ export default function SettingsView() {
       {/* Invitations section */}
       {!isDemoMode && activeTeam && canInvite && (
         <InvitationsSection teamId={activeTeam.id} />
+      )}
+
+      {/* Organisation section */}
+      {!isDemoMode && (
+        <OrganisationSection
+          organisations={organisations}
+          orgMemberships={orgMemberships}
+          orgTeams={orgTeams}
+          userMemberships={memberships}
+          currentUserId={user?.id}
+          onCreateOrg={createOrg}
+          onUpdateOrg={updateOrgAction}
+          onAddTeamToOrg={addTeamToOrg}
+          onFetchOrgTeams={fetchOrgTeams}
+          onInviteToOrg={inviteToOrg}
+          onRemoveFromOrg={removeFromOrg}
+          onRefresh={fetchUserOrgs}
+        />
       )}
 
       {/* Statistics */}
@@ -697,6 +734,442 @@ function DangerZone({
             </button>
           </div>
         )}
+      </div>
+    </section>
+  );
+}
+
+// --- Organisation Section ---
+
+const ORG_ROLE_COLORS: Record<string, string> = {
+  org_admin: 'text-purple-700 bg-purple-100',
+  member: 'text-green-700 bg-green-100',
+};
+
+function OrganisationSection({
+  organisations,
+  orgMemberships,
+  orgTeams,
+  userMemberships,
+  currentUserId,
+  onCreateOrg,
+  onUpdateOrg,
+  onAddTeamToOrg,
+  onFetchOrgTeams,
+  onInviteToOrg,
+  onRemoveFromOrg,
+  onRefresh,
+}: {
+  organisations: Organisation[];
+  orgMemberships: OrganisationMembership[];
+  orgTeams: import('@realestate-crm/types').Team[];
+  userMemberships: Membership[];
+  currentUserId?: string;
+  onCreateOrg: (name: string) => Promise<Organisation | null>;
+  onUpdateOrg: (id: string, updates: Partial<Organisation>) => Promise<void>;
+  onAddTeamToOrg: (orgId: string, teamId: string) => Promise<void>;
+  onFetchOrgTeams: (orgId: string) => Promise<void>;
+  onInviteToOrg: (orgId: string, userId: string, role: OrgRole) => Promise<void>;
+  onRemoveFromOrg: (orgId: string, userId: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [newOrgName, setNewOrgName] = useState('');
+  const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  const [addTeamOrgId, setAddTeamOrgId] = useState<string | null>(null);
+  const [inviteOrgId, setInviteOrgId] = useState<string | null>(null);
+  const [inviteUserId, setInviteUserId] = useState('');
+  const [inviteRole, setInviteRole] = useState<OrgRole>('member');
+  const [inviting, setInviting] = useState(false);
+  const [expandedOrgId, setExpandedOrgId] = useState<string | null>(null);
+
+  // Determine user's role in each org
+  const getUserOrgRole = useCallback(
+    (orgId: string): OrgRole | null => {
+      const membership = orgMemberships.find(
+        (m) => m.organisation_id === orgId && m.user_id === currentUserId
+      );
+      return membership?.role || null;
+    },
+    [orgMemberships, currentUserId]
+  );
+
+  // Teams not yet assigned to a given org
+  const getAvailableTeams = useCallback(
+    (orgId: string) => {
+      const orgTeamIds = new Set(orgTeams.filter((t) => t.organisation_id === orgId).map((t) => t.id));
+      return userMemberships
+        .filter((m) => m.team && !m.team.organisation_id)
+        .map((m) => m.team!)
+        .filter((t) => !orgTeamIds.has(t.id));
+    },
+    [orgTeams, userMemberships]
+  );
+
+  // Members of a given org
+  const getOrgMembers = useCallback(
+    (orgId: string) => {
+      return orgMemberships.filter((m) => m.organisation_id === orgId);
+    },
+    [orgMemberships]
+  );
+
+  const handleCreateOrg = useCallback(async () => {
+    if (!newOrgName.trim()) return;
+    setCreating(true);
+    try {
+      await onCreateOrg(newOrgName.trim());
+      setNewOrgName('');
+      await onRefresh();
+    } catch (err) {
+      console.error('Create org error:', err);
+    } finally {
+      setCreating(false);
+    }
+  }, [newOrgName, onCreateOrg, onRefresh]);
+
+  const handleSaveName = useCallback(
+    async (orgId: string) => {
+      if (!editName.trim()) return;
+      setSavingName(true);
+      try {
+        await onUpdateOrg(orgId, { name: editName.trim() });
+        setEditingOrgId(null);
+        await onRefresh();
+      } catch (err) {
+        console.error('Update org error:', err);
+      } finally {
+        setSavingName(false);
+      }
+    },
+    [editName, onUpdateOrg, onRefresh]
+  );
+
+  const handleAddTeam = useCallback(
+    async (orgId: string, teamId: string) => {
+      try {
+        await onAddTeamToOrg(orgId, teamId);
+        setAddTeamOrgId(null);
+        await onRefresh();
+      } catch (err) {
+        console.error('Add team to org error:', err);
+      }
+    },
+    [onAddTeamToOrg, onRefresh]
+  );
+
+  const handleInvite = useCallback(async () => {
+    if (!inviteOrgId || !inviteUserId.trim()) return;
+    setInviting(true);
+    try {
+      await onInviteToOrg(inviteOrgId, inviteUserId.trim(), inviteRole);
+      setInviteUserId('');
+      setInviteOrgId(null);
+      await onRefresh();
+    } catch (err) {
+      console.error('Invite to org error:', err);
+    } finally {
+      setInviting(false);
+    }
+  }, [inviteOrgId, inviteUserId, inviteRole, onInviteToOrg, onRefresh]);
+
+  const handleRemoveMember = useCallback(
+    async (orgId: string, userId: string) => {
+      if (!window.confirm('Remove this member from the organisation?')) return;
+      try {
+        await onRemoveFromOrg(orgId, userId);
+        await onRefresh();
+      } catch (err) {
+        console.error('Remove from org error:', err);
+      }
+    },
+    [onRemoveFromOrg, onRefresh]
+  );
+
+  const handleExpandOrg = useCallback(
+    (orgId: string) => {
+      if (expandedOrgId === orgId) {
+        setExpandedOrgId(null);
+      } else {
+        setExpandedOrgId(orgId);
+        onFetchOrgTeams(orgId);
+      }
+    },
+    [expandedOrgId, onFetchOrgTeams]
+  );
+
+  // No organisations — show create prompt
+  if (organisations.length === 0) {
+    return (
+      <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
+        <h2 className="mb-4 text-sm font-semibold uppercase text-gray-500">
+          Organisation
+        </h2>
+        <p className="mb-4 text-sm text-gray-500">
+          Organisations let you group multiple teams/offices under one admin umbrella.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newOrgName}
+            onChange={(e) => setNewOrgName(e.target.value)}
+            placeholder="Organisation name"
+            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          />
+          <button
+            onClick={handleCreateOrg}
+            disabled={creating || !newOrgName.trim()}
+            className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50"
+          >
+            {creating ? 'Creating...' : 'Create Organisation'}
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  // Has organisations — show management UI
+  return (
+    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
+      <h2 className="mb-4 text-sm font-semibold uppercase text-gray-500">
+        Organisation
+      </h2>
+
+      <div className="space-y-4">
+        {organisations.map((org) => {
+          const role = getUserOrgRole(org.id);
+          const isAdmin = role === 'org_admin';
+          const isExpanded = expandedOrgId === org.id;
+          const members = getOrgMembers(org.id);
+          const availableTeams = getAvailableTeams(org.id);
+          const teamsInOrg = orgTeams.filter((t) => t.organisation_id === org.id);
+
+          return (
+            <div key={org.id} className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+              {/* Org name & role */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+                  </svg>
+                  {editingOrgId === org.id ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleSaveName(org.id)}
+                        disabled={savingName}
+                        className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-50"
+                      >
+                        {savingName ? '...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => setEditingOrgId(null)}
+                        className="text-xs text-gray-400 hover:text-gray-600"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900">{org.name}</span>
+                      {isAdmin && (
+                        <button
+                          onClick={() => {
+                            setEditingOrgId(org.id);
+                            setEditName(org.name);
+                          }}
+                          className="text-xs text-gray-400 hover:text-gray-600"
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {role && (
+                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${ORG_ROLE_COLORS[role] || ''}`}>
+                      {role === 'org_admin' ? 'Admin' : 'Member'}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => handleExpandOrg(org.id)}
+                    className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+                  >
+                    <svg className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Expanded detail */}
+              {isExpanded && (
+                <div className="mt-4 space-y-4">
+                  {/* Teams in this org */}
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <h4 className="text-xs font-semibold uppercase text-gray-500">
+                        Teams ({teamsInOrg.length})
+                      </h4>
+                      {isAdmin && availableTeams.length > 0 && (
+                        <button
+                          onClick={() => setAddTeamOrgId(addTeamOrgId === org.id ? null : org.id)}
+                          className="text-xs font-medium text-primary-600 hover:text-primary-700"
+                        >
+                          + Add Team
+                        </button>
+                      )}
+                    </div>
+
+                    {addTeamOrgId === org.id && (
+                      <div className="mb-2 rounded-lg border border-gray-200 bg-white p-3">
+                        <p className="mb-2 text-xs text-gray-500">Select a team to add:</p>
+                        <div className="space-y-1">
+                          {availableTeams.map((team) => (
+                            <button
+                              key={team.id}
+                              onClick={() => handleAddTeam(org.id, team.id)}
+                              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-gray-50"
+                            >
+                              <span className="text-gray-900">{team.name}</span>
+                            </button>
+                          ))}
+                          {availableTeams.length === 0 && (
+                            <p className="text-xs text-gray-400">No unassigned teams available.</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {teamsInOrg.length === 0 ? (
+                      <p className="text-xs text-gray-400">No teams in this organisation yet.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {teamsInOrg.map((team) => (
+                          <div key={team.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2">
+                            <span className="text-sm text-gray-900">{team.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Members */}
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <h4 className="text-xs font-semibold uppercase text-gray-500">
+                        Members ({members.length})
+                      </h4>
+                      {isAdmin && (
+                        <button
+                          onClick={() => setInviteOrgId(inviteOrgId === org.id ? null : org.id)}
+                          className="text-xs font-medium text-primary-600 hover:text-primary-700"
+                        >
+                          + Invite
+                        </button>
+                      )}
+                    </div>
+
+                    {inviteOrgId === org.id && (
+                      <div className="mb-2 rounded-lg border border-gray-200 bg-white p-3">
+                        <p className="mb-2 text-xs text-gray-500">Invite a user by their ID:</p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={inviteUserId}
+                            onChange={(e) => setInviteUserId(e.target.value)}
+                            placeholder="User ID"
+                            className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                          <div className="flex rounded-lg border border-gray-300 bg-white">
+                            <button
+                              onClick={() => setInviteRole('org_admin')}
+                              className={`px-3 py-1.5 text-xs font-medium rounded-l-lg transition-colors ${
+                                inviteRole === 'org_admin' ? 'bg-primary-500 text-white' : 'text-gray-600 hover:bg-gray-50'
+                              }`}
+                            >
+                              Admin
+                            </button>
+                            <button
+                              onClick={() => setInviteRole('member')}
+                              className={`px-3 py-1.5 text-xs font-medium rounded-r-lg transition-colors ${
+                                inviteRole === 'member' ? 'bg-primary-500 text-white' : 'text-gray-600 hover:bg-gray-50'
+                              }`}
+                            >
+                              Member
+                            </button>
+                          </div>
+                          <button
+                            onClick={handleInvite}
+                            disabled={inviting || !inviteUserId.trim()}
+                            className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-50"
+                          >
+                            {inviting ? '...' : 'Invite'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {members.length === 0 ? (
+                      <p className="text-xs text-gray-400">No members found.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {members.map((m) => (
+                          <div key={m.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-600">
+                              {m.user_id === currentUserId ? 'Y' : '?'}
+                            </div>
+                            <span className="flex-1 text-sm text-gray-900">
+                              {m.user_id === currentUserId ? 'You' : m.user_id.slice(0, 8) + '...'}
+                            </span>
+                            <span className={`rounded px-2 py-0.5 text-xs font-medium ${ORG_ROLE_COLORS[m.role] || ''}`}>
+                              {m.role === 'org_admin' ? 'Admin' : 'Member'}
+                            </span>
+                            {isAdmin && m.user_id !== currentUserId && (
+                              <button
+                                onClick={() => handleRemoveMember(org.id, m.user_id)}
+                                className="rounded p-1 text-xs text-red-400 hover:bg-red-50 hover:text-red-600"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Create another org */}
+      <div className="mt-4 flex gap-2">
+        <input
+          type="text"
+          value={newOrgName}
+          onChange={(e) => setNewOrgName(e.target.value)}
+          placeholder="New organisation name"
+          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+        />
+        <button
+          onClick={handleCreateOrg}
+          disabled={creating || !newOrgName.trim()}
+          className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50"
+        >
+          {creating ? '...' : 'Create'}
+        </button>
       </div>
     </section>
   );

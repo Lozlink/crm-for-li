@@ -16,8 +16,9 @@ import {
 } from 'react-native-paper';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useCRMStore } from '@realestate-crm/hooks';
+import { useCRMStore, useEmailCampaignStore } from '@realestate-crm/hooks';
 import { Contact, ContactFormData } from '@realestate-crm/types';
+import { Switch } from 'react-native';
 import { ContactForm } from '@realestate-crm/ui';
 import { ActivityFeed } from '@realestate-crm/ui';
 import { AddActivityDialog } from '@realestate-crm/ui';
@@ -34,6 +35,10 @@ export default function ContactDetailScreen() {
   const updateActivity = useCRMStore(state => state.updateActivity);
   const fetchActivities = useCRMStore(state => state.fetchActivities);
   const isLoading = useCRMStore(state => state.isLoading);
+
+  const fetchSubscription = useEmailCampaignStore(state => state.fetchSubscription);
+  const updateSubscription = useEmailCampaignStore(state => state.updateSubscription);
+  const [emailSubscribed, setEmailSubscribed] = useState(true);
 
   const [contact, setContact] = useState<Contact | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -52,6 +57,9 @@ export default function ContactDetailScreen() {
 
     if (id) {
       fetchActivities(id);
+      fetchSubscription(id).then((sub) => {
+        if (sub) setEmailSubscribed(sub.subscribed);
+      });
     }
   }, [id, contacts]);
 
@@ -239,6 +247,28 @@ export default function ContactDetailScreen() {
                 )}
               </Surface>
 
+              {/* Email subscription toggle */}
+              {contact.email && (
+                <Surface style={styles.subscriptionRow} elevation={1}>
+                  <View style={styles.subscriptionContent}>
+                    <Icon name="email-newsletter" size={20} color={theme.colors.onSurfaceVariant} />
+                    <View style={{ flex: 1 }}>
+                      <Text variant="bodyMedium">Email Campaigns</Text>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {emailSubscribed ? 'Subscribed to campaigns' : 'Unsubscribed from campaigns'}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={emailSubscribed}
+                      onValueChange={async (val) => {
+                        setEmailSubscribed(val);
+                        if (id) await updateSubscription(id, val);
+                      }}
+                    />
+                  </View>
+                </Surface>
+              )}
+
               {contact.phone && (
                 <Button
                   mode="contained"
@@ -360,6 +390,16 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  subscriptionRow: {
+    marginTop: 16,
+    borderRadius: 12,
+    padding: 12,
+  },
+  subscriptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   callButton: {
     marginTop: 16,

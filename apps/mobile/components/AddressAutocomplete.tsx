@@ -1,14 +1,20 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { StyleSheet, View, FlatList, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
 import { TextInput, Text, Surface, useTheme, ActivityIndicator } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { PlacePrediction, PlaceDetails } from '../lib/types';
 
 const GOOGLE_PLACES_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '';
 
+export interface AddressComponents {
+  suburb?: string;
+  state?: string;
+  postcode?: string;
+}
+
 interface AddressAutocompleteProps {
   value: string;
-  onAddressSelect: (address: string, lat: number, lng: number) => void;
+  onAddressSelect: (address: string, lat: number, lng: number, components?: AddressComponents) => void;
   style?: object;
 }
 
@@ -104,7 +110,7 @@ export default function AddressAutocomplete({
           method: 'GET',
           headers: {
             'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
-            'X-Goog-FieldMask': 'formattedAddress,location',
+            'X-Goog-FieldMask': 'formattedAddress,location,addressComponents',
           },
         }
       );
@@ -119,6 +125,7 @@ export default function AddressAutocomplete({
               lng: data.location.longitude,
             },
           },
+          addressComponents: data.addressComponents,
         };
       }
       return null;
@@ -135,10 +142,25 @@ export default function AddressAutocomplete({
 
     const details = await getPlaceDetails(prediction.place_id);
     if (details) {
+      // Parse address components from Places API (New) response
+      const components: AddressComponents = {};
+      if (details.addressComponents) {
+        for (const comp of details.addressComponents) {
+          const types: string[] = comp.types || [];
+          if (types.includes('locality')) {
+            components.suburb = comp.longText || comp.shortText;
+          } else if (types.includes('administrative_area_level_1')) {
+            components.state = comp.shortText;
+          } else if (types.includes('postal_code')) {
+            components.postcode = comp.longText || comp.shortText;
+          }
+        }
+      }
       onAddressSelect(
         details.formatted_address,
         details.geometry.location.lat,
-        details.geometry.location.lng
+        details.geometry.location.lng,
+        components
       );
     } else {
       // Fallback: use the description without coordinates
@@ -183,11 +205,10 @@ export default function AddressAutocomplete({
 
       {showResults && predictions.length > 0 && (
         <Surface style={styles.resultsContainer} elevation={3}>
-          <FlatList
-            data={predictions}
-            keyExtractor={(item) => item.place_id}
-            renderItem={({ item }) => (
+          <ScrollView keyboardShouldPersistTaps="handled" style={styles.resultsList}>
+            {predictions.map((item) => (
               <TouchableOpacity
+                key={item.place_id}
                 onPress={() => handleSelectPlace(item)}
                 style={styles.resultItem}
               >
@@ -210,10 +231,8 @@ export default function AddressAutocomplete({
                   </Text>
                 </View>
               </TouchableOpacity>
-            )}
-            keyboardShouldPersistTaps="handled"
-            style={styles.resultsList}
-          />
+            ))}
+          </ScrollView>
         </Surface>
       )}
     </View>
