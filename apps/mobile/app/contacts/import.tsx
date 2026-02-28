@@ -48,6 +48,7 @@ export default function ImportContactsScreen() {
   // Results
   const [importedCount, setImportedCount] = useState(0);
   const [skippedCount, setSkippedCount] = useState(0);
+  const [importError, setImportError] = useState<string | null>(null);
 
   // Load device contacts
   useEffect(() => {
@@ -127,8 +128,16 @@ export default function ImportContactsScreen() {
 
   const handleImport = useCallback(async () => {
     setStep('importing');
-    const toImport = mapped.filter((_, i) => !skipIndices.has(i));
+    setImportError(null);
+    const toImport = mapped
+      .filter((_, i) => !skipIndices.has(i))
+      .map((c) => ({ ...c, source: 'import' as const }));
     const created = await bulkAddContacts(toImport);
+    if (created.length === 0 && toImport.length > 0) {
+      // bulkAddContacts returns [] on error — check the store for details
+      const storeError = useCRMStore.getState().error;
+      setImportError(storeError || 'Import failed. Please try again.');
+    }
     setImportedCount(created.length);
     setSkippedCount(mapped.length - toImport.length);
     setStep('done');
@@ -299,13 +308,24 @@ export default function ImportContactsScreen() {
         {step === 'done' && (
           <View style={styles.centered}>
             <Text variant="headlineSmall" style={{ marginBottom: 16 }}>
-              Import Complete
+              {importError ? 'Import Failed' : 'Import Complete'}
             </Text>
-            <Text variant="bodyLarge">
-              Imported {importedCount}, Skipped {skippedCount}
-            </Text>
-            <Button mode="contained" onPress={() => router.back()} style={{ marginTop: 24 }}>
-              Done
+            {importError ? (
+              <Text variant="bodyLarge" style={{ color: theme.colors.error, textAlign: 'center', marginHorizontal: 16 }}>
+                {importError}
+              </Text>
+            ) : (
+              <Text variant="bodyLarge">
+                Imported {importedCount}, Skipped {skippedCount}
+              </Text>
+            )}
+            {importError && (
+              <Button mode="outlined" onPress={() => setStep('preview')} style={{ marginTop: 16 }}>
+                Try Again
+              </Button>
+            )}
+            <Button mode="contained" onPress={() => router.back()} style={{ marginTop: importError ? 8 : 24 }}>
+              {importError ? 'Go Back' : 'Done'}
             </Button>
           </View>
         )}
