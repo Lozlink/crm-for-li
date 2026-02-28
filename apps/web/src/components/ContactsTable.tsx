@@ -4,18 +4,30 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCRMStore, useSavedSearchStore } from '@realestate-crm/hooks';
-import type { Contact } from '@realestate-crm/types';
+import type {
+  Contact,
+  ContactSource,
+  ContactType,
+  ContactStatus,
+} from '@realestate-crm/types';
 import ContactFormDialog from './ContactFormDialog';
 import CSVImport from './CSVImport';
 
-type SortField = 'name' | 'email' | 'address' | 'created_at';
+type SortField = 'name' | 'email' | 'address' | 'created_at' | 'source' | 'status' | 'contact_type' | 'last_contacted_at';
 type SortDir = 'asc' | 'desc';
+
+const SOURCE_VALUES: ContactSource[] = ['referral', 'web', 'walk_in', 'portal', 'phone', 'import'];
+const TYPE_VALUES: ContactType[] = ['buyer', 'seller', 'tenant', 'landlord', 'investor', 'other'];
+const STATUS_VALUES: ContactStatus[] = ['active', 'inactive', 'archived'];
 
 interface ContactAdvancedFilters {
   hasEmail: boolean;
   hasPhone: boolean;
   createdAfter: string;
   createdBefore: string;
+  sources: ContactSource[];
+  contactTypes: ContactType[];
+  status: ContactStatus | '';
 }
 
 const DEFAULT_CONTACT_FILTERS: ContactAdvancedFilters = {
@@ -23,6 +35,9 @@ const DEFAULT_CONTACT_FILTERS: ContactAdvancedFilters = {
   hasPhone: false,
   createdAfter: '',
   createdBefore: '',
+  sources: [],
+  contactTypes: [],
+  status: 'active',
 };
 
 export default function ContactsTable() {
@@ -57,7 +72,14 @@ export default function ContactsTable() {
     fetchSavedSearches('contact');
   }, [fetchSavedSearches]);
 
-  const hasActiveAdvanced = advanced.hasEmail || advanced.hasPhone || advanced.createdAfter !== '' || advanced.createdBefore !== '';
+  const hasActiveAdvanced =
+    advanced.hasEmail ||
+    advanced.hasPhone ||
+    advanced.createdAfter !== '' ||
+    advanced.createdBefore !== '' ||
+    advanced.sources.length > 0 ||
+    advanced.contactTypes.length > 0 ||
+    (advanced.status !== '' && advanced.status !== 'active');
   const hasAnyActiveFilters = selectedTagIds.length > 0 || hasActiveAdvanced;
 
   const collectFiltersRecord = (): Record<string, unknown> => {
@@ -67,6 +89,9 @@ export default function ContactsTable() {
     if (advanced.hasPhone) record.hasPhone = true;
     if (advanced.createdAfter) record.createdAfter = advanced.createdAfter;
     if (advanced.createdBefore) record.createdBefore = advanced.createdBefore;
+    if (advanced.sources.length > 0) record.sources = advanced.sources;
+    if (advanced.contactTypes.length > 0) record.contactTypes = advanced.contactTypes;
+    if (advanced.status) record.status = advanced.status;
     return record;
   };
 
@@ -77,6 +102,9 @@ export default function ContactsTable() {
       hasPhone: !!record.hasPhone,
       createdAfter: (record.createdAfter as string) || '',
       createdBefore: (record.createdBefore as string) || '',
+      sources: (record.sources as ContactSource[]) || [],
+      contactTypes: (record.contactTypes as ContactType[]) || [],
+      status: (record.status as ContactStatus) || '',
     });
   };
 
@@ -110,6 +138,9 @@ export default function ContactsTable() {
     if (advanced.hasPhone) pills.push('Has phone');
     if (advanced.createdAfter) pills.push(`After ${advanced.createdAfter}`);
     if (advanced.createdBefore) pills.push(`Before ${advanced.createdBefore}`);
+    if (advanced.sources.length > 0) pills.push(`Source: ${advanced.sources.join(', ')}`);
+    if (advanced.contactTypes.length > 0) pills.push(`Type: ${advanced.contactTypes.join(', ')}`);
+    if (advanced.status && advanced.status !== 'active') pills.push(`Status: ${advanced.status}`);
     return pills;
   }, [selectedTagIds, advanced]);
 
@@ -119,6 +150,24 @@ export default function ContactsTable() {
         ? prev.filter((id) => id !== tagId)
         : [...prev, tagId]
     );
+  }, []);
+
+  const toggleSource = useCallback((source: ContactSource) => {
+    setAdvanced((prev) => ({
+      ...prev,
+      sources: prev.sources.includes(source)
+        ? prev.sources.filter((s) => s !== source)
+        : [...prev.sources, source],
+    }));
+  }, []);
+
+  const toggleContactType = useCallback((type: ContactType) => {
+    setAdvanced((prev) => ({
+      ...prev,
+      contactTypes: prev.contactTypes.includes(type)
+        ? prev.contactTypes.filter((t) => t !== type)
+        : [...prev.contactTypes, type],
+    }));
   }, []);
 
   const handleSort = useCallback(
@@ -171,6 +220,21 @@ export default function ContactsTable() {
       result = result.filter((c) => (c.created_at || '') <= advanced.createdBefore);
     }
 
+    // Source filter
+    if (advanced.sources.length > 0) {
+      result = result.filter((c) => c.source && advanced.sources.includes(c.source));
+    }
+
+    // Contact type filter
+    if (advanced.contactTypes.length > 0) {
+      result = result.filter((c) => c.contact_type && advanced.contactTypes.includes(c.contact_type));
+    }
+
+    // Status filter
+    if (advanced.status) {
+      result = result.filter((c) => (c.status || 'active') === advanced.status);
+    }
+
     // Sort
     result.sort((a, b) => {
       let aVal: string;
@@ -188,6 +252,22 @@ export default function ContactsTable() {
         case 'address':
           aVal = (a.address || '').toLowerCase();
           bVal = (b.address || '').toLowerCase();
+          break;
+        case 'source':
+          aVal = (a.source || '').toLowerCase();
+          bVal = (b.source || '').toLowerCase();
+          break;
+        case 'status':
+          aVal = (a.status || 'active').toLowerCase();
+          bVal = (b.status || 'active').toLowerCase();
+          break;
+        case 'contact_type':
+          aVal = (a.contact_type || '').toLowerCase();
+          bVal = (b.contact_type || '').toLowerCase();
+          break;
+        case 'last_contacted_at':
+          aVal = a.last_contacted_at || '';
+          bVal = b.last_contacted_at || '';
           break;
         case 'created_at':
         default:
@@ -394,6 +474,58 @@ export default function ContactsTable() {
               <input type="date" value={advanced.createdBefore} onChange={(e) => setAdvanced((p) => ({ ...p, createdBefore: e.target.value }))} className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500" />
             </div>
           </div>
+
+          {/* Source filter */}
+          <div className="mt-4">
+            <label className="mb-1.5 block text-xs font-medium text-gray-500">Source</label>
+            <div className="flex flex-wrap gap-2">
+              {SOURCE_VALUES.map((src) => (
+                <label key={src} className="flex items-center gap-1.5 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={advanced.sources.includes(src)}
+                    onChange={() => toggleSource(src)}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="capitalize">{src.replace(/_/g, ' ')}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Contact type filter */}
+          <div className="mt-4">
+            <label className="mb-1.5 block text-xs font-medium text-gray-500">Contact Type</label>
+            <div className="flex flex-wrap gap-2">
+              {TYPE_VALUES.map((type) => (
+                <label key={type} className="flex items-center gap-1.5 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={advanced.contactTypes.includes(type)}
+                    onChange={() => toggleContactType(type)}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="capitalize">{type}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Status filter */}
+          <div className="mt-4">
+            <label className="mb-1 block text-xs font-medium text-gray-500">Status</label>
+            <select
+              value={advanced.status}
+              onChange={(e) => setAdvanced((p) => ({ ...p, status: e.target.value as ContactStatus | '' }))}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">All</option>
+              {STATUS_VALUES.map((s) => (
+                <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="mt-3 flex justify-end">
             <button onClick={() => setAdvanced({ ...DEFAULT_CONTACT_FILTERS })} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-white">Clear</button>
           </div>
@@ -433,8 +565,22 @@ export default function ContactsTable() {
                 Phone
               </th>
               <SortHeader
-                label="Address"
-                field="address"
+                label="Type"
+                field="contact_type"
+                current={sortField}
+                dir={sortDir}
+                onSort={handleSort}
+              />
+              <SortHeader
+                label="Source"
+                field="source"
+                current={sortField}
+                dir={sortDir}
+                onSort={handleSort}
+              />
+              <SortHeader
+                label="Status"
+                field="status"
                 current={sortField}
                 dir={sortDir}
                 onSort={handleSort}
@@ -458,7 +604,7 @@ export default function ContactsTable() {
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={9}
                   className="py-12 text-center text-sm text-gray-400"
                 >
                   {contacts.length === 0
@@ -539,6 +685,21 @@ function SortHeader({
   );
 }
 
+const STATUS_COLORS: Record<string, string> = {
+  active: 'bg-green-100 text-green-700',
+  inactive: 'bg-gray-100 text-gray-600',
+  archived: 'bg-red-100 text-red-700',
+};
+
+const TYPE_COLORS: Record<string, string> = {
+  buyer: 'bg-blue-100 text-blue-700',
+  seller: 'bg-green-100 text-green-700',
+  tenant: 'bg-purple-100 text-purple-700',
+  landlord: 'bg-amber-100 text-amber-700',
+  investor: 'bg-cyan-100 text-cyan-700',
+  other: 'bg-gray-100 text-gray-700',
+};
+
 function ContactRow({
   contact,
   onEdit,
@@ -588,10 +749,26 @@ function ContactRow({
           '-'
         )}
       </td>
-      <td className="max-w-[200px] px-4 py-3">
-        <span className="block truncate text-sm text-gray-600">
-          {contact.address || '-'}
-        </span>
+      <td className="px-4 py-3">
+        {contact.contact_type ? (
+          <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${TYPE_COLORS[contact.contact_type] || 'bg-gray-100 text-gray-700'}`}>
+            {contact.contact_type}
+          </span>
+        ) : (
+          <span className="text-sm text-gray-400">-</span>
+        )}
+      </td>
+      <td className="px-4 py-3 text-sm text-gray-600 capitalize">
+        {contact.source ? contact.source.replace(/_/g, ' ') : '-'}
+      </td>
+      <td className="px-4 py-3">
+        {contact.status ? (
+          <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${STATUS_COLORS[contact.status] || 'bg-gray-100 text-gray-600'}`}>
+            {contact.status}
+          </span>
+        ) : (
+          <span className="text-sm text-gray-400">-</span>
+        )}
       </td>
       <td className="px-4 py-3">
         <div className="flex flex-wrap gap-1">

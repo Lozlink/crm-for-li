@@ -23,6 +23,27 @@ function getTeamContext() {
   };
 }
 
+const DEMO_SAVED_SEARCHES: SavedSearch[] = [
+  {
+    id: 'demo-search-1',
+    name: 'Hot leads this month',
+    entity_type: 'contact',
+    filters: { tag: 'hot-lead', created_after: '2026-02-01' },
+    is_shared: false,
+    created_at: '2026-02-10T00:00:00Z',
+    updated_at: '2026-02-10T00:00:00Z',
+  },
+  {
+    id: 'demo-search-2',
+    name: 'Available Eastern Suburbs',
+    entity_type: 'property',
+    filters: { status: 'available', suburbs: ['Bondi Beach', 'Bronte', 'Coogee'] },
+    is_shared: true,
+    created_at: '2026-02-05T00:00:00Z',
+    updated_at: '2026-02-05T00:00:00Z',
+  },
+];
+
 export const useSavedSearchStore = create<SavedSearchState>()((set) => ({
   savedSearches: [],
   isLoading: false,
@@ -33,7 +54,10 @@ export const useSavedSearchStore = create<SavedSearchState>()((set) => ({
     try {
       const { isDemo } = getTeamContext();
       if (isDemo) {
-        set({ isLoading: false });
+        const filtered = entityType
+          ? DEMO_SAVED_SEARCHES.filter((s) => s.entity_type === entityType)
+          : DEMO_SAVED_SEARCHES;
+        set({ savedSearches: filtered, isLoading: false });
         return;
       }
 

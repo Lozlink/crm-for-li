@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import {
   useTheme,
   Text,
@@ -13,7 +13,7 @@ import {
   TextInput,
 } from 'react-native-paper';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { useInspectionStore, useTaskStore } from '@realestate-crm/hooks';
+import { useInspectionStore, useTaskStore, useCRMStore } from '@realestate-crm/hooks';
 import type {
   InspectionType,
   InspectionStatus,
@@ -89,7 +89,9 @@ export default function InspectionDetailScreen() {
   const addAttendee = useInspectionStore(state => state.addAttendee);
   const updateAttendee = useInspectionStore(state => state.updateAttendee);
   const clearActiveInspection = useInspectionStore(state => state.clearActiveInspection);
+  const linkAttendeeToContact = useInspectionStore(state => state.linkAttendeeToContact);
 
+  const addContact = useCRMStore(state => state.addContact);
   const createFollowUpTasks = useTaskStore(state => state.createFollowUpTasks);
 
   // Check-in form state
@@ -99,6 +101,9 @@ export default function InspectionDetailScreen() {
   const [email, setEmail] = useState('');
   const [source, setSource] = useState<AttendeeSource>('walk_in');
   const [isCheckingIn, setIsCheckingIn] = useState(false);
+
+  // Attendee-to-contact conversion
+  const [convertingAttendeeId, setConvertingAttendeeId] = useState<string | null>(null);
 
   // End inspection dialog
   const [endDialogVisible, setEndDialogVisible] = useState(false);
@@ -167,6 +172,34 @@ export default function InspectionDetailScreen() {
       setIsCheckingIn(false);
     }
   }, [id, firstName, lastName, phone, email, source, addAttendee]);
+
+  const handleAttendeePress = useCallback(async (attendee: InspectionAttendee) => {
+    if (attendee.contact_id) {
+      router.push(`/contact/${attendee.contact_id}`);
+      return;
+    }
+
+    // No linked contact — create one and link
+    setConvertingAttendeeId(attendee.id);
+    try {
+      const newContact = await addContact({
+        first_name: attendee.first_name || '',
+        last_name: attendee.last_name || '',
+        phone: attendee.phone || '',
+        email: attendee.email || '',
+        address: '',
+      });
+      if (newContact) {
+        await linkAttendeeToContact(attendee.id, newContact.id);
+        router.push(`/contact/${newContact.id}`);
+      }
+    } catch (error) {
+      console.error('Convert attendee error:', error);
+      Alert.alert('Error', 'Failed to create contact from attendee.');
+    } finally {
+      setConvertingAttendeeId(null);
+    }
+  }, [addContact, linkAttendeeToContact, router]);
 
   const handleOpenEndDialog = useCallback(() => {
     // Initialize ratings for all attendees without one
@@ -420,16 +453,31 @@ export default function InspectionDetailScreen() {
                 const name = [attendee.first_name, attendee.last_name].filter(Boolean).join(' ');
                 const checkedInTime = attendee.created_at ? formatTime(attendee.created_at) : '';
                 const interestLevel = attendee.interest_level;
+                const isConverting = convertingAttendeeId === attendee.id;
 
                 return (
-                  <View key={attendee.id} style={styles.attendeeRow}>
+                  <TouchableOpacity
+                    key={attendee.id}
+                    style={styles.attendeeRow}
+                    onPress={() => handleAttendeePress(attendee)}
+                    disabled={isConverting}
+                  >
                     <View style={{ flex: 1 }}>
-                      <Text variant="bodyMedium" style={{ fontWeight: '600' }}>{name}</Text>
-                      {checkedInTime !== '' && (
-                        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                          Checked in {checkedInTime}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text variant="bodyMedium" style={{ fontWeight: '600', color: attendee.contact_id ? theme.colors.primary : theme.colors.onSurface }}>
+                          {name}
                         </Text>
-                      )}
+                        {!attendee.contact_id && !isConverting && (
+                          <Icon name="account-plus-outline" size={14} color={theme.colors.onSurfaceVariant} />
+                        )}
+                        {isConverting && (
+                          <ActivityIndicator size={14} />
+                        )}
+                      </View>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {attendee.contact_id ? 'View contact' : 'Tap to create contact'}
+                        {checkedInTime ? ` · ${checkedInTime}` : ''}
+                      </Text>
                     </View>
                     {interestLevel && (
                       <Chip
@@ -440,7 +488,8 @@ export default function InspectionDetailScreen() {
                         {INTEREST_LABELS[interestLevel]}
                       </Chip>
                     )}
-                  </View>
+                    <Icon name="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
+                  </TouchableOpacity>
                 );
               })}
             </Surface>

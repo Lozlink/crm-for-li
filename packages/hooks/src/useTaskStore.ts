@@ -39,6 +39,67 @@ function getTeamContext() {
   };
 }
 
+const now = new Date();
+const tomorrow = new Date(now);
+tomorrow.setDate(tomorrow.getDate() + 1);
+tomorrow.setHours(9, 0, 0, 0);
+const yesterday = new Date(now);
+yesterday.setDate(yesterday.getDate() - 1);
+
+const DEMO_TASKS: Task[] = [
+  {
+    id: 'demo-task-1',
+    title: 'Follow up with Sarah Chen about 42 Harbour Street',
+    type: 'follow_up',
+    status: 'pending',
+    priority: 'high',
+    due_at: tomorrow.toISOString(),
+    created_at: now.toISOString(),
+    updated_at: now.toISOString(),
+  },
+  {
+    id: 'demo-task-2',
+    title: 'Prepare CMA for 23 Victoria Avenue appraisal',
+    type: 'task',
+    status: 'pending',
+    priority: 'normal',
+    due_at: tomorrow.toISOString(),
+    created_at: now.toISOString(),
+    updated_at: now.toISOString(),
+  },
+  {
+    id: 'demo-task-3',
+    title: 'Call vendor re: 7 Ocean Road offer update',
+    type: 'follow_up',
+    status: 'overdue',
+    priority: 'high',
+    due_at: yesterday.toISOString(),
+    created_at: yesterday.toISOString(),
+    updated_at: yesterday.toISOString(),
+  },
+  {
+    id: 'demo-task-4',
+    title: 'Schedule photographer for Crown Street listing',
+    type: 'task',
+    status: 'pending',
+    priority: 'low',
+    due_at: new Date(now.getTime() + 3 * 86400000).toISOString(),
+    created_at: now.toISOString(),
+    updated_at: now.toISOString(),
+  },
+  {
+    id: 'demo-task-5',
+    title: 'Send inspection feedback to attendees',
+    type: 'follow_up',
+    status: 'completed',
+    priority: 'normal',
+    due_at: yesterday.toISOString(),
+    completed_at: yesterday.toISOString(),
+    created_at: new Date(now.getTime() - 2 * 86400000).toISOString(),
+    updated_at: yesterday.toISOString(),
+  },
+];
+
 export const useTaskStore = create<TaskState>()((set, get) => ({
   tasks: [],
   todaysTasks: [],
@@ -49,7 +110,10 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { isDemo, teamId } = getTeamContext();
-      if (isDemo) { set({ isLoading: false }); return; }
+      if (isDemo) {
+        set({ tasks: DEMO_TASKS, isLoading: false });
+        return;
+      }
 
       let query = supabase
         .from('tasks')
@@ -76,7 +140,13 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { isDemo, teamId, userId } = getTeamContext();
-      if (isDemo) { set({ isLoading: false }); return; }
+      if (isDemo) {
+        set({
+          todaysTasks: DEMO_TASKS.filter((t) => t.status === 'pending' || t.status === 'overdue'),
+          isLoading: false,
+        });
+        return;
+      }
 
       const now = new Date();
       const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();

@@ -8,7 +8,31 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useCRMStore, useSavedSearchStore } from '@realestate-crm/hooks';
 import { ContactCard } from '@realestate-crm/ui';
-import { Contact } from '@realestate-crm/types';
+import type { Contact, ContactSource, ContactType, ContactStatus } from '@realestate-crm/types';
+
+const SOURCE_OPTIONS: { label: string; value: ContactSource }[] = [
+  { label: 'Referral', value: 'referral' },
+  { label: 'Web', value: 'web' },
+  { label: 'Walk-in', value: 'walk_in' },
+  { label: 'Portal', value: 'portal' },
+  { label: 'Phone', value: 'phone' },
+  { label: 'Import', value: 'import' },
+];
+
+const CONTACT_TYPE_OPTIONS: { label: string; value: ContactType }[] = [
+  { label: 'Buyer', value: 'buyer' },
+  { label: 'Seller', value: 'seller' },
+  { label: 'Tenant', value: 'tenant' },
+  { label: 'Landlord', value: 'landlord' },
+  { label: 'Investor', value: 'investor' },
+  { label: 'Other', value: 'other' },
+];
+
+const STATUS_OPTIONS: { label: string; value: ContactStatus }[] = [
+  { label: 'Active', value: 'active' },
+  { label: 'Inactive', value: 'inactive' },
+  { label: 'Archived', value: 'archived' },
+];
 
 interface ContactFilters {
   tagIds: string[];
@@ -16,6 +40,9 @@ interface ContactFilters {
   hasPhone: boolean;
   createdAfter: string;
   createdBefore: string;
+  sources: ContactSource[];
+  contactTypes: ContactType[];
+  statuses: ContactStatus[];
 }
 
 const DEFAULT_FILTERS: ContactFilters = {
@@ -24,6 +51,9 @@ const DEFAULT_FILTERS: ContactFilters = {
   hasPhone: false,
   createdAfter: '',
   createdBefore: '',
+  sources: [],
+  contactTypes: [],
+  statuses: ['active'],
 };
 
 function hasActiveFilters(filters: ContactFilters): boolean {
@@ -32,7 +62,11 @@ function hasActiveFilters(filters: ContactFilters): boolean {
     filters.hasEmail ||
     filters.hasPhone ||
     filters.createdAfter !== '' ||
-    filters.createdBefore !== ''
+    filters.createdBefore !== '' ||
+    filters.sources.length > 0 ||
+    filters.contactTypes.length > 0 ||
+    // Default status is ['active'], so only "active" if it differs from that
+    !(filters.statuses.length === 1 && filters.statuses[0] === 'active')
   );
 }
 
@@ -43,6 +77,9 @@ function filtersToRecord(filters: ContactFilters): Record<string, unknown> {
   if (filters.hasPhone) record.hasPhone = true;
   if (filters.createdAfter) record.createdAfter = filters.createdAfter;
   if (filters.createdBefore) record.createdBefore = filters.createdBefore;
+  if (filters.sources.length > 0) record.sources = filters.sources;
+  if (filters.contactTypes.length > 0) record.contactTypes = filters.contactTypes;
+  if (filters.statuses.length > 0) record.statuses = filters.statuses;
   return record;
 }
 
@@ -53,6 +90,9 @@ function recordToFilters(record: Record<string, unknown>): ContactFilters {
     hasPhone: (record.hasPhone as boolean) || false,
     createdAfter: (record.createdAfter as string) || '',
     createdBefore: (record.createdBefore as string) || '',
+    sources: (record.sources as ContactSource[]) || [],
+    contactTypes: (record.contactTypes as ContactType[]) || [],
+    statuses: (record.statuses as ContactStatus[]) || ['active'],
   };
 }
 
@@ -125,6 +165,28 @@ export default function ContactsScreen() {
       // Created before filter
       if (filters.createdBefore && contact.created_at) {
         if (contact.created_at > filters.createdBefore) {
+          return false;
+        }
+      }
+
+      // Source filter
+      if (filters.sources.length > 0) {
+        if (!contact.source || !filters.sources.includes(contact.source)) {
+          return false;
+        }
+      }
+
+      // Contact type filter
+      if (filters.contactTypes.length > 0) {
+        if (!contact.contact_type || !filters.contactTypes.includes(contact.contact_type)) {
+          return false;
+        }
+      }
+
+      // Status filter
+      if (filters.statuses.length > 0) {
+        const contactStatus = contact.status ?? 'active';
+        if (!filters.statuses.includes(contactStatus)) {
           return false;
         }
       }
@@ -209,6 +271,27 @@ export default function ContactsScreen() {
     if (filters.hasPhone) labels.push('Has Phone');
     if (filters.createdAfter) labels.push(`After ${filters.createdAfter}`);
     if (filters.createdBefore) labels.push(`Before ${filters.createdBefore}`);
+    if (filters.sources.length > 0) {
+      const sourceLabels = filters.sources.map(s => {
+        const found = SOURCE_OPTIONS.find(o => o.value === s);
+        return found ? found.label : s;
+      });
+      labels.push(`Source: ${sourceLabels.join(', ')}`);
+    }
+    if (filters.contactTypes.length > 0) {
+      const typeLabels = filters.contactTypes.map(t => {
+        const found = CONTACT_TYPE_OPTIONS.find(o => o.value === t);
+        return found ? found.label : t;
+      });
+      labels.push(`Type: ${typeLabels.join(', ')}`);
+    }
+    if (filters.statuses.length > 0 && !(filters.statuses.length === 1 && filters.statuses[0] === 'active')) {
+      const statusLabels = filters.statuses.map(s => {
+        const found = STATUS_OPTIONS.find(o => o.value === s);
+        return found ? found.label : s;
+      });
+      labels.push(`Status: ${statusLabels.join(', ')}`);
+    }
     return labels;
   }, [filters, tags]);
 
@@ -422,6 +505,75 @@ export default function ContactsScreen() {
                   placeholder="e.g. 2025-12-31"
                   style={{ marginTop: 8 }}
                 />
+
+                {/* Source */}
+                <Text variant="labelLarge" style={styles.sectionLabel}>Source</Text>
+                <View style={styles.filterRow}>
+                  {SOURCE_OPTIONS.map(opt => (
+                    <Chip
+                      key={opt.value}
+                      selected={draftFilters.sources.includes(opt.value)}
+                      onPress={() =>
+                        setDraftFilters(prev => ({
+                          ...prev,
+                          sources: prev.sources.includes(opt.value)
+                            ? prev.sources.filter(s => s !== opt.value)
+                            : [...prev.sources, opt.value],
+                        }))
+                      }
+                      compact
+                      style={styles.filterChip}
+                    >
+                      {opt.label}
+                    </Chip>
+                  ))}
+                </View>
+
+                {/* Contact Type */}
+                <Text variant="labelLarge" style={styles.sectionLabel}>Contact Type</Text>
+                <View style={styles.filterRow}>
+                  {CONTACT_TYPE_OPTIONS.map(opt => (
+                    <Chip
+                      key={opt.value}
+                      selected={draftFilters.contactTypes.includes(opt.value)}
+                      onPress={() =>
+                        setDraftFilters(prev => ({
+                          ...prev,
+                          contactTypes: prev.contactTypes.includes(opt.value)
+                            ? prev.contactTypes.filter(t => t !== opt.value)
+                            : [...prev.contactTypes, opt.value],
+                        }))
+                      }
+                      compact
+                      style={styles.filterChip}
+                    >
+                      {opt.label}
+                    </Chip>
+                  ))}
+                </View>
+
+                {/* Status */}
+                <Text variant="labelLarge" style={styles.sectionLabel}>Status</Text>
+                <View style={styles.filterRow}>
+                  {STATUS_OPTIONS.map(opt => (
+                    <Chip
+                      key={opt.value}
+                      selected={draftFilters.statuses.includes(opt.value)}
+                      onPress={() =>
+                        setDraftFilters(prev => ({
+                          ...prev,
+                          statuses: prev.statuses.includes(opt.value)
+                            ? prev.statuses.filter(s => s !== opt.value)
+                            : [...prev.statuses, opt.value],
+                        }))
+                      }
+                      compact
+                      style={styles.filterChip}
+                    >
+                      {opt.label}
+                    </Chip>
+                  ))}
+                </View>
               </View>
             </ScrollView>
           </Dialog.ScrollArea>

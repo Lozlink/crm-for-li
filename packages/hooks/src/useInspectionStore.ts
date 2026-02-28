@@ -26,6 +26,7 @@ interface InspectionState {
   ) => Promise<InspectionAttendee | null>;
   updateAttendee: (attendeeId: string, updates: { interest_level?: InterestLevel; feedback?: string }) => Promise<void>;
   removeAttendee: (attendeeId: string) => Promise<void>;
+  linkAttendeeToContact: (attendeeId: string, contactId: string) => Promise<void>;
   clearActiveInspection: () => void;
 }
 
@@ -37,6 +38,82 @@ function getTeamContext() {
     isDemo: authState.isDemoMode || isDemoMode,
   };
 }
+
+const upcomingDate = new Date();
+upcomingDate.setDate(upcomingDate.getDate() + 2);
+upcomingDate.setHours(10, 0, 0, 0);
+
+const pastDate = new Date();
+pastDate.setDate(pastDate.getDate() - 3);
+pastDate.setHours(14, 0, 0, 0);
+
+const DEMO_INSPECTIONS: Inspection[] = [
+  {
+    id: 'demo-insp-1',
+    property_id: 'demo-prop-1',
+    scheduled_at: upcomingDate.toISOString(),
+    duration_minutes: 30,
+    type: 'open_home',
+    status: 'scheduled',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    property: {
+      id: 'demo-prop-1',
+      address: '42 Harbour Street',
+      suburb: 'Sydney',
+    } as Inspection['property'],
+  },
+  {
+    id: 'demo-insp-2',
+    property_id: 'demo-prop-2',
+    scheduled_at: pastDate.toISOString(),
+    duration_minutes: 45,
+    type: 'private',
+    status: 'completed',
+    created_at: pastDate.toISOString(),
+    updated_at: pastDate.toISOString(),
+    property: {
+      id: 'demo-prop-2',
+      address: '7 Ocean Road',
+      suburb: 'Bondi Beach',
+    } as Inspection['property'],
+  },
+];
+
+const DEMO_ATTENDEES: InspectionAttendee[] = [
+  {
+    id: 'demo-att-1',
+    inspection_id: 'demo-insp-2',
+    contact_id: 'demo-contact-1',
+    first_name: 'Sarah',
+    last_name: 'Chen',
+    phone: '0412 345 678',
+    email: 'sarah.chen@example.com',
+    source: 'registered',
+    interest_level: 'hot',
+    created_at: pastDate.toISOString(),
+  },
+  {
+    id: 'demo-att-2',
+    inspection_id: 'demo-insp-2',
+    first_name: 'James',
+    last_name: 'Wilson',
+    phone: '0423 456 789',
+    source: 'walk_in',
+    interest_level: 'warm',
+    created_at: pastDate.toISOString(),
+  },
+  {
+    id: 'demo-att-3',
+    inspection_id: 'demo-insp-2',
+    first_name: 'Mei',
+    last_name: 'Tan',
+    email: 'mei.tan@example.com',
+    source: 'invited',
+    interest_level: 'cold',
+    created_at: pastDate.toISOString(),
+  },
+];
 
 export const useInspectionStore = create<InspectionState>()((set, get) => ({
   inspections: [],
@@ -50,7 +127,13 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { isDemo, teamId } = getTeamContext();
-      if (isDemo) { set({ isLoading: false }); return; }
+      if (isDemo) {
+        const filtered = propertyId
+          ? DEMO_INSPECTIONS.filter((i) => i.property_id === propertyId)
+          : DEMO_INSPECTIONS;
+        set({ inspections: filtered, isLoading: false });
+        return;
+      }
 
       let query = supabase
         .from('inspections')
@@ -73,7 +156,13 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { isDemo, teamId } = getTeamContext();
-      if (isDemo) { set({ isLoading: false }); return; }
+      if (isDemo) {
+        set({
+          upcomingInspections: DEMO_INSPECTIONS.filter((i) => i.status === 'scheduled'),
+          isLoading: false,
+        });
+        return;
+      }
 
       let query = supabase
         .from('inspections')
@@ -97,7 +186,12 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { isDemo } = getTeamContext();
-      if (isDemo) { set({ isLoading: false }); return; }
+      if (isDemo) {
+        const inspection = DEMO_INSPECTIONS.find((i) => i.id === inspectionId) || null;
+        const attendeeList = DEMO_ATTENDEES.filter((a) => a.inspection_id === inspectionId);
+        set({ activeInspection: inspection, attendees: attendeeList, isLoading: false });
+        return;
+      }
 
       const { data, error } = await supabase
         .from('inspections')
@@ -275,6 +369,36 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
       set((state) => ({ attendees: state.attendees.filter((a) => a.id !== attendeeId) }));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to remove attendee';
+      set({ error: message });
+    }
+  },
+
+  linkAttendeeToContact: async (attendeeId, contactId) => {
+    try {
+      const { isDemo } = getTeamContext();
+      if (isDemo) {
+        set((state) => ({
+          attendees: state.attendees.map((a) =>
+            a.id === attendeeId ? { ...a, contact_id: contactId } : a
+          ),
+        }));
+        return;
+      }
+
+      const { error } = await supabase
+        .from('inspection_attendees')
+        .update({ contact_id: contactId })
+        .eq('id', attendeeId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        attendees: state.attendees.map((a) =>
+          a.id === attendeeId ? { ...a, contact_id: contactId } : a
+        ),
+      }));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to link attendee to contact';
       set({ error: message });
     }
   },

@@ -1,5 +1,8 @@
 // Entities
-export type { Tag, Contact, Activity, ActivityWithContact, ContactFormData } from './entities';
+export type {
+  Tag, Contact, Activity, ActivityWithContact, ContactFormData,
+  ContactSource, ContactType, ContactStatus, PreferredContactMethod,
+} from './entities';
 export type { Route, RouteStop, RouteStatus, RouteMode, StopStatus, StreetStats } from './entities';
 export type { TrackingSession, TrackingBreadcrumb, TrackingAnnotation } from './entities';
 export type {

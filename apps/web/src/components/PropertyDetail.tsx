@@ -178,7 +178,9 @@ export default function PropertyDetail({ propertyId }: PropertyDetailProps) {
   const activeInspection = useInspectionStore((s) => s.activeInspection);
   const attendees = useInspectionStore((s) => s.attendees);
   const updateAttendee = useInspectionStore((s) => s.updateAttendee);
+  const linkAttendeeToContact = useInspectionStore((s) => s.linkAttendeeToContact);
   const isInspectionLoading = useInspectionStore((s) => s.isLoading);
+  const addContact = useCRMStore((s) => s.addContact);
 
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -209,6 +211,7 @@ export default function PropertyDetail({ propertyId }: PropertyDetailProps) {
   const [inspectionDuration, setInspectionDuration] = useState('30');
   const [creatingInspection, setCreatingInspection] = useState(false);
   const [expandedInspectionId, setExpandedInspectionId] = useState<string | null>(null);
+  const [convertingAttendeeId, setConvertingAttendeeId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProperty(propertyId);
@@ -365,6 +368,24 @@ export default function PropertyDetail({ propertyId }: PropertyDetailProps) {
   const handleInterestLevelChange = useCallback(async (attendeeId: string, level: InterestLevel) => {
     await updateAttendee(attendeeId, { interest_level: level });
   }, [updateAttendee]);
+
+  const handleConvertAttendeeToContact = useCallback(async (att: { id: string; first_name?: string; last_name?: string; phone?: string; email?: string }) => {
+    setConvertingAttendeeId(att.id);
+    try {
+      const newContact = await addContact({
+        first_name: att.first_name || '',
+        last_name: att.last_name || '',
+        phone: att.phone || '',
+        email: att.email || '',
+        address: '',
+      });
+      if (newContact) {
+        await linkAttendeeToContact(att.id, newContact.id);
+      }
+    } finally {
+      setConvertingAttendeeId(null);
+    }
+  }, [addContact, linkAttendeeToContact]);
 
   if (isLoading) {
     return (
@@ -1087,7 +1108,16 @@ export default function PropertyDetail({ propertyId }: PropertyDetailProps) {
                                               {attName}
                                             </Link>
                                           ) : (
-                                            <span className="font-medium text-gray-700">{attName}</span>
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-medium text-gray-700">{attName}</span>
+                                              <button
+                                                onClick={() => handleConvertAttendeeToContact(att)}
+                                                disabled={convertingAttendeeId === att.id}
+                                                className="rounded bg-primary-50 px-1.5 py-0.5 text-[10px] font-medium text-primary-600 hover:bg-primary-100 disabled:opacity-50"
+                                              >
+                                                {convertingAttendeeId === att.id ? 'Creating...' : 'Create Contact'}
+                                              </button>
+                                            </div>
                                           )}
                                         </td>
                                         <td className="py-2 pr-3 text-gray-600">{attPhone}</td>
