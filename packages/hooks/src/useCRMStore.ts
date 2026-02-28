@@ -377,7 +377,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       const { data, error } = await supabase
         .from('contacts')
         .insert(insertData)
-        .select('*, tag:tags(*)')
+        .select('*, tag:tags!contacts_tag_id_fkey(*)')
         .single();
 
       if (error) throw error;
@@ -738,7 +738,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       const { data, error } = await supabase
         .from('contacts')
         .insert(insertData)
-        .select('*, tag:tags(*)');
+        .select('*, tag:tags!contacts_tag_id_fkey(*)');
 
       if (error) throw error;
 
