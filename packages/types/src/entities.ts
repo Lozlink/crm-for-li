@@ -7,6 +7,11 @@ export interface Tag {
   created_at?: string;
 }
 
+export type ContactSource = 'referral' | 'web' | 'walk_in' | 'portal' | 'phone' | 'import';
+export type ContactType = 'buyer' | 'seller' | 'tenant' | 'landlord' | 'investor' | 'other';
+export type ContactStatus = 'active' | 'inactive' | 'archived';
+export type PreferredContactMethod = 'phone' | 'email' | 'sms';
+
 export interface Contact {
   id: string;
   first_name: string;
@@ -21,6 +26,19 @@ export interface Contact {
   tags?: Tag[];
   user_id?: string;
   team_id?: string;
+  // Enrichment fields
+  source?: ContactSource;
+  contact_type?: ContactType;
+  company_name?: string;
+  title?: string;
+  preferred_contact_method?: PreferredContactMethod;
+  do_not_contact?: boolean;
+  notes?: string;
+  // Lifecycle fields
+  status?: ContactStatus;
+  lead_score?: number;
+  last_contacted_at?: string;
+  next_follow_up_at?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -50,6 +68,12 @@ export interface ContactFormData {
   tag_id?: string;
   tag_ids?: string[];
   initial_note?: string;
+  source?: ContactSource;
+  contact_type?: ContactType;
+  company_name?: string;
+  title?: string;
+  preferred_contact_method?: PreferredContactMethod;
+  notes?: string;
 }
 
 export type RouteStatus = 'planned' | 'in_progress' | 'completed';

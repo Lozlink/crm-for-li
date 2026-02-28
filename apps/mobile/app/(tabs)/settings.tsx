@@ -200,6 +200,112 @@ export default function SettingsScreen() {
         />
       </Surface>
 
+      {/* Organisation Section */}
+      {!isDemo && (
+        <>
+          <Divider style={styles.divider} />
+          <Surface style={styles.orgCard} elevation={1}>
+            <View style={styles.orgHeader}>
+              <Text variant="titleMedium" style={styles.sectionTitle}>Organisation</Text>
+            </View>
+
+            {!activeOrg ? (
+              <View>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
+                  Organisations let you group multiple teams/offices under one admin umbrella.
+                </Text>
+                <Button
+                  mode="contained"
+                  onPress={() => setShowCreateOrg(true)}
+                  icon="office-building-plus"
+                >
+                  Create Organisation
+                </Button>
+              </View>
+            ) : (
+              <View>
+                <View style={styles.orgInfoRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="titleSmall">{activeOrg.name}</Text>
+                    {activeOrgMembership && (
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {activeOrgMembership.role === 'org_admin' ? 'Admin' : 'Member'}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={styles.orgBadge}>
+                    <Text variant="labelSmall" style={{ color: theme.colors.primary }}>
+                      {orgMemberCount} {orgMemberCount === 1 ? 'member' : 'members'}
+                    </Text>
+                  </View>
+                </View>
+
+                <List.Item
+                  title="Manage Teams"
+                  description={`${orgTeams.filter(t => t.organisation_id === activeOrg.id).length} teams`}
+                  left={props => <List.Icon {...props} icon="office-building" />}
+                  right={props => <List.Icon {...props} icon="chevron-right" />}
+                  onPress={() => handleViewOrgTeams(activeOrg.id)}
+                  style={styles.listItem}
+                />
+              </View>
+            )}
+          </Surface>
+        </>
+      )}
+
+      {/* Create Organisation Dialog */}
+      <Portal>
+        <Dialog visible={showCreateOrg} onDismiss={() => setShowCreateOrg(false)}>
+          <Dialog.Title>Create Organisation</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Organisation Name"
+              value={newOrgName}
+              onChangeText={setNewOrgName}
+              mode="outlined"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowCreateOrg(false)}>Cancel</Button>
+            <Button
+              onPress={handleCreateOrg}
+              disabled={creatingOrg || !newOrgName.trim()}
+              loading={creatingOrg}
+            >
+              Create
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Org Teams Dialog */}
+      <Portal>
+        <Dialog visible={showOrgTeams} onDismiss={() => setShowOrgTeams(false)}>
+          <Dialog.Title>{activeOrg?.name} - Teams</Dialog.Title>
+          <Dialog.Content>
+            {orgTeams.filter(t => activeOrg && t.organisation_id === activeOrg.id).length === 0 ? (
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                No teams in this organisation yet.
+              </Text>
+            ) : (
+              orgTeams
+                .filter(t => activeOrg && t.organisation_id === activeOrg.id)
+                .map(team => (
+                  <List.Item
+                    key={team.id}
+                    title={team.name}
+                    left={props => <List.Icon {...props} icon="account-group" />}
+                  />
+                ))
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowOrgTeams(false)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
       <Divider style={styles.divider} />
 
       <Surface style={styles.infoCard} elevation={1}>

@@ -2,7 +2,13 @@
 
 import { useState, useCallback } from 'react';
 import { useCRMStore } from '@realestate-crm/hooks';
-import type { Contact } from '@realestate-crm/types';
+import type {
+  Contact,
+  ContactSource,
+  ContactType,
+  ContactStatus,
+  PreferredContactMethod,
+} from '@realestate-crm/types';
 import AddressAutocomplete from './AddressAutocomplete';
 
 interface ContactFormDialogProps {
@@ -11,6 +17,36 @@ interface ContactFormDialogProps {
   prefillAddress?: string;
   prefillCoords?: { lat: number; lng: number };
 }
+
+const SOURCE_OPTIONS: { value: ContactSource; label: string }[] = [
+  { value: 'referral', label: 'Referral' },
+  { value: 'web', label: 'Web' },
+  { value: 'walk_in', label: 'Walk In' },
+  { value: 'portal', label: 'Portal' },
+  { value: 'phone', label: 'Phone' },
+  { value: 'import', label: 'Import' },
+];
+
+const TYPE_OPTIONS: { value: ContactType; label: string }[] = [
+  { value: 'buyer', label: 'Buyer' },
+  { value: 'seller', label: 'Seller' },
+  { value: 'tenant', label: 'Tenant' },
+  { value: 'landlord', label: 'Landlord' },
+  { value: 'investor', label: 'Investor' },
+  { value: 'other', label: 'Other' },
+];
+
+const STATUS_OPTIONS: { value: ContactStatus; label: string }[] = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'archived', label: 'Archived' },
+];
+
+const CONTACT_METHOD_OPTIONS: { value: PreferredContactMethod; label: string }[] = [
+  { value: 'phone', label: 'Phone' },
+  { value: 'email', label: 'Email' },
+  { value: 'sms', label: 'SMS' },
+];
 
 export default function ContactFormDialog({
   contact,
@@ -37,6 +73,19 @@ export default function ContactFormDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // New enrichment fields
+  const [source, setSource] = useState<ContactSource | ''>(contact?.source || '');
+  const [contactType, setContactType] = useState<ContactType | ''>(contact?.contact_type || '');
+  const [companyName, setCompanyName] = useState(contact?.company_name || '');
+  const [title, setTitle] = useState(contact?.title || '');
+  const [preferredContactMethod, setPreferredContactMethod] = useState<PreferredContactMethod | ''>(contact?.preferred_contact_method || '');
+  const [doNotContact, setDoNotContact] = useState(contact?.do_not_contact || false);
+  const [notes, setNotes] = useState(contact?.notes || '');
+  const [status, setStatus] = useState<ContactStatus | ''>(contact?.status || '');
+  const [nextFollowUpAt, setNextFollowUpAt] = useState(
+    contact?.next_follow_up_at ? contact.next_follow_up_at.split('T')[0] : ''
+  );
+
   const isEditing = !!contact;
 
   const handleSubmit = useCallback(
@@ -51,6 +100,18 @@ export default function ContactFormDialog({
       setError('');
 
       try {
+        const enrichmentFields: Partial<Contact> = {
+          source: source || undefined,
+          contact_type: contactType || undefined,
+          company_name: companyName.trim() || undefined,
+          title: title.trim() || undefined,
+          preferred_contact_method: preferredContactMethod || undefined,
+          do_not_contact: doNotContact,
+          notes: notes.trim() || undefined,
+          status: status || undefined,
+          next_follow_up_at: nextFollowUpAt ? new Date(nextFollowUpAt + 'T00:00:00').toISOString() : undefined,
+        };
+
         if (isEditing) {
           await updateContact(contact.id, {
             first_name: firstName.trim(),
@@ -60,6 +121,7 @@ export default function ContactFormDialog({
             address: address.trim() || undefined,
             tag_id: selectedTags[0] || undefined,
             tags: tags.filter((t) => selectedTags.includes(t.id)),
+            ...enrichmentFields,
           });
         } else {
           const newContact = await addContact({
@@ -72,6 +134,7 @@ export default function ContactFormDialog({
             tags: tags.filter((t) => selectedTags.includes(t.id)),
             latitude: coords?.lat,
             longitude: coords?.lng,
+            ...enrichmentFields,
           });
           if (newContact && note.trim()) {
             await addActivity({
@@ -82,8 +145,9 @@ export default function ContactFormDialog({
           }
         }
         onClose();
-      } catch (err: any) {
-        setError(err.message || 'Failed to save contact');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to save contact';
+        setError(message);
       } finally {
         setSaving(false);
       }
@@ -104,14 +168,23 @@ export default function ContactFormDialog({
       updateContact,
       onClose,
       coords,
+      source,
+      contactType,
+      companyName,
+      title,
+      preferredContactMethod,
+      doNotContact,
+      notes,
+      status,
+      nextFollowUpAt,
     ]
   );
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
-      <div className="mx-4 w-full max-w-lg rounded-xl bg-white shadow-xl">
+      <div className="mx-4 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 rounded-t-xl">
           <h2 className="text-lg font-semibold text-gray-900">
             {isEditing ? 'Edit Contact' : 'New Contact'}
           </h2>
@@ -198,6 +271,126 @@ export default function ContactFormDialog({
               />
             </div>
 
+            {/* Company & Title */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Company
+                </label>
+                <input
+                  type="text"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+
+            {/* Source & Contact Type */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Source
+                </label>
+                <select
+                  value={source}
+                  onChange={(e) => setSource(e.target.value as ContactSource | '')}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                >
+                  <option value="">Select...</option>
+                  {SOURCE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Contact Type
+                </label>
+                <select
+                  value={contactType}
+                  onChange={(e) => setContactType(e.target.value as ContactType | '')}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                >
+                  <option value="">Select...</option>
+                  {TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Preferred Contact Method & Status */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Preferred Contact
+                </label>
+                <select
+                  value={preferredContactMethod}
+                  onChange={(e) => setPreferredContactMethod(e.target.value as PreferredContactMethod | '')}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                >
+                  <option value="">Select...</option>
+                  {CONTACT_METHOD_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Status
+                </label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as ContactStatus | '')}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                >
+                  <option value="">Select...</option>
+                  {STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Next Follow-up & Do Not Contact */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Next Follow-up
+                </label>
+                <input
+                  type="date"
+                  value={nextFollowUpAt}
+                  onChange={(e) => setNextFollowUpAt(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </div>
+              <div className="flex items-end pb-2">
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={doNotContact}
+                    onChange={(e) => setDoNotContact(e.target.checked)}
+                    className="rounded border-gray-300"
+                  />
+                  Do Not Contact
+                </label>
+              </div>
+            </div>
+
             {/* Tags (multi-select) */}
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
@@ -265,16 +458,30 @@ export default function ContactFormDialog({
               </div>
             </div>
 
-            {/* Note */}
+            {/* Notes */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Notes
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="Contact notes..."
+              />
+            </div>
+
+            {/* Initial note for new contacts */}
             {!isEditing && (
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Note
+                  Initial Activity Note
                 </label>
                 <textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  rows={3}
+                  rows={2}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                   placeholder="Add an initial note..."
                 />

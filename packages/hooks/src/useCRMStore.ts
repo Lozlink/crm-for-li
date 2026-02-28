@@ -617,11 +617,20 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
           team_id: teamId || undefined,
           created_at: new Date().toISOString(),
         };
-        set(state => ({ activities: [newActivity, ...state.activities] }));
+        set(state => ({
+          activities: [newActivity, ...state.activities],
+          contacts: ['call', 'meeting', 'email'].includes(activity.type)
+            ? state.contacts.map((c) =>
+                c.id === activity.contact_id
+                  ? { ...c, last_contacted_at: new Date().toISOString() }
+                  : c
+              )
+            : state.contacts,
+        }));
         return newActivity;
       }
 
-      const insertData: any = { ...activity };
+      const insertData: Record<string, unknown> = { ...activity };
       if (teamId) insertData.team_id = teamId;
       if (userId) insertData.user_id = userId;
 
@@ -633,7 +642,23 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
       if (error) throw error;
 
-      set(state => ({ activities: [data, ...state.activities] }));
+      // Auto-update last_contacted_at for communication activities
+      if (['call', 'meeting', 'email'].includes(activity.type)) {
+        const now = new Date().toISOString();
+        await supabase
+          .from('contacts')
+          .update({ last_contacted_at: now })
+          .eq('id', activity.contact_id);
+
+        set(state => ({
+          activities: [data, ...state.activities],
+          contacts: state.contacts.map((c) =>
+            c.id === activity.contact_id ? { ...c, last_contacted_at: now } : c
+          ),
+        }));
+      } else {
+        set(state => ({ activities: [data, ...state.activities] }));
+      }
       return data;
     } catch (error: any) {
       set({ error: error.message });

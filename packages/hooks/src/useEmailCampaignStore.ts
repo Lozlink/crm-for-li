@@ -32,6 +32,34 @@ function getTeamContext() {
   };
 }
 
+const DEMO_CAMPAIGNS: EmailCampaign[] = [
+  {
+    id: 'demo-campaign-1',
+    name: 'New Listings - February',
+    subject: 'Hot new listings in your area',
+    body_html: '<h1>New Listings</h1><p>Check out the latest properties we have available.</p>',
+    status: 'draft',
+    created_at: '2026-02-20T00:00:00Z',
+    updated_at: '2026-02-20T00:00:00Z',
+    recipient_count: 45,
+    sent_count: 0,
+    opened_count: 0,
+  },
+  {
+    id: 'demo-campaign-2',
+    name: 'January Market Update',
+    subject: 'Your monthly market snapshot',
+    body_text: 'Here is your January market update for the Eastern Suburbs.',
+    status: 'sent',
+    sent_at: '2026-01-31T09:00:00Z',
+    created_at: '2026-01-28T00:00:00Z',
+    updated_at: '2026-01-31T09:00:00Z',
+    recipient_count: 120,
+    sent_count: 118,
+    opened_count: 67,
+  },
+];
+
 export const useEmailCampaignStore = create<EmailCampaignState>()((set, get) => ({
   campaigns: [],
   activeCampaign: null,
@@ -43,7 +71,10 @@ export const useEmailCampaignStore = create<EmailCampaignState>()((set, get) => 
     set({ isLoading: true, error: null });
     try {
       const { isDemo, teamId } = getTeamContext();
-      if (isDemo) { set({ isLoading: false }); return; }
+      if (isDemo) {
+        set({ campaigns: DEMO_CAMPAIGNS, isLoading: false });
+        return;
+      }
 
       let query = supabase
         .from('email_campaigns')
@@ -212,19 +243,16 @@ export const useEmailCampaignStore = create<EmailCampaignState>()((set, get) => 
       // Set status to sending
       await get().updateCampaign(campaignId, { status: 'sending' });
 
-      // Call Supabase Edge Function to handle actual email sending
+      // TODO: Create Supabase Edge Function `send-campaign` to handle actual email delivery
       const { error } = await supabase.functions.invoke('send-campaign', {
         body: { campaign_id: campaignId },
       });
 
       if (error) throw error;
 
-      // Status will be updated to 'sent' by the edge function on completion
       await get().fetchCampaign(campaignId);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to send campaign';
-      set({ error: message });
-      // Revert status on error
+      set({ error: 'Email sending is not yet configured. The campaign has been saved as a draft.' });
       await get().updateCampaign(campaignId, { status: 'draft' });
     }
   },
