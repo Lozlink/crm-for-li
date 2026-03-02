@@ -87,21 +87,10 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         return;
       }
 
-      const session = await apiGetSession();
-      if (session?.user) {
-        const profile = await apiGetProfile();
-        set({
-          session,
-          user: session.user,
-          profile,
-          isAuthenticated: true,
-        });
-
-        // Fetch memberships and set active team
-        await get().fetchMemberships();
-      }
-
-      // Listen for auth changes (only set up once)
+      // Set up auth listener FIRST so token refreshes are always captured,
+      // even if subsequent API calls (e.g. fetchMemberships) fail.
+      // This prevents a dead-end state where the user is "authenticated"
+      // but has no memberships and no listener to recover from token refresh.
       if (!authSubscription) {
         const { data } = onAuthStateChange(async (event, session) => {
           if (event === 'SIGNED_OUT') {
@@ -117,9 +106,44 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
             });
           } else if (session?.user) {
             set({ session, user: session.user, isAuthenticated: true });
+
+            // Recovery: if memberships haven't been loaded (e.g. init failed
+            // due to expired token and Supabase later refreshed it), fetch now
+            if (get().memberships.length === 0 && !get().activeTeam) {
+              try {
+                if (!get().profile) {
+                  const profile = await apiGetProfile();
+                  set({ profile });
+                }
+                await get().fetchMemberships();
+                set({ authError: null });
+              } catch {
+                // Will retry on next auth state change
+              }
+            }
           }
         });
         authSubscription = data.subscription;
+      }
+
+      const session = await apiGetSession();
+      if (session?.user) {
+        const profile = await apiGetProfile();
+        set({
+          session,
+          user: session.user,
+          profile,
+          isAuthenticated: true,
+        });
+
+        // Fetch memberships — don't let failure skip the finally block
+        // or leave user stuck on team-create with no recovery path
+        try {
+          await get().fetchMemberships();
+        } catch (error: unknown) {
+          console.error('Failed to fetch memberships during init:', error);
+          // Auth listener above will retry when token refreshes
+        }
       }
     } catch (error: any) {
       console.error('Auth init error:', error);
