@@ -25,7 +25,9 @@
     "mobile:build:preview": "pnpm --filter=mobile build:preview",
     "mobile:build:production": "pnpm --filter=mobile build:production",
     "install:all": "pnpm install",
-    "eas-build-pre-install": "corepack enable"
+    "eas-build-pre-install": "corepack enable",
+    "eas:update-preview": "cd apps/mobile && set -a && source ../../.env && set +a && eas update --channel preview",
+    "eas:update-production": "cd apps/mobile && set -a && source ../../.env && set +a && eas update --channel production"
   },
   "devDependencies": {
     "turbo": "^2.8.2",
