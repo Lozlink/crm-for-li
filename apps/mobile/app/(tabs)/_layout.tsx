@@ -2,7 +2,8 @@ import { Tabs, useRouter } from 'expo-router';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme, Text } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useAuthStore } from '@realestate-crm/hooks';
+import { useAuthStore, useTrackingStore } from '@realestate-crm/hooks';
+import { TrackingBanner } from '@realestate-crm/ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function TopHeader() {
@@ -62,104 +63,111 @@ function TopHeader() {
 
 export default function TabLayout() {
   const theme = useTheme();
+  const activeSession = useTrackingStore(s => s.activeSession);
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
-        tabBarStyle: {
-          backgroundColor: theme.colors.surface,
-          borderTopColor: theme.colors.outlineVariant,
-        },
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '600',
-        },
-        header: () => <TopHeader />,
-      }}
-    >
-      <Tabs.Screen
-        name="properties"
-        options={{
-          title: 'Properties',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="home-city" size={size} color={color} />
-          ),
+    <View style={styles.root}>
+      <Tabs
+        screenOptions={{
+          tabBarActiveTintColor: theme.colors.primary,
+          tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
+          tabBarStyle: {
+            backgroundColor: theme.colors.surface,
+            borderTopColor: theme.colors.outlineVariant,
+          },
+          tabBarLabelStyle: {
+            fontSize: 10,
+            fontWeight: '600',
+          },
+          header: () => <TopHeader />,
         }}
-      />
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Contacts',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="account-group" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="tasks"
-        options={{
-          title: 'Tasks',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="checkbox-marked-circle-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="map"
-        options={{
-          title: 'Map',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="map-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="more"
-        options={{
-          title: 'More',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="view-grid-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      {/* Hidden tabs — accessible via More grid or top header */}
-      <Tabs.Screen
-        name="pipeline"
-        options={{ title: 'Pipeline', href: null,
-          tabBarIcon: ({ color, size }) => <Icon name="view-column" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="notes"
-        options={{ title: 'Notes', href: null,
-          tabBarIcon: ({ color, size }) => <Icon name="note-text" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="routes"
-        options={{ title: 'Routes', href: null,
-          tabBarIcon: ({ color, size }) => <Icon name="routes" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="stats"
-        options={{ title: 'Reports', href: null,
-          tabBarIcon: ({ color, size }) => <Icon name="chart-bar" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{ title: 'Settings', href: null,
-          tabBarIcon: ({ color, size }) => <Icon name="cog" size={size} color={color} />,
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="properties"
+          options={{
+            title: 'Properties',
+            tabBarIcon: ({ color, size }) => (
+              <Icon name="home-city" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Contacts',
+            tabBarIcon: ({ color, size }) => (
+              <Icon name="account-group" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="tasks"
+          options={{
+            title: 'Tasks',
+            tabBarIcon: ({ color, size }) => (
+              <Icon name="checkbox-marked-circle-outline" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="map"
+          options={{
+            title: 'Map',
+            tabBarIcon: ({ color, size }) => (
+              <Icon name="map-outline" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="more"
+          options={{
+            title: 'More',
+            tabBarIcon: ({ color, size }) => (
+              <Icon name="view-grid-outline" size={size} color={color} />
+            ),
+          }}
+        />
+        {/* Hidden tabs — accessible via More grid or top header */}
+        <Tabs.Screen
+          name="pipeline"
+          options={{ title: 'Pipeline', href: null,
+            tabBarIcon: ({ color, size }) => <Icon name="view-column" size={size} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="notes"
+          options={{ title: 'Notes', href: null,
+            tabBarIcon: ({ color, size }) => <Icon name="note-text" size={size} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="routes"
+          options={{ title: 'Routes', href: null,
+            tabBarIcon: ({ color, size }) => <Icon name="routes" size={size} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="stats"
+          options={{ title: 'Reports', href: null,
+            tabBarIcon: ({ color, size }) => <Icon name="chart-bar" size={size} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="settings"
+          options={{ title: 'Settings', href: null,
+            tabBarIcon: ({ color, size }) => <Icon name="cog" size={size} color={color} />,
+          }}
+        />
+      </Tabs>
+      {activeSession && <TrackingBanner />}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   topHeader: {
     borderBottomWidth: StyleSheet.hairlineWidth,
   },

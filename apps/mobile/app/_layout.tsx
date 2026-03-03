@@ -221,6 +221,12 @@ export default function RootLayout() {
               }}
             />
             <Stack.Screen
+              name="settings/custom-fields"
+              options={{
+                title: 'Custom Fields',
+              }}
+            />
+            <Stack.Screen
               name="tracking/[id]"
               options={{
                 title: 'Tracking Session',

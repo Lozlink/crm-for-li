@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { storage } from '@realestate-crm/utils';
-import type { Contact, Tag, Activity, ActivityWithContact, MapRegion, SavedSuburb } from '@realestate-crm/types';
+import type { Contact, Tag, Activity, ActivityWithContact, MapRegion, SavedSuburb, ActivitySource } from '@realestate-crm/types';
 import { supabase, isDemoMode, generateUUID } from '@realestate-crm/api';
 import { useAuthStore } from './useAuthStore';
 
@@ -320,7 +320,41 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
       const { data, error } = await query;
       if (error) throw error;
-      set({ recentActivities: (data as ActivityWithContact[]) || [] });
+
+      // Also fetch orphaned tracking annotations (no activity link, no contact_id)
+      // These are field notes not yet linked to any contact
+      let orphanQuery = supabase
+        .from('tracking_annotations')
+        .select('id, note, created_at, latitude, longitude, session_id, team_id')
+        .is('contact_id', null)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (teamId) {
+        orphanQuery = orphanQuery.eq('team_id', teamId);
+      }
+
+      const { data: orphans } = await orphanQuery;
+
+      // Convert orphaned annotations to ActivityWithContact shape for display
+      const orphanActivities: ActivityWithContact[] = (orphans || []).map(o => ({
+        id: `orphan-${o.id}`,
+        contact_id: '',
+        type: 'note' as const,
+        content: o.note,
+        source: 'tracking' as const,
+        tracking_annotation_id: o.id,
+        team_id: o.team_id,
+        created_at: o.created_at,
+        contact: { first_name: 'Field Note', last_name: '(unlinked)' },
+      }));
+
+      // Merge and sort by date
+      const merged = [...(data as ActivityWithContact[] || []), ...orphanActivities]
+        .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
+        .slice(0, limit);
+
+      set({ recentActivities: merged });
     } catch (error: any) {
       set({ error: error.message });
     }
@@ -610,18 +644,23 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
     try {
       const { isDemo, teamId, userId } = getTeamContext();
 
+      // Default source based on activity type if not provided
+      const source: ActivitySource | undefined = activity.source
+        ?? (activity.type === 'call' ? 'call' : activity.type === 'note' ? 'office' : undefined);
+      const activityWithSource = { ...activity, source };
+
       if (isDemo) {
         const newActivity: Activity = {
-          ...activity,
+          ...activityWithSource,
           id: generateUUID(),
           team_id: teamId || undefined,
           created_at: new Date().toISOString(),
         };
         set(state => ({
           activities: [newActivity, ...state.activities],
-          contacts: ['call', 'meeting', 'email'].includes(activity.type)
+          contacts: ['call', 'meeting', 'email'].includes(activityWithSource.type)
             ? state.contacts.map((c) =>
-                c.id === activity.contact_id
+                c.id === activityWithSource.contact_id
                   ? { ...c, last_contacted_at: new Date().toISOString() }
                   : c
               )
@@ -630,7 +669,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         return newActivity;
       }
 
-      const insertData: Record<string, unknown> = { ...activity };
+      const insertData: Record<string, unknown> = { ...activityWithSource };
       if (teamId) insertData.team_id = teamId;
       if (userId) insertData.user_id = userId;
 
@@ -643,17 +682,17 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       if (error) throw error;
 
       // Auto-update last_contacted_at for communication activities
-      if (['call', 'meeting', 'email'].includes(activity.type)) {
+      if (['call', 'meeting', 'email'].includes(activityWithSource.type)) {
         const now = new Date().toISOString();
         await supabase
           .from('contacts')
           .update({ last_contacted_at: now })
-          .eq('id', activity.contact_id);
+          .eq('id', activityWithSource.contact_id);
 
         set(state => ({
           activities: [data, ...state.activities],
           contacts: state.contacts.map((c) =>
-            c.id === activity.contact_id ? { ...c, last_contacted_at: now } : c
+            c.id === activityWithSource.contact_id ? { ...c, last_contacted_at: now } : c
           ),
         }));
       } else {

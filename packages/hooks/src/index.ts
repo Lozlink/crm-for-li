@@ -13,3 +13,4 @@ export { useTaskStore } from './useTaskStore';
 export { useSavedSearchStore } from './useSavedSearchStore';
 export { useOrganisationStore } from './useOrganisationStore';
 export { useEmailCampaignStore } from './useEmailCampaignStore';
+export { useCustomFieldStore } from './useCustomFieldStore';

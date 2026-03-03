@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { TrackingSession, TrackingBreadcrumb, TrackingAnnotation } from '@realestate-crm/types';
 import { supabase, isDemoMode, generateUUID, encodePolyline } from '@realestate-crm/api';
 import { useAuthStore } from './useAuthStore';
+import { useCRMStore } from './useCRMStore';
 
 const TRACKING_TASK_NAME = 'background-location-tracking';
 const BREADCRUMB_BUFFER_KEY = 'tracking_breadcrumbs_buffer';
@@ -14,6 +15,7 @@ interface TrackingState {
   activeSession: TrackingSession | null;
   sessions: TrackingSession[];
   annotations: TrackingAnnotation[];
+  allAnnotations: TrackingAnnotation[];
   isLoading: boolean;
   error: string | null;
 
@@ -24,7 +26,8 @@ interface TrackingState {
   recoverOrphanedSession: () => Promise<void>;
 
   fetchAnnotations: (sessionId: string) => Promise<void>;
-  createAnnotation: (annotation: { session_id: string; latitude: number; longitude: number; note: string }) => Promise<TrackingAnnotation | null>;
+  fetchAllAnnotations: () => Promise<void>;
+  createAnnotation: (annotation: { session_id: string; latitude: number; longitude: number; note: string; contact_id?: string }) => Promise<TrackingAnnotation | null>;
   updateAnnotation: (id: string, note: string) => Promise<void>;
   deleteAnnotation: (id: string) => Promise<void>;
   linkAnnotationContact: (id: string, contactId: string) => Promise<void>;
@@ -92,6 +95,7 @@ export const useTrackingStore = create<TrackingState>()((set, get) => ({
   activeSession: null,
   sessions: [],
   annotations: [],
+  allAnnotations: [],
   isLoading: false,
   error: null,
 
@@ -357,6 +361,32 @@ export const useTrackingStore = create<TrackingState>()((set, get) => ({
     }
   },
 
+  fetchAllAnnotations: async () => {
+    try {
+      const { isDemo, teamId } = getTeamContext();
+      if (isDemo) {
+        set({ allAnnotations: [] });
+        return;
+      }
+
+      let query = supabase
+        .from('tracking_annotations')
+        .select('*, contact:contacts(id, first_name, last_name, address)')
+        .order('created_at', { ascending: false });
+
+      if (teamId) {
+        query = query.eq('team_id', teamId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      set({ allAnnotations: data || [] });
+    } catch (error: any) {
+      console.error('Error fetching all annotations:', error);
+      set({ allAnnotations: [] });
+    }
+  },
+
   createAnnotation: async (annotation) => {
     try {
       const { isDemo, teamId, userId } = getTeamContext();
@@ -371,10 +401,22 @@ export const useTrackingStore = create<TrackingState>()((set, get) => ({
           updated_at: new Date().toISOString(),
         };
         set({ annotations: [...get().annotations, newAnnotation] });
+
+        // Create corresponding activity if contact is linked
+        if (annotation.contact_id) {
+          useCRMStore.getState().addActivity({
+            contact_id: annotation.contact_id,
+            type: 'note',
+            content: annotation.note,
+            source: 'tracking',
+            tracking_annotation_id: newAnnotation.id,
+          });
+        }
+
         return newAnnotation;
       }
 
-      const insertData: any = { ...annotation };
+      const insertData: Record<string, unknown> = { ...annotation };
       if (teamId) insertData.team_id = teamId;
       if (userId) insertData.user_id = userId;
 
@@ -386,6 +428,18 @@ export const useTrackingStore = create<TrackingState>()((set, get) => ({
 
       if (error) throw error;
       set({ annotations: [...get().annotations, data] });
+
+      // Create corresponding activity if contact is linked
+      if (annotation.contact_id) {
+        await useCRMStore.getState().addActivity({
+          contact_id: annotation.contact_id,
+          type: 'note',
+          content: annotation.note,
+          source: 'tracking',
+          tracking_annotation_id: data.id,
+        });
+      }
+
       return data;
     } catch (error: any) {
       console.error('Error creating annotation:', error);
@@ -452,11 +506,28 @@ export const useTrackingStore = create<TrackingState>()((set, get) => ({
         if (error) throw error;
       }
 
+      const annotation = get().annotations.find(a => a.id === id) ||
+        get().allAnnotations.find(a => a.id === id);
+
       set({
         annotations: get().annotations.map((a) =>
           a.id === id ? { ...a, contact_id: contactId, updated_at: new Date().toISOString() } : a
         ),
+        allAnnotations: get().allAnnotations.map((a) =>
+          a.id === id ? { ...a, contact_id: contactId, updated_at: new Date().toISOString() } : a
+        ),
       });
+
+      // Create corresponding activity for the newly linked contact
+      if (annotation) {
+        await useCRMStore.getState().addActivity({
+          contact_id: contactId,
+          type: 'note',
+          content: annotation.note,
+          source: 'tracking',
+          tracking_annotation_id: id,
+        });
+      }
     } catch (error: any) {
       console.error('Error linking annotation contact:', error);
     }

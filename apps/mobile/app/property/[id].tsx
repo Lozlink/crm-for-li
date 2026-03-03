@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import {
   useTheme,
   Text,
@@ -27,6 +27,7 @@ import type {
   InspectionType,
 } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { CustomFieldRenderer } from '@realestate-crm/ui';
 
 const STATUS_LABELS: Record<PropertyStatus, string> = {
   appraisal: 'Appraisal',
@@ -227,6 +228,7 @@ export default function PropertyDetailScreen() {
   const [editCars, setEditCars] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [showCustomFields, setShowCustomFields] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -894,6 +896,25 @@ export default function PropertyDetailScreen() {
                     </View>
                   </Surface>
                 ))}
+              </Surface>
+
+              {/* Custom Fields */}
+              <Surface style={styles.sectionCard} elevation={1}>
+                <Pressable
+                  onPress={() => setShowCustomFields(prev => !prev)}
+                  style={styles.sectionHeader}
+                >
+                  <Icon name="form-textbox" size={20} color={theme.colors.primary} />
+                  <Text variant="titleSmall" style={[styles.sectionTitleText, { flex: 1 }]}>Custom Fields</Text>
+                  <Icon
+                    name={showCustomFields ? 'chevron-up' : 'chevron-down'}
+                    size={20}
+                    color={theme.colors.onSurfaceVariant}
+                  />
+                </Pressable>
+                {showCustomFields && (
+                  <CustomFieldRenderer entityType="property" entityId={id as string} />
+                )}
               </Surface>
 
               {/* Status Controls */}

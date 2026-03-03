@@ -43,11 +43,15 @@ export interface Contact {
   updated_at?: string;
 }
 
+export type ActivitySource = 'office' | 'field' | 'call' | 'tracking' | 'inspection' | 'import';
+
 export interface Activity {
   id: string;
   contact_id: string;
   type: 'note' | 'call' | 'meeting' | 'email';
   content?: string;
+  source?: ActivitySource;
+  tracking_annotation_id?: string;
   user_id?: string;
   team_id?: string;
   created_at?: string;
@@ -404,4 +408,42 @@ export interface ContactSubscription {
   unsubscribe_reason?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+// --- Custom Fields ---
+export type CustomFieldType = 'text' | 'number' | 'boolean' | 'date' | 'single_select' | 'multi_select';
+export type CustomFieldEntityType = 'contact' | 'property' | 'contact_requirement' | 'inspection' | 'task';
+
+export interface CustomFieldDefinition {
+  id: string;
+  team_id: string;
+  entity_type: CustomFieldEntityType;
+  field_name: string;
+  field_label: string;
+  field_type: CustomFieldType;
+  options?: string[];
+  is_required?: boolean;
+  display_order?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CustomFieldValue {
+  id: string;
+  definition_id: string;
+  entity_id: string;
+  entity_type: CustomFieldEntityType;
+  value_text?: string;
+  value_number?: number;
+  value_boolean?: boolean;
+  value_date?: string;
+  value_json?: unknown;
+  team_id: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CustomFieldWithValue {
+  definition: CustomFieldDefinition;
+  value: CustomFieldValue | null;
 }

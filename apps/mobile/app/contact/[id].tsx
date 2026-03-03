@@ -26,6 +26,7 @@ import { Switch } from 'react-native';
 import { ContactForm } from '@realestate-crm/ui';
 import { ActivityFeed } from '@realestate-crm/ui';
 import { AddActivityDialog } from '@realestate-crm/ui';
+import { CustomFieldRenderer } from '@realestate-crm/ui';
 
 // --- Constants ---
 
@@ -897,6 +898,11 @@ export default function ContactDetailScreen() {
                 }
               >
                 <ActivityFeed contactId={id!} />
+              </CollapsibleCard>
+
+              {/* ===== CUSTOM FIELDS CARD ===== */}
+              <CollapsibleCard title="Custom Fields">
+                <CustomFieldRenderer entityType="contact" entityId={id!} />
               </CollapsibleCard>
             </>
           )}

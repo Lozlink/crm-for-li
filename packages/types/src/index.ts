@@ -2,6 +2,7 @@
 export type {
   Tag, Contact, Activity, ActivityWithContact, ContactFormData,
   ContactSource, ContactType, ContactStatus, PreferredContactMethod,
+  ActivitySource,
 } from './entities';
 export type { Route, RouteStop, RouteStatus, RouteMode, StopStatus, StreetStats } from './entities';
 export type { TrackingSession, TrackingBreadcrumb, TrackingAnnotation } from './entities';
@@ -23,6 +24,10 @@ export type { SavedSearch } from './entities';
 export type {
   EmailCampaign, EmailRecipient, ContactSubscription,
   CampaignStatus, RecipientStatus,
+} from './entities';
+export type {
+  CustomFieldType, CustomFieldEntityType,
+  CustomFieldDefinition, CustomFieldValue, CustomFieldWithValue,
 } from './entities';
 
 // Map types

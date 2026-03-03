@@ -1,22 +1,29 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { StyleSheet, View, Dimensions } from 'react-native';
+import { StyleSheet, View, Dimensions, Linking } from 'react-native';
 import { FAB, Portal, useTheme, Chip, Surface, Text, Dialog, Button } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import MapView, { Marker, Polygon, Circle, PROVIDER_GOOGLE, MapPressEvent, LongPressEvent, Region } from 'react-native-maps';
+import MapView, { Marker, Polygon, Circle, Polyline, PROVIDER_GOOGLE, LongPressEvent, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
-import { useCRMStore, useStreetStats } from '@realestate-crm/hooks';
-import { Contact, SuburbBoundary  } from '@realestate-crm/types';
-import { fetchSuburbByName} from '@realestate-crm/api';
-import { FilterSheet } from '@realestate-crm/ui';
-import { ContactPreview } from '@realestate-crm/ui';
-import { MapSearchBar } from '@realestate-crm/ui';
+import { useCRMStore, useStreetStats, usePropertyStore, useTrackingStore, useBuyerMatchStore } from '@realestate-crm/hooks';
+import type { Contact, Property, ActivityWithContact, ContactRequirement } from '@realestate-crm/types';
+import { fetchSuburbByName, decodePolyline } from '@realestate-crm/api';
+import type { SuburbBoundary } from '@realestate-crm/types';
+import { FilterSheet, ContactPreview, MapSearchBar, PropertyPreview } from '@realestate-crm/ui';
 
 const { width, height } = Dimensions.get('window');
 
-const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.googleMapsApiKey || 
+const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.googleMapsApiKey ||
   process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+
+interface VisibleLayers {
+  contacts: boolean;
+  properties: boolean;
+  routes: boolean;
+  annotations: boolean;
+  stats: boolean;
+}
 
 export default function MapScreen() {
   const theme = useTheme();
@@ -29,24 +36,55 @@ export default function MapScreen() {
   const setMapRegion = useCRMStore(state => state.setMapRegion);
   const selectedTagIds = useCRMStore(state => state.selectedTagIds);
   const tags = useCRMStore(state => state.tags);
+  const recentActivities = useCRMStore(state => state.recentActivities);
+  const fetchRecentActivities = useCRMStore(state => state.fetchRecentActivities);
 
-  const [showStats, setShowStats] = useState(false);
+  const properties = usePropertyStore(state => state.properties);
+  const fetchProperties = usePropertyStore(state => state.fetchProperties);
+
+  const sessions = useTrackingStore(state => state.sessions);
+  const fetchSessions = useTrackingStore(state => state.fetchSessions);
+  const allAnnotations = useTrackingStore(state => state.allAnnotations);
+  const fetchAllAnnotations = useTrackingStore(state => state.fetchAllAnnotations);
+  const activeSession = useTrackingStore(state => state.activeSession);
+  const startSession = useTrackingStore(state => state.startSession);
+
+  const fetchRequirements = useBuyerMatchStore(s => s.fetchRequirements);
 
   const streetStats = useStreetStats();
+
+  const [visibleLayers, setVisibleLayers] = useState<VisibleLayers>({
+    contacts: true,
+    properties: false,
+    routes: false,
+    annotations: false,
+    stats: false,
+  });
 
   const [filterVisible, setFilterVisible] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+  const [propertyPreviewVisible, setPropertyPreviewVisible] = useState(false);
   const [pendingMarker, setPendingMarker] = useState<{ latitude: number; longitude: number } | null>(null);
   const [currentSuburbBoundary, setCurrentSuburbBoundary] = useState<SuburbBoundary | null>(null);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [fabOpen, setFabOpen] = useState(false);
+  const [isStartingTracking, setIsStartingTracking] = useState(false);
   const [longPressDialog, setLongPressDialog] = useState<{
     visible: boolean;
     latitude: number;
     longitude: number;
     address: string;
   }>({ visible: false, latitude: 0, longitude: 0, address: '' });
+
+  // Fetch data on mount
+  useEffect(() => {
+    fetchProperties();
+    fetchSessions();
+    fetchAllAnnotations();
+    fetchRecentActivities(200);
+  }, [fetchProperties, fetchSessions, fetchAllAnnotations, fetchRecentActivities]);
 
   // Get user location on mount
   useEffect(() => {
@@ -70,12 +108,11 @@ export default function MapScreen() {
       );
       const data = await response.json();
       if (data.results && data.results[0]) {
-        // Find the suburb/locality component
         const components = data.results[0].address_components;
-        const suburb = components.find((c: any) => 
-          c.types.includes('locality') || c.types.includes('sublocality')
+        const suburb = components.find((c: Record<string, unknown>) =>
+          (c.types as string[]).includes('locality') || (c.types as string[]).includes('sublocality')
         );
-        return suburb?.long_name || null;
+        return (suburb?.long_name as string) || null;
       }
     } catch (error) {
       console.error('Reverse geocode for suburb error:', error);
@@ -108,9 +145,42 @@ export default function MapScreen() {
     return tags.filter(t => selectedTagIds.includes(t.id));
   }, [tags, selectedTagIds]);
 
-  const handleMarkerPress = useCallback((contact: Contact) => {
+  // Properties with coordinates
+  const mappedProperties = useMemo(() => {
+    return properties.filter(p => p.latitude != null && p.longitude != null);
+  }, [properties]);
+
+  // Decoded route polylines
+  const routePolylines = useMemo(() => {
+    return sessions
+      .filter(s => s.polyline)
+      .map(s => ({
+        id: s.id,
+        coordinates: decodePolyline(s.polyline!),
+        startedAt: s.started_at,
+      }));
+  }, [sessions]);
+
+  const [contactRequirements, setContactRequirements] = useState<ContactRequirement[]>([]);
+
+  const selectedContactLastActivity = useMemo((): ActivityWithContact | null => {
+    if (!selectedContact) return null;
+    const activity = recentActivities.find(a => a.contact_id === selectedContact.id);
+    return activity || null;
+  }, [selectedContact, recentActivities]);
+
+  const handleMarkerPress = useCallback(async (contact: Contact) => {
     setSelectedContact(contact);
     setPreviewVisible(true);
+
+    // Fetch buyer requirements for this contact
+    await fetchRequirements(contact.id);
+    setContactRequirements(useBuyerMatchStore.getState().requirements);
+  }, [fetchRequirements]);
+
+  const handlePropertyMarkerPress = useCallback((property: Property) => {
+    setSelectedProperty(property);
+    setPropertyPreviewVisible(true);
   }, []);
 
   const handleRegionChange = useCallback((region: Region) => {
@@ -128,12 +198,8 @@ export default function MapScreen() {
         `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}`
       );
       const data = await response.json();
-      console.log('Geocoding response:', data.status, data.error_message || data.results?.[0]?.formatted_address);
       if (data.results && data.results[0]) {
-        return data.results[0].formatted_address;
-      }
-      if (data.error_message) {
-        console.error('Geocoding API error:', data.error_message);
+        return data.results[0].formatted_address as string;
       }
     } catch (error) {
       console.error('Reverse geocode error:', error);
@@ -143,17 +209,16 @@ export default function MapScreen() {
 
   const handleAddQuickNote = useCallback(async () => {
     setFabOpen(false);
-    // Get center of current map view
     const center = mapRegion;
     const address = await reverseGeocode(center.latitude, center.longitude);
-    
+
     router.push({
       pathname: '/contact/new',
       params: {
         lat: center.latitude.toString(),
         lng: center.longitude.toString(),
         address: address,
-        quickNote: 'true', // Flag to show minimal form
+        quickNote: 'true',
       },
     });
   }, [mapRegion, reverseGeocode, router]);
@@ -161,18 +226,15 @@ export default function MapScreen() {
   const handleMapLongPress = useCallback(async (event: LongPressEvent) => {
     const { latitude, longitude } = event.nativeEvent.coordinate;
     setPendingMarker({ latitude, longitude });
-    
-    // Reverse geocode to get address
+
     const address = await reverseGeocode(latitude, longitude);
-    
-    // Show dialog to choose action
     setLongPressDialog({ visible: true, latitude, longitude, address });
   }, [reverseGeocode]);
 
   const handleLongPressAction = useCallback((quickNote: boolean) => {
     const { latitude, longitude, address } = longPressDialog;
     setLongPressDialog(prev => ({ ...prev, visible: false }));
-    
+
     router.push({
       pathname: '/contact/new',
       params: {
@@ -182,8 +244,7 @@ export default function MapScreen() {
         quickNote: quickNote ? 'true' : undefined,
       },
     });
-    
-    // Clear pending marker after navigation
+
     setTimeout(() => setPendingMarker(null), 500);
   }, [longPressDialog, router]);
 
@@ -199,8 +260,27 @@ export default function MapScreen() {
     }
   }, [selectedContact, router]);
 
+  const handleViewProperty = useCallback(() => {
+    if (selectedProperty) {
+      setPropertyPreviewVisible(false);
+      router.push(`/property/${selectedProperty.id}`);
+    }
+  }, [selectedProperty, router]);
+
+  const handleAddNoteForContact = useCallback(() => {
+    if (selectedContact) {
+      setPreviewVisible(false);
+      router.push(`/contact/${selectedContact.id}`);
+    }
+  }, [selectedContact, router]);
+
+  const handleNavigateToContact = useCallback(() => {
+    if (selectedContact?.latitude != null && selectedContact?.longitude != null) {
+      Linking.openURL(`maps:?daddr=${selectedContact.latitude},${selectedContact.longitude}`);
+    }
+  }, [selectedContact]);
+
   const getMarkerColor = useCallback((contact: Contact) => {
-    // Use first tag from multi-tag, fall back to legacy single tag
     return contact.tags?.[0]?.color || contact.tag?.color || theme.colors.primary;
   }, [theme.colors.primary]);
 
@@ -214,21 +294,18 @@ export default function MapScreen() {
     const newRegion = {
       latitude: lat,
       longitude: lng,
-      latitudeDelta: 0.04, // Suburb-level zoom (shows whole suburb)
+      latitudeDelta: 0.04,
       longitudeDelta: 0.04,
     };
     setMapRegion(newRegion);
     mapRef.current?.animateToRegion(newRegion, 500);
-    
-    // Fetch boundary for the searched suburb
     fetchSuburbBoundary(name);
   }, [setMapRegion, fetchSuburbBoundary]);
 
   const handleCenterOnUser = useCallback(async () => {
     let location = userLocation;
-    
+
     if (!location) {
-      // Try to get fresh location
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
 
@@ -239,7 +316,7 @@ export default function MapScreen() {
       };
       setUserLocation(location);
     }
-    
+
     const newRegion = {
       latitude: location.latitude,
       longitude: location.longitude,
@@ -247,13 +324,26 @@ export default function MapScreen() {
       longitudeDelta: 0.008,
     };
     mapRef.current?.animateToRegion(newRegion, 500);
-    
-    // Fetch suburb boundary for user's location
+
     const suburbName = await getSuburbFromCoords(location.latitude, location.longitude);
     if (suburbName) {
       fetchSuburbBoundary(suburbName);
     }
   }, [userLocation, getSuburbFromCoords, fetchSuburbBoundary]);
+
+  const handleStartTracking = useCallback(async () => {
+    setIsStartingTracking(true);
+    setFabOpen(false);
+    await startSession();
+    setIsStartingTracking(false);
+  }, [startSession]);
+
+  const toggleLayer = useCallback((layer: keyof VisibleLayers) => {
+    setVisibleLayers(prev => ({ ...prev, [layer]: !prev[layer] }));
+  }, []);
+
+  // Route line colors
+  const ROUTE_COLORS = ['#6366f1', '#0d9488', '#f59e0b', '#ef4444', '#2563eb'];
 
   return (
     <View style={styles.container}>
@@ -267,9 +357,10 @@ export default function MapScreen() {
         showsUserLocation
         showsMyLocationButton
       >
-        {mappedContacts.map((contact) => (
+        {/* Contact markers */}
+        {visibleLayers.contacts && mappedContacts.map((contact) => (
           <Marker
-            key={contact.id}
+            key={`c-${contact.id}`}
             coordinate={{
               latitude: contact.latitude!,
               longitude: contact.longitude!,
@@ -280,6 +371,48 @@ export default function MapScreen() {
             onPress={() => handleMarkerPress(contact)}
           />
         ))}
+
+        {/* Property markers (purple) */}
+        {visibleLayers.properties && mappedProperties.map((property) => (
+          <Marker
+            key={`p-${property.id}`}
+            coordinate={{
+              latitude: property.latitude!,
+              longitude: property.longitude!,
+            }}
+            title={property.address}
+            description={`${property.status} - ${property.for_type}`}
+            pinColor="#7c3aed"
+            onPress={() => handlePropertyMarkerPress(property)}
+          />
+        ))}
+
+        {/* Route polyline overlays */}
+        {visibleLayers.routes && routePolylines.map((route, idx) => (
+          <Polyline
+            key={`r-${route.id}`}
+            coordinates={route.coordinates}
+            strokeColor={ROUTE_COLORS[idx % ROUTE_COLORS.length]}
+            strokeWidth={3}
+            lineDashPattern={[0]}
+          />
+        ))}
+
+        {/* Annotation markers (amber) */}
+        {visibleLayers.annotations && allAnnotations.map((annotation) => (
+          <Marker
+            key={`a-${annotation.id}`}
+            coordinate={{
+              latitude: annotation.latitude,
+              longitude: annotation.longitude,
+            }}
+            title={annotation.note}
+            description={annotation.created_at ? new Date(annotation.created_at).toLocaleDateString() : ''}
+            pinColor="#f59e0b"
+          />
+        ))}
+
+        {/* Pending long-press marker */}
         {pendingMarker && (
           <Marker
             coordinate={pendingMarker}
@@ -287,7 +420,7 @@ export default function MapScreen() {
             opacity={0.7}
           />
         )}
-        {/* User location shown via showsUserLocation prop on MapView */}
+
         {/* Current suburb boundary polygon */}
         {currentSuburbBoundary && (
           <Polygon
@@ -298,7 +431,9 @@ export default function MapScreen() {
             fillColor="rgba(0, 0, 0, 0.03)"
           />
         )}
-        {showStats && streetStats.map((stat) => (
+
+        {/* Street stats heat circles */}
+        {visibleLayers.stats && streetStats.map((stat) => (
           <Circle
             key={`${stat.streetName}-${stat.suburb}`}
             center={{
@@ -334,31 +469,84 @@ export default function MapScreen() {
         </Surface>
       )}
 
+      {/* Layer toggle buttons (left side) */}
+      <View style={[styles.layerToggles, { top: 130 }]}>
+        <FAB
+          icon={visibleLayers.contacts ? 'account' : 'account-outline'}
+          style={[styles.layerFab, {
+            backgroundColor: visibleLayers.contacts ? theme.colors.primaryContainer : theme.colors.surface,
+          }]}
+          color={visibleLayers.contacts ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant}
+          onPress={() => toggleLayer('contacts')}
+          size="small"
+        />
+        <FAB
+          icon={visibleLayers.properties ? 'home-city' : 'home-city-outline'}
+          style={[styles.layerFab, {
+            backgroundColor: visibleLayers.properties ? '#7c3aed' : theme.colors.surface,
+          }]}
+          color={visibleLayers.properties ? '#fff' : theme.colors.onSurfaceVariant}
+          onPress={() => toggleLayer('properties')}
+          size="small"
+        />
+        <FAB
+          icon={visibleLayers.routes ? 'map-marker-path' : 'map-marker-path'}
+          style={[styles.layerFab, {
+            backgroundColor: visibleLayers.routes ? theme.colors.tertiaryContainer : theme.colors.surface,
+          }]}
+          color={visibleLayers.routes ? theme.colors.onTertiaryContainer : theme.colors.onSurfaceVariant}
+          onPress={() => toggleLayer('routes')}
+          size="small"
+        />
+        <FAB
+          icon={visibleLayers.annotations ? 'map-marker-alert' : 'map-marker-alert-outline'}
+          style={[styles.layerFab, {
+            backgroundColor: visibleLayers.annotations ? '#f59e0b' : theme.colors.surface,
+          }]}
+          color={visibleLayers.annotations ? '#fff' : theme.colors.onSurfaceVariant}
+          onPress={() => toggleLayer('annotations')}
+          size="small"
+        />
+        <FAB
+          icon={visibleLayers.stats ? 'chart-bar' : 'chart-bar'}
+          style={[styles.layerFab, {
+            backgroundColor: visibleLayers.stats ? theme.colors.primaryContainer : theme.colors.surface,
+          }]}
+          color={visibleLayers.stats ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant}
+          onPress={() => toggleLayer('stats')}
+          size="small"
+        />
+      </View>
+
+      {/* Right side action FABs */}
       <FAB
         icon="crosshairs-gps"
-        style={[styles.locationFab, { backgroundColor: theme.colors.surface, bottom: insets.bottom + 190 }]}
+        style={[styles.rightFab, { backgroundColor: theme.colors.surface, bottom: insets.bottom + 190 }]}
         color={theme.colors.primary}
         onPress={handleCenterOnUser}
         size="small"
       />
 
       <FAB
-        icon={showStats ? 'chart-bar' : 'chart-bar'}
-        style={[styles.statsFab, {
-          backgroundColor: showStats ? theme.colors.primaryContainer : theme.colors.surface,
-          bottom: insets.bottom + 250
-        }]}
-        color={showStats ? theme.colors.onPrimaryContainer : theme.colors.primary}
-        onPress={() => setShowStats(!showStats)}
-        size="small"
-      />
-
-      <FAB
         icon="filter"
-        style={[styles.filterFab, { backgroundColor: theme.colors.secondaryContainer, bottom: insets.bottom + 130 }]}
+        style={[styles.rightFab, { backgroundColor: theme.colors.secondaryContainer, bottom: insets.bottom + 130 }]}
         color={theme.colors.onSecondaryContainer}
         onPress={() => setFilterVisible(true)}
       />
+
+      {/* Start Tracking FAB (only if not already tracking) */}
+      {!activeSession && (
+        <FAB
+          icon="walk"
+          label="Track"
+          style={[styles.trackingFab, { backgroundColor: theme.colors.tertiaryContainer, bottom: insets.bottom + 130 }]}
+          color={theme.colors.onTertiaryContainer}
+          onPress={handleStartTracking}
+          loading={isStartingTracking}
+          disabled={isStartingTracking}
+          size="small"
+        />
+      )}
 
       <FAB.Group
         open={fabOpen}
@@ -377,6 +565,11 @@ export default function MapScreen() {
             label: 'Quick Note',
             onPress: handleAddQuickNote,
           },
+          ...(!activeSession ? [{
+            icon: 'map-marker-path' as const,
+            label: 'Start Tracking',
+            onPress: handleStartTracking,
+          }] : []),
         ]}
         onStateChange={({ open }) => setFabOpen(open)}
         style={[styles.fabGroup, { bottom: insets.bottom }]}
@@ -393,6 +586,17 @@ export default function MapScreen() {
           visible={previewVisible}
           onDismiss={() => setPreviewVisible(false)}
           onViewDetails={handleViewContact}
+          requirements={contactRequirements}
+          lastActivity={selectedContactLastActivity}
+          onAddNote={handleAddNoteForContact}
+          onNavigate={handleNavigateToContact}
+        />
+
+        <PropertyPreview
+          property={selectedProperty}
+          visible={propertyPreviewVisible}
+          onDismiss={() => setPropertyPreviewVisible(false)}
+          onViewDetails={handleViewProperty}
         />
 
         <Dialog visible={longPressDialog.visible} onDismiss={dismissLongPressDialog}>
@@ -425,17 +629,21 @@ const styles = StyleSheet.create({
     width,
     height,
   },
-  statsFab: {
+  layerToggles: {
+    position: 'absolute',
+    left: 12,
+    gap: 8,
+  },
+  layerFab: {
+    elevation: 2,
+  },
+  rightFab: {
     position: 'absolute',
     right: 16,
   },
-  locationFab: {
+  trackingFab: {
     position: 'absolute',
-    right: 16,
-  },
-  filterFab: {
-    position: 'absolute',
-    right: 16,
+    left: 16,
   },
   fabGroup: {
     position: 'absolute',
