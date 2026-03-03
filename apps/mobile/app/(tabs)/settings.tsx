@@ -413,4 +413,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.05)',
     borderRadius: 8,
   },
+  orgCard: {
+    margin: 16,
+    marginTop: 8,
+    padding: 16,
+    borderRadius: 12,
+  },
+  orgHeader: {
+    marginBottom: 12,
+  },
+  orgInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  orgBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(98, 0, 238, 0.08)',
+  },
 });

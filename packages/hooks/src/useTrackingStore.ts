@@ -288,19 +288,25 @@ export const useTrackingStore = create<TrackingState>()((set, get) => ({
 
   fetchSessionBreadcrumbs: async (sessionId: string) => {
     try {
-      const { isDemo } = getTeamContext();
+      const { isDemo, teamId } = getTeamContext();
       if (isDemo) return [];
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('tracking_breadcrumbs')
         .select('*')
         .eq('session_id', sessionId)
         .order('recorded_at', { ascending: true });
 
+      if (teamId) {
+        query = query.eq('team_id', teamId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
-    } catch (error: any) {
-      console.error('Error fetching breadcrumbs:', error);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error fetching breadcrumbs:', message);
       return [];
     }
   },
@@ -341,22 +347,28 @@ export const useTrackingStore = create<TrackingState>()((set, get) => ({
 
   fetchAnnotations: async (sessionId: string) => {
     try {
-      const { isDemo } = getTeamContext();
+      const { isDemo, teamId } = getTeamContext();
       if (isDemo) {
         set({ annotations: [] });
         return;
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('tracking_annotations')
         .select('*, contact:contacts(id, first_name, last_name, address)')
         .eq('session_id', sessionId)
         .order('created_at', { ascending: true });
 
+      if (teamId) {
+        query = query.eq('team_id', teamId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       set({ annotations: data || [] });
-    } catch (error: any) {
-      console.error('Error fetching annotations:', error);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error fetching annotations:', message);
       set({ annotations: [] });
     }
   },

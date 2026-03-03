@@ -159,7 +159,7 @@ export const useBuyerMatchStore = create<BuyerMatchState>()((set) => ({
   fetchRequirements: async (contactId) => {
     set({ isLoading: true, error: null });
     try {
-      const { isDemo } = getTeamContext();
+      const { isDemo, teamId } = getTeamContext();
       if (isDemo) {
         set({
           requirements: DEMO_REQUIREMENTS.filter((r) => r.contact_id === contactId),
@@ -168,12 +168,17 @@ export const useBuyerMatchStore = create<BuyerMatchState>()((set) => ({
         return;
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('contact_requirements')
         .select('*')
         .eq('contact_id', contactId)
         .order('created_at', { ascending: false });
 
+      if (teamId) {
+        query = query.eq('team_id', teamId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       set({ requirements: (data as ContactRequirement[]) || [], isLoading: false });
     } catch (err: unknown) {

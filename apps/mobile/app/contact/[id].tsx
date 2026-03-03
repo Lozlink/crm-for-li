@@ -687,6 +687,9 @@ export default function ContactDetailScreen() {
                     </Text>
                   </View>
                 )}
+
+                {/* Inline custom fields for this contact */}
+                <CustomFieldRenderer entityType="contact" entityId={id!} inline />
               </CollapsibleCard>
 
               {/* ===== EMAIL SUBSCRIPTION ===== */}
@@ -771,6 +774,9 @@ export default function ContactDetailScreen() {
                           ))}
                         </View>
                       )}
+
+                      {/* Inline custom fields for this requirement */}
+                      <CustomFieldRenderer entityType="contact_requirement" entityId={req.id} inline />
 
                       <Button
                         mode="outlined"
@@ -900,10 +906,6 @@ export default function ContactDetailScreen() {
                 <ActivityFeed contactId={id!} />
               </CollapsibleCard>
 
-              {/* ===== CUSTOM FIELDS CARD ===== */}
-              <CollapsibleCard title="Custom Fields">
-                <CustomFieldRenderer entityType="contact" entityId={id!} />
-              </CollapsibleCard>
             </>
           )}
         </ScrollView>

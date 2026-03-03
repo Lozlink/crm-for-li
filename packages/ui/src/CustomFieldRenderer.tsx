@@ -1,13 +1,37 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Text, TextInput, Switch, Chip, useTheme, Menu, ActivityIndicator } from 'react-native-paper';
+import {
+  Text,
+  TextInput,
+  Switch,
+  Chip,
+  useTheme,
+  Menu,
+  ActivityIndicator,
+  IconButton,
+  Portal,
+  Dialog,
+  Button,
+  SegmentedButtons,
+} from 'react-native-paper';
 import { useCustomFieldStore } from '@realestate-crm/hooks';
-import type { CustomFieldEntityType, CustomFieldWithValue } from '@realestate-crm/types';
+import type { CustomFieldEntityType, CustomFieldWithValue, CustomFieldType } from '@realestate-crm/types';
+
+const FIELD_TYPE_OPTIONS: { value: CustomFieldType; label: string }[] = [
+  { value: 'text', label: 'Text' },
+  { value: 'number', label: 'Number' },
+  { value: 'boolean', label: 'Yes/No' },
+  { value: 'date', label: 'Date' },
+  { value: 'single_select', label: 'Select' },
+  { value: 'multi_select', label: 'Multi' },
+];
 
 interface CustomFieldRendererProps {
   entityType: CustomFieldEntityType;
   entityId: string;
   readonly?: boolean;
+  /** When true, renders nothing if no custom fields exist and no add button (for embedding within existing cards) */
+  inline?: boolean;
 }
 
 function FieldRow({
@@ -227,13 +251,121 @@ function FieldRow({
   }
 }
 
-export default function CustomFieldRenderer({ entityType, entityId, readonly }: CustomFieldRendererProps) {
+function AddFieldDialog({
+  visible,
+  onDismiss,
+  entityType,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  entityType: CustomFieldEntityType;
+}) {
+  const theme = useTheme();
+  const createDefinition = useCustomFieldStore(s => s.createDefinition);
+  const definitions = useCustomFieldStore(s => s.definitions);
+
+  const [fieldLabel, setFieldLabel] = useState('');
+  const [fieldType, setFieldType] = useState<CustomFieldType>('text');
+  const [optionsText, setOptionsText] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const needsOptions = fieldType === 'single_select' || fieldType === 'multi_select';
+  const canSave = fieldLabel.trim().length > 0 && (!needsOptions || optionsText.trim().length > 0);
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    const fieldName = fieldLabel.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    const options = needsOptions
+      ? optionsText.split(',').map(o => o.trim()).filter(Boolean)
+      : undefined;
+    const existingCount = definitions.filter(d => d.entity_type === entityType).length;
+
+    await createDefinition({
+      entity_type: entityType,
+      field_name: fieldName,
+      field_label: fieldLabel.trim(),
+      field_type: fieldType,
+      options,
+      is_required: false,
+      display_order: existingCount,
+    });
+
+    setFieldLabel('');
+    setFieldType('text');
+    setOptionsText('');
+    setSaving(false);
+    onDismiss();
+  };
+
+  const handleDismiss = () => {
+    setFieldLabel('');
+    setFieldType('text');
+    setOptionsText('');
+    onDismiss();
+  };
+
+  return (
+    <Portal>
+      <Dialog visible={visible} onDismiss={handleDismiss}>
+        <Dialog.Title>Add Custom Field</Dialog.Title>
+        <Dialog.Content style={styles.dialogContent}>
+          <TextInput
+            label="Field Label"
+            value={fieldLabel}
+            onChangeText={setFieldLabel}
+            mode="outlined"
+            dense
+            autoFocus
+          />
+          <Text variant="labelMedium" style={[styles.dialogLabel, { color: theme.colors.onSurfaceVariant }]}>
+            Field Type
+          </Text>
+          <View style={styles.typeGrid}>
+            {FIELD_TYPE_OPTIONS.map(opt => (
+              <Chip
+                key={opt.value}
+                selected={fieldType === opt.value}
+                onPress={() => setFieldType(opt.value)}
+                compact
+                style={styles.typeChip}
+              >
+                {opt.label}
+              </Chip>
+            ))}
+          </View>
+          {needsOptions && (
+            <TextInput
+              label="Options (comma-separated)"
+              value={optionsText}
+              onChangeText={setOptionsText}
+              mode="outlined"
+              dense
+              placeholder="Option 1, Option 2, Option 3"
+              style={{ marginTop: 8 }}
+            />
+          )}
+        </Dialog.Content>
+        <Dialog.Actions>
+          <Button onPress={handleDismiss}>Cancel</Button>
+          <Button onPress={handleSave} disabled={!canSave || saving} loading={saving}>
+            Add
+          </Button>
+        </Dialog.Actions>
+      </Dialog>
+    </Portal>
+  );
+}
+
+export default function CustomFieldRenderer({ entityType, entityId, readonly, inline }: CustomFieldRendererProps) {
   const theme = useTheme();
   const fetchDefinitions = useCustomFieldStore(s => s.fetchDefinitions);
   const fetchValues = useCustomFieldStore(s => s.fetchValues);
   const setFieldValue = useCustomFieldStore(s => s.setFieldValue);
   const getFieldsWithValues = useCustomFieldStore(s => s.getFieldsWithValues);
   const isLoading = useCustomFieldStore(s => s.isLoading);
+
+  const [addDialogVisible, setAddDialogVisible] = useState(false);
 
   useEffect(() => {
     fetchDefinitions(entityType);
@@ -250,6 +382,7 @@ export default function CustomFieldRenderer({ entityType, entityId, readonly }: 
   );
 
   if (isLoading) {
+    if (inline) return null;
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="small" />
@@ -257,6 +390,33 @@ export default function CustomFieldRenderer({ entityType, entityId, readonly }: 
     );
   }
 
+  // When inline and no fields + readonly, render nothing
+  if (fields.length === 0 && inline && readonly) {
+    return null;
+  }
+
+  // When inline with no fields but editable, show just the add button
+  if (fields.length === 0 && inline) {
+    return (
+      <View style={styles.inlineAddRow}>
+        <Chip
+          icon="plus"
+          onPress={() => setAddDialogVisible(true)}
+          compact
+          style={{ backgroundColor: theme.colors.surfaceVariant }}
+        >
+          Add Field
+        </Chip>
+        <AddFieldDialog
+          visible={addDialogVisible}
+          onDismiss={() => setAddDialogVisible(false)}
+          entityType={entityType}
+        />
+      </View>
+    );
+  }
+
+  // Standalone (non-inline) with no fields
   if (fields.length === 0) {
     return (
       <View style={styles.empty}>
@@ -277,6 +437,25 @@ export default function CustomFieldRenderer({ entityType, entityId, readonly }: 
           onChangeValue={handleChange(field.definition.id)}
         />
       ))}
+      {!readonly && inline && (
+        <View style={styles.inlineAddRow}>
+          <Chip
+            icon="plus"
+            onPress={() => setAddDialogVisible(true)}
+            compact
+            style={{ backgroundColor: theme.colors.surfaceVariant }}
+          >
+            Add Field
+          </Chip>
+        </View>
+      )}
+      {!readonly && (
+        <AddFieldDialog
+          visible={addDialogVisible}
+          onDismiss={() => setAddDialogVisible(false)}
+          entityType={entityType}
+        />
+      )}
     </View>
   );
 }
@@ -308,5 +487,23 @@ const styles = StyleSheet.create({
   empty: {
     padding: 12,
     alignItems: 'center',
+  },
+  inlineAddRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+  },
+  dialogContent: {
+    gap: 12,
+  },
+  dialogLabel: {
+    marginTop: 4,
+  },
+  typeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  typeChip: {
+    marginBottom: 2,
   },
 });

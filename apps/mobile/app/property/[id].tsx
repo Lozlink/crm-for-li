@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import {
   useTheme,
   Text,
@@ -228,7 +228,6 @@ export default function PropertyDetailScreen() {
   const [editCars, setEditCars] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [showCustomFields, setShowCustomFields] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -674,6 +673,9 @@ export default function PropertyDetailScreen() {
                     </View>
                   </View>
                 )}
+
+                {/* Inline custom fields for this property */}
+                <CustomFieldRenderer entityType="property" entityId={id as string} inline />
               </Surface>
 
               {/* Contacts Card */}
@@ -898,24 +900,6 @@ export default function PropertyDetailScreen() {
                 ))}
               </Surface>
 
-              {/* Custom Fields */}
-              <Surface style={styles.sectionCard} elevation={1}>
-                <Pressable
-                  onPress={() => setShowCustomFields(prev => !prev)}
-                  style={styles.sectionHeader}
-                >
-                  <Icon name="form-textbox" size={20} color={theme.colors.primary} />
-                  <Text variant="titleSmall" style={[styles.sectionTitleText, { flex: 1 }]}>Custom Fields</Text>
-                  <Icon
-                    name={showCustomFields ? 'chevron-up' : 'chevron-down'}
-                    size={20}
-                    color={theme.colors.onSurfaceVariant}
-                  />
-                </Pressable>
-                {showCustomFields && (
-                  <CustomFieldRenderer entityType="property" entityId={id as string} />
-                )}
-              </Surface>
 
               {/* Status Controls */}
               {nextStatuses.length > 0 && (
