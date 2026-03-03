@@ -735,28 +735,37 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         return d;
       });
 
-      const { data, error } = await supabase
-        .from('contacts')
-        .insert(insertData)
-        .select('*, tag:tags!contacts_tag_id_fkey(*)');
+      // Insert in batches to avoid PostgREST body size limits
+      const BATCH_SIZE = 500;
+      const allCreated: Contact[] = [];
 
-      if (error) throw error;
+      for (let i = 0; i < insertData.length; i += BATCH_SIZE) {
+        const batch = insertData.slice(i, i + BATCH_SIZE);
+        const { data, error } = await supabase
+          .from('contacts')
+          .insert(batch)
+          .select('*, tag:tags!contacts_tag_id_fkey(*)');
 
-      const created = data || [];
+        if (error) throw error;
 
-      // Sync junction table for each contact that has a tag_id
-      for (const contact of created) {
-        if (contact.tag_id) {
-          await syncContactTags(contact.id, [contact.tag_id], teamId);
+        const created = data || [];
+
+        // Sync junction table for each contact that has a tag_id
+        for (const contact of created) {
+          if (contact.tag_id) {
+            await syncContactTags(contact.id, [contact.tag_id], teamId);
+          }
+          contact.tags = contact.tag ? [contact.tag] : [];
         }
-        contact.tags = contact.tag ? [contact.tag] : [];
+
+        allCreated.push(...created);
       }
 
       set(state => ({
-        contacts: [...created, ...state.contacts],
+        contacts: [...allCreated, ...state.contacts],
       }));
       get().persist();
-      return created;
+      return allCreated;
     } catch (error: any) {
       set({ error: error.message });
       return [];
