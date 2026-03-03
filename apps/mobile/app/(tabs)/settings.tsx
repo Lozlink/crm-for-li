@@ -198,14 +198,6 @@ export default function SettingsScreen() {
           onPress={() => router.push('/settings/caller-id')}
           style={styles.listItem}
         />
-        <List.Item
-          title="Custom Fields"
-          description="Define custom fields for contacts, properties, etc."
-          left={props => <List.Icon {...props} icon="form-textbox" />}
-          right={props => <List.Icon {...props} icon="chevron-right" />}
-          onPress={() => router.push('/settings/custom-fields')}
-          style={styles.listItem}
-        />
       </Surface>
 
       {/* Organisation Section */}

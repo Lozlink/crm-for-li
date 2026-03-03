@@ -17,6 +17,7 @@ const SOURCE_OPTIONS: { label: string; value: ContactSource }[] = [
   { label: 'Portal', value: 'portal' },
   { label: 'Phone', value: 'phone' },
   { label: 'Import', value: 'import' },
+  { label: 'Other', value: 'other' },
 ];
 
 const CONTACT_TYPE_OPTIONS: { label: string; value: ContactType }[] = [

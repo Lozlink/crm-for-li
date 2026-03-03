@@ -7,10 +7,10 @@ export interface Tag {
   created_at?: string;
 }
 
-export type ContactSource = 'referral' | 'web' | 'walk_in' | 'portal' | 'phone' | 'import';
+export type ContactSource = 'referral' | 'web' | 'walk_in' | 'portal' | 'phone' | 'import' | 'other';
 export type ContactType = 'buyer' | 'seller' | 'tenant' | 'landlord' | 'investor' | 'other';
 export type ContactStatus = 'active' | 'inactive' | 'archived';
-export type PreferredContactMethod = 'phone' | 'email' | 'sms';
+export type PreferredContactMethod = 'phone' | 'email' | 'sms' | 'other';
 
 export interface Contact {
   id: string;
@@ -174,7 +174,7 @@ export interface TrackingAnnotation {
 export type PropertyType = 'residential' | 'commercial';
 
 export type PropertyCategory =
-  | 'house' | 'apartment' | 'townhouse' | 'land' | 'unit' | 'villa' | 'acreage' | 'block_of_units'
+  | 'house' | 'apartment' | 'townhouse' | 'land' | 'unit' | 'villa' | 'acreage' | 'block_of_units' | 'other'
   | 'commercial_office' | 'commercial_retail' | 'commercial_industrial' | 'commercial_other';
 
 export type PropertyForType = 'sale' | 'lease';

@@ -17,7 +17,7 @@ import {
 } from 'react-native-paper';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useCRMStore, useEmailCampaignStore, useBuyerMatchStore, usePropertyStore, useInspectionStore } from '@realestate-crm/hooks';
+import { useCRMStore, useEmailCampaignStore, useBuyerMatchStore, usePropertyStore, useInspectionStore, useCustomFieldStore } from '@realestate-crm/hooks';
 import type {
   Contact, ContactFormData, ContactSource, ContactType as CType,
   ContactStatus, PreferredContactMethod, ContactRequirement, Property,
@@ -37,6 +37,7 @@ const SOURCE_OPTIONS: { label: string; value: ContactSource }[] = [
   { label: 'Portal', value: 'portal' },
   { label: 'Phone', value: 'phone' },
   { label: 'Import', value: 'import' },
+  { label: 'Other', value: 'other' },
 ];
 
 const CONTACT_TYPE_OPTIONS: { label: string; value: CType }[] = [
@@ -58,9 +59,10 @@ const PREFERRED_METHOD_OPTIONS: { label: string; value: PreferredContactMethod }
   { label: 'Phone', value: 'phone' },
   { label: 'Email', value: 'email' },
   { label: 'SMS', value: 'sms' },
+  { label: 'Other', value: 'other' },
 ];
 
-const REQUIREMENT_CATEGORIES = ['house', 'apartment', 'townhouse', 'land', 'unit', 'villa'] as const;
+const REQUIREMENT_CATEGORIES = ['house', 'apartment', 'townhouse', 'land', 'unit', 'villa', 'other'] as const;
 
 // --- Helpers ---
 
@@ -238,9 +240,20 @@ export default function ContactDetailScreen() {
   const [editEnrichmentVisible, setEditEnrichmentVisible] = useState(false);
   const [editForm, setEditForm] = useState<EditFormState>(initialEditState({} as Contact));
 
+  // Custom fields for requirements
+  const reqFieldDefs = useCustomFieldStore(s => s.definitions).filter(d => d.entity_type === 'contact_requirement');
+  const fetchCustomFieldDefs = useCustomFieldStore(s => s.fetchDefinitions);
+  const setCustomFieldValue = useCustomFieldStore(s => s.setFieldValue);
+  const createFieldDefinition = useCustomFieldStore(s => s.createDefinition);
+
   // Requirement dialog
   const [reqDialogVisible, setReqDialogVisible] = useState(false);
   const [reqForm, setReqForm] = useState<RequirementFormState>(DEFAULT_REQ_FORM);
+  const [reqCustomValues, setReqCustomValues] = useState<Record<string, string | number | boolean | string[]>>({});
+  const [addFieldDialogVisible, setAddFieldDialogVisible] = useState(false);
+  const [newFieldLabel, setNewFieldLabel] = useState('');
+  const [newFieldType, setNewFieldType] = useState<'text' | 'number' | 'boolean' | 'date' | 'single_select' | 'multi_select'>('text');
+  const [newFieldOptions, setNewFieldOptions] = useState('');
 
   // Matching properties per requirement
   const [matchResults, setMatchResults] = useState<Record<string, Property[]>>({});
@@ -262,6 +275,7 @@ export default function ContactDetailScreen() {
       fetchRequirements(id);
       fetchProperties();
       fetchInspections();
+      fetchCustomFieldDefs('contact_requirement');
     }
   }, [id, contacts]);
 
@@ -368,7 +382,28 @@ export default function ContactDetailScreen() {
 
   const handleOpenReqDialog = () => {
     setReqForm(DEFAULT_REQ_FORM);
+    setReqCustomValues({});
     setReqDialogVisible(true);
+  };
+
+  const handleAddCustomField = async () => {
+    if (!newFieldLabel.trim()) return;
+    const fieldName = newFieldLabel.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    const needsOpts = newFieldType === 'single_select' || newFieldType === 'multi_select';
+    const options = needsOpts ? newFieldOptions.split(',').map(o => o.trim()).filter(Boolean) : undefined;
+    await createFieldDefinition({
+      entity_type: 'contact_requirement',
+      field_name: fieldName,
+      field_label: newFieldLabel.trim(),
+      field_type: newFieldType,
+      options,
+      is_required: false,
+      display_order: reqFieldDefs.length,
+    });
+    setNewFieldLabel('');
+    setNewFieldType('text');
+    setNewFieldOptions('');
+    setAddFieldDialogVisible(false);
   };
 
   const handleSaveRequirement = async () => {
@@ -382,7 +417,7 @@ export default function ContactDetailScreen() {
       .map(s => s.trim())
       .filter(Boolean);
 
-    await createRequirement({
+    const newReq = await createRequirement({
       contact_id: id,
       for_type: reqForm.for_type,
       property_types: ['residential'],
@@ -396,6 +431,16 @@ export default function ContactDetailScreen() {
       features: featuresList,
       active: reqForm.active,
     });
+
+    // Save custom field values for the new requirement
+    if (newReq) {
+      for (const [defId, val] of Object.entries(reqCustomValues)) {
+        if (val !== '' && val !== null && val !== undefined) {
+          await setCustomFieldValue(defId, newReq.id, 'contact_requirement', val);
+        }
+      }
+    }
+
     setReqDialogVisible(false);
   };
 
@@ -1219,12 +1264,182 @@ export default function ContactDetailScreen() {
                     onValueChange={v => setReqForm(prev => ({ ...prev, active: v }))}
                   />
                 </View>
+
+                {/* Custom fields for requirements */}
+                {reqFieldDefs.length > 0 && (
+                  <>
+                    <Divider style={{ marginVertical: 12 }} />
+                    <Text variant="labelLarge" style={styles.fieldLabel}>Custom Fields</Text>
+                    {reqFieldDefs.map(def => {
+                      const val = reqCustomValues[def.id];
+                      switch (def.field_type) {
+                        case 'text':
+                          return (
+                            <TextInput
+                              key={def.id}
+                              label={def.field_label}
+                              value={(val as string) ?? ''}
+                              onChangeText={v => setReqCustomValues(prev => ({ ...prev, [def.id]: v }))}
+                              mode="outlined"
+                              dense
+                              style={styles.dialogInput}
+                            />
+                          );
+                        case 'number':
+                          return (
+                            <TextInput
+                              key={def.id}
+                              label={def.field_label}
+                              value={val != null ? String(val) : ''}
+                              onChangeText={v => {
+                                const n = parseFloat(v);
+                                setReqCustomValues(prev => ({ ...prev, [def.id]: isNaN(n) ? 0 : n }));
+                              }}
+                              mode="outlined"
+                              dense
+                              keyboardType="numeric"
+                              style={styles.dialogInput}
+                            />
+                          );
+                        case 'boolean':
+                          return (
+                            <View key={def.id} style={styles.switchRow}>
+                              <Text variant="bodyMedium">{def.field_label}</Text>
+                              <Switch
+                                value={(val as boolean) ?? false}
+                                onValueChange={v => setReqCustomValues(prev => ({ ...prev, [def.id]: v }))}
+                              />
+                            </View>
+                          );
+                        case 'single_select': {
+                          const options = def.options ?? [];
+                          const selected = (val as string) ?? '';
+                          return (
+                            <View key={def.id}>
+                              <Text variant="labelMedium" style={styles.fieldLabel}>{def.field_label}</Text>
+                              <View style={styles.chipRow}>
+                                {options.map(opt => (
+                                  <Chip
+                                    key={opt}
+                                    selected={selected === opt}
+                                    onPress={() => setReqCustomValues(prev => ({ ...prev, [def.id]: selected === opt ? '' : opt }))}
+                                    compact
+                                  >
+                                    {opt}
+                                  </Chip>
+                                ))}
+                              </View>
+                            </View>
+                          );
+                        }
+                        case 'multi_select': {
+                          const options = def.options ?? [];
+                          const selectedArr = Array.isArray(val) ? val : [];
+                          return (
+                            <View key={def.id}>
+                              <Text variant="labelMedium" style={styles.fieldLabel}>{def.field_label}</Text>
+                              <View style={styles.chipRow}>
+                                {options.map(opt => (
+                                  <Chip
+                                    key={opt}
+                                    selected={selectedArr.includes(opt)}
+                                    onPress={() => {
+                                      const newArr = selectedArr.includes(opt)
+                                        ? selectedArr.filter(s => s !== opt)
+                                        : [...selectedArr, opt];
+                                      setReqCustomValues(prev => ({ ...prev, [def.id]: newArr }));
+                                    }}
+                                    compact
+                                  >
+                                    {opt}
+                                  </Chip>
+                                ))}
+                              </View>
+                            </View>
+                          );
+                        }
+                        case 'date':
+                          return (
+                            <TextInput
+                              key={def.id}
+                              label={def.field_label}
+                              value={(val as string) ?? ''}
+                              onChangeText={v => setReqCustomValues(prev => ({ ...prev, [def.id]: v }))}
+                              mode="outlined"
+                              dense
+                              placeholder="YYYY-MM-DD"
+                              style={styles.dialogInput}
+                            />
+                          );
+                        default:
+                          return null;
+                      }
+                    })}
+                  </>
+                )}
+
+                {/* Add Custom Field button */}
+                <Divider style={{ marginVertical: 12 }} />
+                <Chip
+                  icon="plus"
+                  onPress={() => setAddFieldDialogVisible(true)}
+                  compact
+                >
+                  Add Custom
+                </Chip>
               </View>
             </ScrollView>
           </Dialog.ScrollArea>
           <Dialog.Actions>
             <Button onPress={() => setReqDialogVisible(false)}>Cancel</Button>
             <Button mode="contained" onPress={handleSaveRequirement}>Save</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Add custom field definition dialog */}
+        <Dialog visible={addFieldDialogVisible} onDismiss={() => setAddFieldDialogVisible(false)}>
+          <Dialog.Title>Add Custom Field</Dialog.Title>
+          <Dialog.Content style={{ gap: 12 }}>
+            <TextInput
+              label="Field Label"
+              value={newFieldLabel}
+              onChangeText={setNewFieldLabel}
+              mode="outlined"
+              dense
+              autoFocus
+            />
+            <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>Field Type</Text>
+            <View style={styles.chipRow}>
+              {(['text', 'number', 'boolean', 'date', 'single_select', 'multi_select'] as const).map(t => (
+                <Chip
+                  key={t}
+                  selected={newFieldType === t}
+                  onPress={() => setNewFieldType(t)}
+                  compact
+                >
+                  {t === 'single_select' ? 'Select' : t === 'multi_select' ? 'Multi' : t === 'boolean' ? 'Yes/No' : capitalizeFirst(t)}
+                </Chip>
+              ))}
+            </View>
+            {(newFieldType === 'single_select' || newFieldType === 'multi_select') && (
+              <TextInput
+                label="Options (comma-separated)"
+                value={newFieldOptions}
+                onChangeText={setNewFieldOptions}
+                mode="outlined"
+                dense
+                placeholder="Option 1, Option 2"
+              />
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setAddFieldDialogVisible(false)}>Cancel</Button>
+            <Button
+              onPress={handleAddCustomField}
+              disabled={!newFieldLabel.trim()}
+            >
+              Add
+            </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

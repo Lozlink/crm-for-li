@@ -54,6 +54,7 @@ const CATEGORY_OPTIONS: { label: string; value: PropertyCategory }[] = [
   { label: 'Villa', value: 'villa' },
   { label: 'Acreage', value: 'acreage' },
   { label: 'Block of Units', value: 'block_of_units' },
+  { label: 'Other', value: 'other' },
 ];
 
 interface PropertyFilters {

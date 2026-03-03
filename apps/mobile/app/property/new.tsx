@@ -27,6 +27,7 @@ const RESIDENTIAL_CATEGORIES: { label: string; value: PropertyCategory }[] = [
   { label: 'Land', value: 'land' },
   { label: 'Acreage', value: 'acreage' },
   { label: 'Block of Units', value: 'block_of_units' },
+  { label: 'Other', value: 'other' },
 ];
 
 const COMMERCIAL_CATEGORIES: { label: string; value: PropertyCategory }[] = [
