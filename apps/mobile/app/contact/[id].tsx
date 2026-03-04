@@ -274,7 +274,7 @@ export default function ContactDetailScreen() {
       });
       fetchRequirements(id);
       fetchProperties();
-      fetchInspections();
+      fetchInspections(undefined, true);
       fetchCustomFieldDefs('contact_requirement');
     }
   }, [id, contacts]);

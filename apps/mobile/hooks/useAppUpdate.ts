@@ -7,7 +7,14 @@ export function useAppUpdate() {
 
   useEffect(() => {
     if (isUpdatePending) {
-      Updates.reloadAsync();
+      Alert.alert(
+        'Update Ready',
+        'A new version has been downloaded. Restart now to apply it?',
+        [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Restart', onPress: () => Updates.reloadAsync() },
+        ]
+      );
     }
   }, [isUpdatePending]);
 

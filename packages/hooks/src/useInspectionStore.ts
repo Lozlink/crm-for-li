@@ -127,7 +127,11 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
   error: null,
 
   fetchInspections: async (propertyId, includeAttendees) => {
-    set({ isLoading: true, error: null });
+    set({
+      isLoading: true,
+      error: null,
+      ...(propertyId ? { propertyInspections: [] } : {}),
+    });
     try {
       const { isDemo, teamId } = getTeamContext();
       if (isDemo) {
