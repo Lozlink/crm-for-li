@@ -179,26 +179,38 @@ export default function InspectionDetailScreen() {
       return;
     }
 
-    // No linked contact — create one and link
-    setConvertingAttendeeId(attendee.id);
-    try {
-      const newContact = await addContact({
-        first_name: attendee.first_name || '',
-        last_name: attendee.last_name || '',
-        phone: attendee.phone || '',
-        email: attendee.email || '',
-        address: '',
-      });
-      if (newContact) {
-        await linkAttendeeToContact(attendee.id, newContact.id);
-        router.push(`/contact/${newContact.id}`);
-      }
-    } catch (error) {
-      console.error('Convert attendee error:', error);
-      Alert.alert('Error', 'Failed to create contact from attendee.');
-    } finally {
-      setConvertingAttendeeId(null);
-    }
+    // No linked contact — confirm before creating
+    Alert.alert(
+      'Create Contact',
+      `Create a new contact for ${[attendee.first_name, attendee.last_name].filter(Boolean).join(' ')}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Create Contact',
+          onPress: async () => {
+            setConvertingAttendeeId(attendee.id);
+            try {
+              const newContact = await addContact({
+                first_name: attendee.first_name || '',
+                last_name: attendee.last_name || '',
+                phone: attendee.phone || '',
+                email: attendee.email || '',
+                address: '',
+              });
+              if (newContact) {
+                await linkAttendeeToContact(attendee.id, newContact.id);
+                router.push(`/contact/${newContact.id}`);
+              }
+            } catch (error) {
+              console.error('Convert attendee error:', error);
+              Alert.alert('Error', 'Failed to create contact from attendee.');
+            } finally {
+              setConvertingAttendeeId(null);
+            }
+          },
+        },
+      ]
+    );
   }, [addContact, linkAttendeeToContact, router]);
 
   const handleOpenEndDialog = useCallback(() => {

@@ -6,6 +6,7 @@ import { useCRMStore } from './useCRMStore';
 
 interface InspectionState {
   inspections: Inspection[];
+  propertyInspections: Inspection[];
   activeInspection: Inspection | null;
   attendees: InspectionAttendee[];
   upcomingInspections: Inspection[];
@@ -117,6 +118,7 @@ const DEMO_ATTENDEES: InspectionAttendee[] = [
 
 export const useInspectionStore = create<InspectionState>()((set, get) => ({
   inspections: [],
+  propertyInspections: [],
   activeInspection: null,
   attendees: [],
   upcomingInspections: [],
@@ -131,13 +133,17 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
         const filtered = propertyId
           ? DEMO_INSPECTIONS.filter((i) => i.property_id === propertyId)
           : DEMO_INSPECTIONS;
-        const inspections = includeAttendees
+        const results = includeAttendees
           ? filtered.map((i) => ({
               ...i,
               attendees: DEMO_ATTENDEES.filter((a) => a.inspection_id === i.id),
             }))
           : filtered;
-        set({ inspections, isLoading: false });
+        if (propertyId) {
+          set({ propertyInspections: results, isLoading: false });
+        } else {
+          set({ inspections: results, isLoading: false });
+        }
         return;
       }
 
@@ -155,7 +161,12 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
 
       const { data, error } = await query;
       if (error) throw error;
-      set({ inspections: (data as Inspection[]) || [], isLoading: false });
+      const results = (data as Inspection[]) || [];
+      if (propertyId) {
+        set({ propertyInspections: results, isLoading: false });
+      } else {
+        set({ inspections: results, isLoading: false });
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to fetch inspections';
       set({ error: message, isLoading: false });
@@ -247,7 +258,13 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
 
       if (error) throw error;
       const newInspection = data as Inspection;
-      set((state) => ({ inspections: [newInspection, ...state.inspections] }));
+      set((state) => ({
+        inspections: [newInspection, ...state.inspections],
+        propertyInspections: state.propertyInspections.length > 0 &&
+          state.propertyInspections[0]?.property_id === newInspection.property_id
+          ? [newInspection, ...state.propertyInspections]
+          : state.propertyInspections,
+      }));
       return newInspection;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create inspection';
@@ -266,6 +283,7 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
 
       set((state) => ({
         inspections: state.inspections.map((i) => (i.id === id ? { ...i, ...updates } : i)),
+        propertyInspections: state.propertyInspections.map((i) => (i.id === id ? { ...i, ...updates } : i)),
         activeInspection: state.activeInspection?.id === id ? { ...state.activeInspection, ...updates } : state.activeInspection,
       }));
     } catch (err: unknown) {

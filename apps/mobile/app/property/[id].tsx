@@ -222,7 +222,7 @@ export default function PropertyDetailScreen() {
   const [hasSearchedBuyers, setHasSearchedBuyers] = useState(false);
 
   // Inspections
-  const inspections = useInspectionStore(state => state.inspections);
+  const inspections = useInspectionStore(state => state.propertyInspections);
   const isInspectionsLoading = useInspectionStore(state => state.isLoading);
   const fetchInspections = useInspectionStore(state => state.fetchInspections);
   const createInspection = useInspectionStore(state => state.createInspection);

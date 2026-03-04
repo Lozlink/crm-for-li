@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore, useCallerIdSync, useCallLogSync, useTrackingStore } from '@realestate-crm/hooks';
 import { useCRMStore } from '@realestate-crm/hooks';
+import { useAppUpdate } from '../hooks/useAppUpdate';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -107,6 +108,7 @@ export default function RootLayout() {
 
   useCallerIdSync();
   useCallLogSync();
+  useAppUpdate();
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

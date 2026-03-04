@@ -273,9 +273,18 @@ export const useBuyerMatchStore = create<BuyerMatchState>()((set) => ({
           }
         }
         const order = { strong: 0, partial: 1, weak: 2 };
-        demoMatches.sort((a, b) => order[a.strength] - order[b.strength]);
-        set({ matches: demoMatches, isLoading: false });
-        return demoMatches;
+        // Deduplicate by contact ID, keeping strongest match
+        const deduped = new Map<string, BuyerMatch>();
+        for (const m of demoMatches) {
+          const existing = deduped.get(m.contact.id);
+          if (!existing || order[m.strength] < order[existing.strength]) {
+            deduped.set(m.contact.id, m);
+          }
+        }
+        const finalMatches = Array.from(deduped.values());
+        finalMatches.sort((a, b) => order[a.strength] - order[b.strength]);
+        set({ matches: finalMatches, isLoading: false });
+        return finalMatches;
       }
 
       // Fetch all active requirements for the team
@@ -306,12 +315,20 @@ export const useBuyerMatchStore = create<BuyerMatchState>()((set) => ({
         }
       }
 
-      // Sort: strong first, then partial, then weak
+      // Deduplicate by contact ID, keeping strongest match
       const order = { strong: 0, partial: 1, weak: 2 };
-      matches.sort((a, b) => order[a.strength] - order[b.strength]);
+      const deduped = new Map<string, BuyerMatch>();
+      for (const m of matches) {
+        const existing = deduped.get(m.contact.id);
+        if (!existing || order[m.strength] < order[existing.strength]) {
+          deduped.set(m.contact.id, m);
+        }
+      }
+      const finalMatches = Array.from(deduped.values());
+      finalMatches.sort((a, b) => order[a.strength] - order[b.strength]);
 
-      set({ matches, isLoading: false });
-      return matches;
+      set({ matches: finalMatches, isLoading: false });
+      return finalMatches;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to find matches';
       set({ error: message, isLoading: false });
