@@ -56,6 +56,9 @@ const DEMO_TASKS: Task[] = [
     due_at: tomorrow.toISOString(),
     created_at: now.toISOString(),
     updated_at: now.toISOString(),
+    contact_id: 'demo-contact-1',
+    contact: { id: 'demo-contact-1', first_name: 'Sarah', last_name: 'Chen', email: 'sarah.chen@example.com', phone: '0412 345 678' } as Task['contact'],
+    property: { id: 'demo-prop-1', address: '42 Harbour Street', suburb: 'Sydney' } as Task['property'],
   },
   {
     id: 'demo-task-2',
@@ -76,6 +79,9 @@ const DEMO_TASKS: Task[] = [
     due_at: yesterday.toISOString(),
     created_at: yesterday.toISOString(),
     updated_at: yesterday.toISOString(),
+    contact_id: 'demo-contact-2',
+    contact: { id: 'demo-contact-2', first_name: 'James', last_name: 'Wilson', phone: '0423 456 789' } as Task['contact'],
+    property: { id: 'demo-prop-2', address: '7 Ocean Road', suburb: 'Bondi Beach' } as Task['property'],
   },
   {
     id: 'demo-task-4',
@@ -117,7 +123,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
 
       let query = supabase
         .from('tasks')
-        .select('*, contact:contacts(id, first_name, last_name), property:properties(id, address, suburb)')
+        .select('*, contact:contacts(id, first_name, last_name, email, phone), property:properties(id, address, suburb)')
         .order('due_at', { ascending: true, nullsFirst: false });
 
       if (teamId) query = query.eq('team_id', teamId);
@@ -153,7 +159,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
 
       let query = supabase
         .from('tasks')
-        .select('*, contact:contacts(id, first_name, last_name), property:properties(id, address, suburb)')
+        .select('*, contact:contacts(id, first_name, last_name, email, phone), property:properties(id, address, suburb)')
         .in('status', ['pending', 'overdue'])
         .lte('due_at', endOfDay)
         .order('due_at', { ascending: true });
@@ -193,7 +199,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
       const { data, error } = await supabase
         .from('tasks')
         .insert(insertData)
-        .select('*, contact:contacts(id, first_name, last_name), property:properties(id, address, suburb)')
+        .select('*, contact:contacts(id, first_name, last_name, email, phone), property:properties(id, address, suburb)')
         .single();
 
       if (error) throw error;

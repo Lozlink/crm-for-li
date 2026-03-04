@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View, FlatList, ScrollView } from 'react-native';
+import { StyleSheet, View, FlatList, ScrollView, Linking, Platform } from 'react-native';
 import {
   FAB,
   useTheme,
@@ -82,6 +82,56 @@ function getContactDisplayName(contact: Task['contact']): string | null {
   if (!contact) return null;
   const parts = [contact.first_name, contact.last_name].filter(Boolean);
   return parts.length > 0 ? parts.join(' ') : null;
+}
+
+function generateTaskMessage(type: TaskType, name: string, context?: { property?: string; date?: string; title?: string }): string {
+  switch (type) {
+    case 'follow_up':
+      return `Hi ${name}, following up regarding ${context?.property || 'our recent conversation'}. Would love to chat when you have a moment.`;
+    case 'appointment':
+      return `Hi ${name}, confirming our appointment${context?.date ? ` on ${context.date}` : ''}. Looking forward to speaking with you.`;
+    case 'inspection_reminder':
+      return `Hi ${name}, reminder: inspection${context?.property ? ` at ${context.property}` : ''}${context?.date ? ` on ${context.date}` : ''}. See you there!`;
+    default:
+      return `Hi ${name}, touching base regarding ${context?.title || 'your enquiry'}. Let me know if you have any questions.`;
+  }
+}
+
+function sanitizePhone(phone: string): string {
+  return phone.replace(/[^\d+]/g, '');
+}
+
+function handleTaskEmail(task: Task) {
+  const contact = task.contact;
+  if (!contact?.email) return;
+  const name = getContactDisplayName(contact) || 'there';
+  const subject = encodeURIComponent(task.title);
+  const body = encodeURIComponent(generateTaskMessage(task.type, name, {
+    property: task.property?.address,
+    date: task.due_at ? formatDueDate(task.due_at) : undefined,
+    title: task.title,
+  }));
+  Linking.openURL(`mailto:${encodeURIComponent(contact.email)}?subject=${subject}&body=${body}`).catch(() => {});
+}
+
+function handleTaskSMS(task: Task) {
+  const contact = task.contact;
+  if (!contact?.phone) return;
+  const phone = sanitizePhone(contact.phone);
+  const name = getContactDisplayName(contact) || 'there';
+  const body = encodeURIComponent(generateTaskMessage(task.type, name, {
+    property: task.property?.address,
+    date: task.due_at ? formatDueDate(task.due_at) : undefined,
+    title: task.title,
+  }));
+  const separator = Platform.OS === 'ios' ? '&' : '?';
+  Linking.openURL(`sms:${phone}${separator}body=${body}`).catch(() => {});
+}
+
+function handleTaskCall(task: Task) {
+  const contact = task.contact;
+  if (!contact?.phone) return;
+  Linking.openURL(`tel:${sanitizePhone(contact.phone)}`).catch(() => {});
 }
 
 export default function TasksScreen() {
@@ -340,6 +390,42 @@ export default function TasksScreen() {
                 )}
               </View>
             )}
+
+            {/* Action buttons for tasks with linked contacts */}
+            {isPending && item.contact && (item.contact.email || item.contact.phone) && (
+              <View style={styles.actionRow}>
+                {item.contact.email && (
+                  <IconButton
+                    icon="email-outline"
+                    size={20}
+                    iconColor={theme.colors.primary}
+                    style={styles.actionButton}
+                    onPress={() => handleTaskEmail(item)}
+                    accessibilityLabel="Send email"
+                  />
+                )}
+                {item.contact.phone && (
+                  <IconButton
+                    icon="message-text-outline"
+                    size={20}
+                    iconColor={theme.colors.primary}
+                    style={styles.actionButton}
+                    onPress={() => handleTaskSMS(item)}
+                    accessibilityLabel="Send SMS"
+                  />
+                )}
+                {item.contact.phone && (
+                  <IconButton
+                    icon="phone-outline"
+                    size={20}
+                    iconColor={theme.colors.primary}
+                    style={styles.actionButton}
+                    onPress={() => handleTaskCall(item)}
+                    accessibilityLabel="Call contact"
+                  />
+                )}
+              </View>
+            )}
           </View>
         </View>
       </Surface>
@@ -551,6 +637,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 1,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    marginLeft: -8,
+  },
+  actionButton: {
+    margin: 0,
   },
   fab: {
     position: 'absolute',

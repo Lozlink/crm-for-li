@@ -12,7 +12,7 @@ interface InspectionState {
   isLoading: boolean;
   error: string | null;
 
-  fetchInspections: (propertyId?: string) => Promise<void>;
+  fetchInspections: (propertyId?: string, includeAttendees?: boolean) => Promise<void>;
   fetchUpcoming: () => Promise<void>;
   fetchInspection: (inspectionId: string) => Promise<void>;
   createInspection: (inspection: Omit<Inspection, 'id' | 'created_at' | 'updated_at' | 'attendees' | 'property'>) => Promise<Inspection | null>;
@@ -123,7 +123,7 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
   isLoading: false,
   error: null,
 
-  fetchInspections: async (propertyId) => {
+  fetchInspections: async (propertyId, includeAttendees) => {
     set({ isLoading: true, error: null });
     try {
       const { isDemo, teamId } = getTeamContext();
@@ -131,13 +131,23 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
         const filtered = propertyId
           ? DEMO_INSPECTIONS.filter((i) => i.property_id === propertyId)
           : DEMO_INSPECTIONS;
-        set({ inspections: filtered, isLoading: false });
+        const inspections = includeAttendees
+          ? filtered.map((i) => ({
+              ...i,
+              attendees: DEMO_ATTENDEES.filter((a) => a.inspection_id === i.id),
+            }))
+          : filtered;
+        set({ inspections, isLoading: false });
         return;
       }
 
+      const selectFields = includeAttendees
+        ? '*, property:properties(id, address, suburb), attendees:inspection_attendees(id, first_name, last_name, interest_level, source, phone, email, contact_id)'
+        : '*, property:properties(id, address, suburb), attendees:inspection_attendees(count)';
+
       let query = supabase
         .from('inspections')
-        .select('*, property:properties(id, address, suburb), attendees:inspection_attendees(count)')
+        .select(selectFields)
         .order('scheduled_at', { ascending: false });
 
       if (teamId) query = query.eq('team_id', teamId);

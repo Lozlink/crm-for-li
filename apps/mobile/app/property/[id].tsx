@@ -25,6 +25,7 @@ import type {
   MatchStrength,
   Inspection,
   InspectionType,
+  InspectionAttendee,
 } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { CustomFieldRenderer } from '@realestate-crm/ui';
@@ -161,6 +162,27 @@ function formatDateTime(isoString: string): string {
   });
 }
 
+const INTEREST_COLORS: Record<string, string> = {
+  hot: '#dc2626',
+  warm: '#f59e0b',
+  cold: '#3b82f6',
+};
+
+function getInterestBreakdown(attendees: InspectionAttendee[]): string {
+  if (!attendees || attendees.length === 0) return '0 attended';
+  const counts: Record<string, number> = {};
+  for (const a of attendees) {
+    const level = a.interest_level || 'unknown';
+    counts[level] = (counts[level] || 0) + 1;
+  }
+  const parts: string[] = [];
+  if (counts.hot) parts.push(`${counts.hot} hot`);
+  if (counts.warm) parts.push(`${counts.warm} warm`);
+  if (counts.cold) parts.push(`${counts.cold} cold`);
+  if (counts.unknown) parts.push(`${counts.unknown} unrated`);
+  return `${attendees.length} attended${parts.length > 0 ? ': ' + parts.join(', ') : ''}`;
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   house: 'House',
   apartment: 'Apartment',
@@ -232,7 +254,7 @@ export default function PropertyDetailScreen() {
   useEffect(() => {
     if (id) {
       fetchProperty(id);
-      fetchInspections(id);
+      fetchInspections(id, true);
     }
     return () => {
       clearActiveProperty();
@@ -350,7 +372,7 @@ export default function PropertyDetailScreen() {
       setInspectionTime('');
       setInspectionType('open_home');
       setInspectionDuration('30');
-      await fetchInspections(id);
+      await fetchInspections(id, true);
     } catch (error) {
       console.error('Schedule inspection error:', error);
       Alert.alert('Error', 'Failed to schedule inspection.');
@@ -823,12 +845,12 @@ export default function PropertyDetailScreen() {
                 ))}
               </Surface>
 
-              {/* Inspections */}
+              {/* Visits */}
               <Surface style={styles.sectionCard} elevation={1}>
                 <View style={styles.sectionHeaderWithAction}>
                   <View style={styles.sectionHeader}>
                     <Icon name="clipboard-check" size={20} color={theme.colors.primary} />
-                    <Text variant="titleSmall" style={styles.sectionTitleText}>Inspections</Text>
+                    <Text variant="titleSmall" style={styles.sectionTitleText}>Visits</Text>
                   </View>
                   <Button
                     mode="contained-tonal"
@@ -850,25 +872,42 @@ export default function PropertyDetailScreen() {
                   <View style={styles.emptyContacts}>
                     <Icon name="calendar-blank" size={32} color={theme.colors.onSurfaceVariant} />
                     <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8, textAlign: 'center' }}>
-                      No inspections scheduled
+                      No visits yet
                     </Text>
                   </View>
                 )}
 
-                {!isInspectionsLoading && inspections.map(inspection => (
-                  <Surface
-                    key={inspection.id}
-                    style={styles.matchCard}
-                    elevation={0}
-                  >
+                {!isInspectionsLoading && inspections.map((inspection, index) => {
+                  const isCompleted = inspection.status === 'completed';
+                  const isLast = index === inspections.length - 1;
+                  const attendees = (inspection.attendees as InspectionAttendee[] | undefined) || [];
+
+                  return (
                     <View
-                      style={styles.contactOptionTouchable}
+                      key={inspection.id}
+                      style={styles.timelineItem}
                       onTouchEnd={() => router.push(`/inspection/${inspection.id}`)}
                       accessible
                       accessibilityRole="button"
-                      accessibilityLabel={`View inspection on ${formatDateTime(inspection.scheduled_at)}`}
+                      accessibilityLabel={`View visit on ${formatDateTime(inspection.scheduled_at)}`}
                     >
-                      <View style={{ flex: 1 }}>
+                      {/* Timeline rail */}
+                      <View style={styles.timelineRail}>
+                        <View
+                          style={[
+                            styles.timelineDot,
+                            isCompleted
+                              ? { backgroundColor: INSPECTION_STATUS_COLORS[inspection.status] }
+                              : { backgroundColor: 'transparent', borderWidth: 2, borderColor: INSPECTION_STATUS_COLORS[inspection.status] },
+                          ]}
+                        />
+                        {!isLast && (
+                          <View style={[styles.timelineLine, { backgroundColor: theme.colors.outlineVariant }]} />
+                        )}
+                      </View>
+
+                      {/* Card */}
+                      <View style={[styles.timelineCard, !isCompleted && { opacity: 0.7 }]}>
                         <Text variant="bodyMedium" style={{ fontWeight: '600' }}>
                           {formatDateTime(inspection.scheduled_at)}
                         </Text>
@@ -887,17 +926,42 @@ export default function PropertyDetailScreen() {
                           >
                             {INSPECTION_STATUS_LABELS[inspection.status]}
                           </Chip>
-                          {inspection.attendees && (
-                            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                              {(inspection.attendees as unknown as { count: number }[])[0]?.count ?? 0} attendees
-                            </Text>
-                          )}
                         </View>
+
+                        {/* Attendee summary */}
+                        {isCompleted && attendees.length > 0 && (
+                          <View style={{ marginTop: 6 }}>
+                            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                              {getInterestBreakdown(attendees)}
+                            </Text>
+                            <View style={styles.attendeeList}>
+                              {attendees.map((att) => {
+                                const name = [att.first_name, att.last_name].filter(Boolean).join(' ');
+                                const dotColor = att.interest_level ? INTEREST_COLORS[att.interest_level] || theme.colors.onSurfaceVariant : theme.colors.onSurfaceVariant;
+                                return (
+                                  <View key={att.id} style={styles.attendeeItem}>
+                                    <View style={[styles.interestDot, { backgroundColor: dotColor }]} />
+                                    <Text variant="bodySmall" style={{ color: theme.colors.onSurface }}>
+                                      {name}
+                                    </Text>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          </View>
+                        )}
+
+                        {attendees.length === 0 && (
+                          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
+                            {isCompleted ? 'No attendees recorded' : 'No attendees registered yet'}
+                          </Text>
+                        )}
                       </View>
-                      <Icon name="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
+
+                      <Icon name="chevron-right" size={20} color={theme.colors.onSurfaceVariant} style={{ alignSelf: 'center' }} />
                     </View>
-                  </Surface>
-                ))}
+                  );
+                })}
               </Surface>
 
 
@@ -1246,6 +1310,48 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 4,
     marginTop: 6,
+  },
+  timelineItem: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  timelineRail: {
+    width: 28,
+    alignItems: 'center',
+    paddingTop: 6,
+  },
+  timelineDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    marginTop: 4,
+  },
+  timelineCard: {
+    flex: 1,
+    padding: 12,
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  attendeeList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  attendeeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  interestDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   matchFieldChip: {
     height: 24,

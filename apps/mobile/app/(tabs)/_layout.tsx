@@ -43,12 +43,6 @@ function TopHeader() {
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => router.push('/(tabs)/settings' as never)}
-            style={styles.headerIcon}
-          >
-            <Icon name="cog-outline" size={22} color={theme.colors.onSurfaceVariant} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => router.push('/(tabs)/settings' as never)}
             style={[styles.avatar, { backgroundColor: theme.colors.primaryContainer }]}
           >
             <Text style={{ color: theme.colors.onPrimaryContainer, fontWeight: '700', fontSize: 13 }}>
