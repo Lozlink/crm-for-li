@@ -13,7 +13,7 @@ import {
   TextInput,
 } from 'react-native-paper';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { useInspectionStore, useTaskStore, useCRMStore } from '@realestate-crm/hooks';
+import { useInspectionStore, useTaskStore, useCRMStore, useDuplicateCheck } from '@realestate-crm/hooks';
 import type {
   InspectionType,
   InspectionStatus,
@@ -93,6 +93,7 @@ export default function InspectionDetailScreen() {
 
   const addContact = useCRMStore(state => state.addContact);
   const createFollowUpTasks = useTaskStore(state => state.createFollowUpTasks);
+  const { checkForDuplicate } = useDuplicateCheck();
 
   // Check-in form state
   const [firstName, setFirstName] = useState('');
@@ -150,28 +151,57 @@ export default function InspectionDetailScreen() {
 
   const handleCheckIn = useCallback(async () => {
     if (!id || !firstName.trim()) return;
-    setIsCheckingIn(true);
-    try {
-      await addAttendee(id, {
-        first_name: firstName.trim(),
-        last_name: lastName.trim() || undefined,
-        phone: phone.trim() || undefined,
-        email: email.trim() || undefined,
-        source,
-      });
-      // Clear form
+
+    const attendeeData = {
+      first_name: firstName.trim(),
+      last_name: lastName.trim() || undefined,
+      phone: phone.trim() || undefined,
+      email: email.trim() || undefined,
+      source,
+    };
+
+    const clearForm = () => {
       setFirstName('');
       setLastName('');
       setPhone('');
       setEmail('');
       setSource('walk_in');
-    } catch (error) {
-      console.error('Check-in error:', error);
-      Alert.alert('Error', 'Failed to check in attendee.');
-    } finally {
-      setIsCheckingIn(false);
+    };
+
+    const doCheckIn = async (resolvedContactId?: string) => {
+      setIsCheckingIn(true);
+      try {
+        await addAttendee(id, attendeeData, resolvedContactId);
+        clearForm();
+      } catch (error) {
+        console.error('Check-in error:', error);
+        Alert.alert('Error', 'Failed to check in attendee.');
+      } finally {
+        setIsCheckingIn(false);
+      }
+    };
+
+    const match = checkForDuplicate({
+      first_name: attendeeData.first_name,
+      last_name: attendeeData.last_name,
+      phone: attendeeData.phone,
+      email: attendeeData.email,
+    });
+
+    if (match) {
+      Alert.alert(
+        'Possible Duplicate',
+        `You may already have this person saved: ${match.first_name} ${match.last_name || ''}`.trim(),
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Link Existing', onPress: () => doCheckIn(match.id) },
+          { text: 'Check In New', onPress: () => doCheckIn() },
+        ],
+      );
+    } else {
+      await doCheckIn();
     }
-  }, [id, firstName, lastName, phone, email, source, addAttendee]);
+  }, [id, firstName, lastName, phone, email, source, addAttendee, checkForDuplicate]);
 
   const handleAttendeePress = useCallback(async (attendee: InspectionAttendee) => {
     if (attendee.contact_id) {
@@ -179,39 +209,63 @@ export default function InspectionDetailScreen() {
       return;
     }
 
-    // No linked contact — confirm before creating
-    Alert.alert(
-      'Create Contact',
-      `Create a new contact for ${[attendee.first_name, attendee.last_name].filter(Boolean).join(' ')}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Create Contact',
-          onPress: async () => {
-            setConvertingAttendeeId(attendee.id);
-            try {
-              const newContact = await addContact({
-                first_name: attendee.first_name || '',
-                last_name: attendee.last_name || '',
-                phone: attendee.phone || '',
-                email: attendee.email || '',
-                address: '',
-              });
-              if (newContact) {
-                await linkAttendeeToContact(attendee.id, newContact.id);
-                router.push(`/contact/${newContact.id}`);
-              }
-            } catch (error) {
-              console.error('Convert attendee error:', error);
-              Alert.alert('Error', 'Failed to create contact from attendee.');
-            } finally {
-              setConvertingAttendeeId(null);
-            }
+    const createAndLink = async () => {
+      setConvertingAttendeeId(attendee.id);
+      try {
+        const newContact = await addContact({
+          first_name: attendee.first_name || '',
+          last_name: attendee.last_name || '',
+          phone: attendee.phone || '',
+          email: attendee.email || '',
+          address: '',
+        });
+        if (newContact) {
+          await linkAttendeeToContact(attendee.id, newContact.id);
+          router.push(`/contact/${newContact.id}`);
+        }
+      } catch (error) {
+        console.error('Convert attendee error:', error);
+        Alert.alert('Error', 'Failed to create contact from attendee.');
+      } finally {
+        setConvertingAttendeeId(null);
+      }
+    };
+
+    const match = checkForDuplicate({
+      first_name: attendee.first_name,
+      last_name: attendee.last_name,
+      phone: attendee.phone,
+      email: attendee.email,
+    });
+
+    if (match) {
+      Alert.alert(
+        'Possible Duplicate',
+        `You may already have this person saved: ${match.first_name} ${match.last_name || ''}`.trim(),
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Link Existing',
+            onPress: async () => {
+              await linkAttendeeToContact(attendee.id, match.id);
+              router.push(`/contact/${match.id}`);
+            },
           },
-        },
-      ]
-    );
-  }, [addContact, linkAttendeeToContact, router]);
+          { text: 'Create New', onPress: createAndLink },
+        ],
+      );
+    } else {
+      // No duplicate — show existing confirm dialog
+      Alert.alert(
+        'Create Contact',
+        `Create a new contact for ${[attendee.first_name, attendee.last_name].filter(Boolean).join(' ')}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Create Contact', onPress: createAndLink },
+        ],
+      );
+    }
+  }, [addContact, linkAttendeeToContact, router, checkForDuplicate]);
 
   const handleOpenEndDialog = useCallback(() => {
     // Initialize ratings for all attendees without one

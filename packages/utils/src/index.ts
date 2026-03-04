@@ -19,4 +19,7 @@ export {
   normalizePhone,
   isDuplicateContact,
   findDuplicates,
+  findSingleDuplicate,
 } from './validation';
+
+export type { DedupContact } from './validation';

@@ -44,10 +44,11 @@ export function normalizePhone(phone: string): string {
   return digits.slice(-10);
 }
 
-interface DedupContact {
+export interface DedupContact {
   first_name: string;
   last_name?: string;
   phone?: string;
+  email?: string;
 }
 
 /**
@@ -60,6 +61,11 @@ export function isDuplicateContact(incoming: DedupContact, existing: DedupContac
     const inPhone = normalizePhone(incoming.phone);
     const exPhone = normalizePhone(existing.phone);
     if (inPhone.length >= 10 && inPhone === exPhone) return true;
+  }
+
+  // Match on case-insensitive email
+  if (incoming.email && existing.email) {
+    if (incoming.email.toLowerCase().trim() === existing.email.toLowerCase().trim()) return true;
   }
 
   // Match on exact lowercase first+last name
@@ -91,4 +97,18 @@ export function findDuplicates<T extends DedupContact>(
     }
   }
   return dupes;
+}
+
+/**
+ * Find a single duplicate for an incoming contact from a list of existing contacts.
+ * Returns the first match or null.
+ */
+export function findSingleDuplicate<T extends DedupContact>(
+  incoming: DedupContact,
+  existing: T[],
+): T | null {
+  for (const ex of existing) {
+    if (isDuplicateContact(incoming, ex)) return ex;
+  }
+  return null;
 }

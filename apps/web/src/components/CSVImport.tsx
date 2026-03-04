@@ -172,6 +172,7 @@ export default function CSVImport({ onClose }: CSVImportProps) {
         first_name: c.first_name,
         last_name: c.last_name,
         phone: c.phone,
+        email: c.email,
       })),
       existingContacts
     );

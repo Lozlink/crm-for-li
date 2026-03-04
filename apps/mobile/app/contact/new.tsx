@@ -1,10 +1,10 @@
 import { useMemo, useLayoutEffect } from 'react';
-import { StyleSheet, View, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { ContactForm } from '@realestate-crm/ui';
 import { ContactFormData } from '@realestate-crm/types';
-import { useCRMStore } from '@realestate-crm/hooks';
+import { useCRMStore, useDuplicateCheck } from '@realestate-crm/hooks';
 
 export default function NewContactScreen() {
   const theme = useTheme();
@@ -14,6 +14,7 @@ export default function NewContactScreen() {
   const addContact = useCRMStore(state => state.addContact);
   const addActivity = useCRMStore(state => state.addActivity);
   const isLoading = useCRMStore(state => state.isLoading);
+  const { checkForDuplicate } = useDuplicateCheck();
 
   // Check if coming from map (has coordinates)
   const isFromMap = !!(params.lat && params.lng);
@@ -52,18 +53,39 @@ export default function NewContactScreen() {
       contactData.first_name = 'Quick Note';
     }
 
-    const contact = await addContact(contactData);
-    
-    if (contact) {
-      // Create initial note activity if provided
-      if (initial_note?.trim()) {
-        await addActivity({
-          contact_id: contact.id,
-          type: 'note',
-          content: initial_note.trim(),
-        });
+    const createContact = async () => {
+      const contact = await addContact(contactData);
+      if (contact) {
+        if (initial_note?.trim()) {
+          await addActivity({
+            contact_id: contact.id,
+            type: 'note',
+            content: initial_note.trim(),
+          });
+        }
+        router.back();
       }
-      router.back();
+    };
+
+    const match = checkForDuplicate({
+      first_name: contactData.first_name,
+      last_name: contactData.last_name,
+      phone: contactData.phone,
+      email: contactData.email,
+    });
+
+    if (match) {
+      Alert.alert(
+        'Possible Duplicate',
+        `You may already have this person saved: ${match.first_name} ${match.last_name || ''} — ${match.phone || match.email || ''}`.trim(),
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'View Existing', onPress: () => router.push(`/contact/${match.id}`) },
+          { text: 'Create Anyway', onPress: createContact },
+        ],
+      );
+    } else {
+      await createContact();
     }
   };
 

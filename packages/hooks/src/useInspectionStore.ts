@@ -23,7 +23,8 @@ interface InspectionState {
   cancelInspection: (id: string) => Promise<void>;
   addAttendee: (
     inspectionId: string,
-    attendee: { first_name: string; last_name?: string; phone?: string; email?: string; source: AttendeeSource }
+    attendee: { first_name: string; last_name?: string; phone?: string; email?: string; source: AttendeeSource },
+    resolvedContactId?: string
   ) => Promise<InspectionAttendee | null>;
   updateAttendee: (attendeeId: string, updates: { interest_level?: InterestLevel; feedback?: string }) => Promise<void>;
   removeAttendee: (attendeeId: string) => Promise<void>;
@@ -304,35 +305,14 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
     await get().updateInspection(id, { status: 'cancelled' as InspectionStatus });
   },
 
-  addAttendee: async (inspectionId, attendee) => {
+  addAttendee: async (inspectionId, attendee, resolvedContactId) => {
     try {
-      const { isDemo, teamId } = getTeamContext();
+      const { isDemo } = getTeamContext();
       if (isDemo) return null;
 
-      // Try to match existing contact by phone or email
-      let contactId: string | null = null;
-      if (attendee.phone || attendee.email) {
-        let matchQuery = supabase.from('contacts').select('id').limit(1);
-        if (teamId) matchQuery = matchQuery.eq('team_id', teamId);
+      let contactId: string | null = resolvedContactId || null;
 
-        if (attendee.phone) {
-          const { data: phoneMatch } = await matchQuery.eq('phone', attendee.phone);
-          if (phoneMatch && phoneMatch.length > 0) {
-            contactId = (phoneMatch[0] as { id: string }).id;
-          }
-        }
-
-        if (!contactId && attendee.email) {
-          let emailQuery = supabase.from('contacts').select('id').eq('email', attendee.email).limit(1);
-          if (teamId) emailQuery = emailQuery.eq('team_id', teamId);
-          const { data: emailMatch } = await emailQuery;
-          if (emailMatch && emailMatch.length > 0) {
-            contactId = (emailMatch[0] as { id: string }).id;
-          }
-        }
-      }
-
-      // If no match, create a new contact
+      // If no resolved contact, create a new one
       if (!contactId) {
         const newContact = await useCRMStore.getState().addContact({
           first_name: attendee.first_name,
