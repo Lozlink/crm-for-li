@@ -74,6 +74,16 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
   initialize: async () => {
     set({ isLoading: true, authError: null });
+
+    // Safety timeout: if initialization hangs (e.g. Supabase auth lock
+    // deadlock), force isLoading to false so the user isn't stuck forever.
+    const timeout = setTimeout(() => {
+      if (get().isLoading) {
+        console.warn('Auth init timed out after 10s — forcing isLoading to false');
+        set({ isLoading: false });
+      }
+    }, 10000);
+
     try {
       // Check if user was in demo mode
       const demoFlag = await storage.getItem('demo-mode');
@@ -87,12 +97,15 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         return;
       }
 
-      // Set up auth listener FIRST so token refreshes are always captured,
-      // even if subsequent API calls (e.g. fetchMemberships) fail.
-      // This prevents a dead-end state where the user is "authenticated"
-      // but has no memberships and no listener to recover from token refresh.
+      // Get session BEFORE setting up the auth listener to avoid
+      // Supabase's internal auth lock contention. onAuthStateChange()
+      // internally calls getSession() for the INITIAL_SESSION event;
+      // calling apiGetSession() concurrently can deadlock on the same lock.
+      const session = await apiGetSession();
+
+      // Now set up auth listener for ongoing state changes
       if (!authSubscription) {
-        const { data } = onAuthStateChange(async (event, session) => {
+        const { data } = onAuthStateChange(async (event, newSession) => {
           if (event === 'SIGNED_OUT') {
             set({
               session: null,
@@ -104,8 +117,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
               memberships: [],
               teamMembers: [],
             });
-          } else if (session?.user) {
-            set({ session, user: session.user, isAuthenticated: true });
+          } else if (event !== 'INITIAL_SESSION' && newSession?.user) {
+            set({ session: newSession, user: newSession.user, isAuthenticated: true });
 
             // Recovery: if memberships haven't been loaded (e.g. init failed
             // due to expired token and Supabase later refreshed it), fetch now
@@ -126,7 +139,6 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         authSubscription = data.subscription;
       }
 
-      const session = await apiGetSession();
       if (session?.user) {
         const profile = await apiGetProfile();
         set({
@@ -145,10 +157,12 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           // Auth listener above will retry when token refreshes
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Auth init error:', error);
-      set({ authError: error.message });
+      const message = error instanceof Error ? error.message : 'Initialization failed';
+      set({ authError: message });
     } finally {
+      clearTimeout(timeout);
       set({ isLoading: false });
     }
   },

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, Component, type ReactNode } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { PaperProvider, MD3DarkTheme, MD3LightTheme, ActivityIndicator } from 'react-native-paper';
 import { useColorScheme, View } from 'react-native';
@@ -8,6 +8,18 @@ import { StatusBar } from 'expo-status-bar';
 import { useAuthStore, useCallerIdSync, useCallLogSync, useTrackingStore } from '@realestate-crm/hooks';
 import { useCRMStore } from '@realestate-crm/hooks';
 import { useAppUpdate } from '../hooks/useAppUpdate';
+
+// Error boundary to isolate useAppUpdate from crashing the root layout
+class UpdateErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() { return this.state.hasError ? null : this.props.children; }
+}
+
+function AppUpdateCheck() {
+  useAppUpdate();
+  return null;
+}
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -108,13 +120,13 @@ export default function RootLayout() {
 
   useCallerIdSync();
   useCallLogSync();
-  useAppUpdate();
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
       <PaperProvider theme={theme}>
         <StatusBar style="auto" />
+        <UpdateErrorBoundary><AppUpdateCheck /></UpdateErrorBoundary>
         <AuthGate>
           <Stack
             screenOptions={{
