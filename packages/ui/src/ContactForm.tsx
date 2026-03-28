@@ -36,6 +36,7 @@ export default function ContactForm({
     email: '',
     phone: '',
     address: '',
+    unit_number: '',
     latitude: undefined,
     longitude: undefined,
     tag_id: undefined,
@@ -113,6 +114,8 @@ export default function ContactForm({
         .filter(Boolean);
       const submitData = {
         ...formData,
+        // Sanitize unit_number: trim whitespace, strip trailing slashes
+        unit_number: formData.unit_number?.trim().replace(/\/+$/, '').trim() || undefined,
         tags: resolvedTags,
         tag_id: tagIds[0] || undefined,
       } as any;
@@ -187,6 +190,15 @@ export default function ContactForm({
             value={formData.address}
             onAddressSelect={handleAddressSelect}
             style={styles.input}
+          />
+          <TextInput
+            label="Unit / Apt #"
+            value={formData.unit_number || ''}
+            onChangeText={(v) => updateField('unit_number', v)}
+            mode="outlined"
+            placeholder="e.g., Unit 3, Apt 2B"
+            style={styles.input}
+            dense
           />
           {errors.address && (
             <HelperText type="error">{errors.address}</HelperText>
@@ -266,6 +278,15 @@ export default function ContactForm({
             value={formData.address}
             onAddressSelect={handleAddressSelect}
             style={styles.input}
+          />
+          <TextInput
+            label="Unit / Apt #"
+            value={formData.unit_number || ''}
+            onChangeText={(v) => updateField('unit_number', v)}
+            mode="outlined"
+            placeholder="e.g., Unit 3, Apt 2B"
+            style={styles.input}
+            dense
           />
 
           {formData.latitude && formData.longitude && (

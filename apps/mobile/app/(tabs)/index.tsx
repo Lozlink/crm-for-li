@@ -1,706 +1,640 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { StyleSheet, View, FlatList, ScrollView, Alert } from 'react-native';
-import {
-  Searchbar, FAB, useTheme, Text, ActivityIndicator, Button,
-  IconButton, Portal, Dialog, Chip, TextInput, Switch,
-} from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCallback, useMemo, useState } from 'react';
+import { StyleSheet, View, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { useTheme, Text, Surface } from 'react-native-paper';
 import { useRouter } from 'expo-router';
-import { useCRMStore, useSavedSearchStore } from '@realestate-crm/hooks';
-import { ContactCard } from '@realestate-crm/ui';
-import type { Contact, ContactSource, ContactType, ContactStatus } from '@realestate-crm/types';
+import { useFocusEffect } from 'expo-router';
+import {
+  useTaskStore, usePropertyStore, useCRMStore, useAuthStore, useInspectionStore, useTrackingStore,
+} from '@realestate-crm/hooks';
+import type { Task, Property, Contact, Inspection, TrackingSession } from '@realestate-crm/types';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const SOURCE_OPTIONS: { label: string; value: ContactSource }[] = [
-  { label: 'Referral', value: 'referral' },
-  { label: 'Web', value: 'web' },
-  { label: 'Walk-in', value: 'walk_in' },
-  { label: 'Portal', value: 'portal' },
-  { label: 'Phone', value: 'phone' },
-  { label: 'Import', value: 'import' },
-  { label: 'Other', value: 'other' },
-];
+// ── Helpers ──────────────────────────────────────────────────────────
 
-const CONTACT_TYPE_OPTIONS: { label: string; value: ContactType }[] = [
-  { label: 'Buyer', value: 'buyer' },
-  { label: 'Seller', value: 'seller' },
-  { label: 'Tenant', value: 'tenant' },
-  { label: 'Landlord', value: 'landlord' },
-  { label: 'Investor', value: 'investor' },
-  { label: 'Other', value: 'other' },
-];
-
-const STATUS_OPTIONS: { label: string; value: ContactStatus }[] = [
-  { label: 'Active', value: 'active' },
-  { label: 'Inactive', value: 'inactive' },
-  { label: 'Archived', value: 'archived' },
-];
-
-interface ContactFilters {
-  tagIds: string[];
-  hasEmail: boolean;
-  hasPhone: boolean;
-  createdAfter: string;
-  createdBefore: string;
-  sources: ContactSource[];
-  contactTypes: ContactType[];
-  statuses: ContactStatus[];
-}
-
-const DEFAULT_FILTERS: ContactFilters = {
-  tagIds: [],
-  hasEmail: false,
-  hasPhone: false,
-  createdAfter: '',
-  createdBefore: '',
-  sources: [],
-  contactTypes: [],
-  statuses: ['active'],
-};
-
-function hasActiveFilters(filters: ContactFilters): boolean {
+function isToday(dateStr: string): boolean {
+  const d = new Date(dateStr);
+  const now = new Date();
   return (
-    filters.tagIds.length > 0 ||
-    filters.hasEmail ||
-    filters.hasPhone ||
-    filters.createdAfter !== '' ||
-    filters.createdBefore !== '' ||
-    filters.sources.length > 0 ||
-    filters.contactTypes.length > 0 ||
-    // Default status is ['active'], so only "active" if it differs from that
-    !(filters.statuses.length === 1 && filters.statuses[0] === 'active')
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
   );
 }
 
-function filtersToRecord(filters: ContactFilters): Record<string, unknown> {
-  const record: Record<string, unknown> = {};
-  if (filters.tagIds.length > 0) record.tagIds = filters.tagIds;
-  if (filters.hasEmail) record.hasEmail = true;
-  if (filters.hasPhone) record.hasPhone = true;
-  if (filters.createdAfter) record.createdAfter = filters.createdAfter;
-  if (filters.createdBefore) record.createdBefore = filters.createdBefore;
-  if (filters.sources.length > 0) record.sources = filters.sources;
-  if (filters.contactTypes.length > 0) record.contactTypes = filters.contactTypes;
-  if (filters.statuses.length > 0) record.statuses = filters.statuses;
-  return record;
+function isOverdue(dueAt: string | undefined, status: string): boolean {
+  if (!dueAt || status === 'completed') return false;
+  return new Date(dueAt) < new Date();
 }
 
-function recordToFilters(record: Record<string, unknown>): ContactFilters {
-  return {
-    tagIds: (record.tagIds as string[]) || [],
-    hasEmail: (record.hasEmail as boolean) || false,
-    hasPhone: (record.hasPhone as boolean) || false,
-    createdAfter: (record.createdAfter as string) || '',
-    createdBefore: (record.createdBefore as string) || '',
-    sources: (record.sources as ContactSource[]) || [],
-    contactTypes: (record.contactTypes as ContactType[]) || [],
-    statuses: (record.statuses as ContactStatus[]) || ['active'],
-  };
+function formatTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function ContactsScreen() {
+function formatPrice(price: number): string {
+  if (price >= 1_000_000) return `$${(price / 1_000_000).toFixed(1)}M`;
+  if (price >= 1_000) return `$${(price / 1_000).toFixed(0)}K`;
+  return `$${price}`;
+}
+
+function getContactName(contact: { first_name: string; last_name?: string } | undefined): string {
+  if (!contact) return '';
+  return [contact.first_name, contact.last_name].filter(Boolean).join(' ');
+}
+
+function formatDuration(seconds: number | undefined): string {
+  if (!seconds) return '0m';
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  return `${mins}m`;
+}
+
+function formatDistance(meters: number | undefined): string {
+  if (!meters) return '0 km';
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+// ── Quick Actions ────────────────────────────────────────────────────
+
+const QUICK_ACTIONS = [
+  { key: 'contact', icon: 'account-plus', label: 'Add Contact', route: '/contact/new', color: '#6366f1' },
+  { key: 'route', icon: 'map-marker-path', label: 'Start Route', route: '/(tabs)/routes', color: '#10b981' },
+  { key: 'task', icon: 'checkbox-marked-circle-plus-outline', label: 'New Task', route: '/(tabs)/tasks', color: '#f59e0b' },
+  { key: 'property', icon: 'home-plus', label: 'Add Listing', route: '/property/new', color: '#3b82f6' },
+] as const;
+
+// ── Component ────────────────────────────────────────────────────────
+
+export default function TodayScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
 
-  const allContacts = useCRMStore(state => state.contacts);
-  const tags = useCRMStore(state => state.tags);
-  const isLoading = useCRMStore(state => state.isLoading);
-  const searchQuery = useCRMStore(state => state.searchQuery);
-  const setSearchQuery = useCRMStore(state => state.setSearchQuery);
+  const currentUserId = useAuthStore(s => s.user?.id);
+  const profile = useAuthStore(s => s.profile);
+  const isDemoMode = useAuthStore(s => s.isDemoMode);
 
-  const savedSearches = useSavedSearchStore(state => state.savedSearches);
-  const fetchSavedSearches = useSavedSearchStore(state => state.fetchSavedSearches);
-  const createSavedSearch = useSavedSearchStore(state => state.createSavedSearch);
-  const deleteSavedSearch = useSavedSearchStore(state => state.deleteSavedSearch);
+  const tasks = useTaskStore(s => s.tasks);
+  const fetchTasks = useTaskStore(s => s.fetchTasks);
+  const completeTask = useTaskStore(s => s.completeTask);
 
-  const [filters, setFilters] = useState<ContactFilters>(DEFAULT_FILTERS);
-  const [draftFilters, setDraftFilters] = useState<ContactFilters>(DEFAULT_FILTERS);
-  const [showFilterDialog, setShowFilterDialog] = useState(false);
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [saveSearchName, setSaveSearchName] = useState('');
+  const properties = usePropertyStore(s => s.properties);
+  const fetchProperties = usePropertyStore(s => s.fetchProperties);
 
-  const contactSavedSearches = useMemo(
-    () => savedSearches.filter(s => s.entity_type === 'contact'),
-    [savedSearches]
+  const contacts = useCRMStore(s => s.contacts);
+  const fetchContacts = useCRMStore(s => s.fetchContacts);
+
+  const inspections = useInspectionStore(s => s.inspections);
+  const fetchInspections = useInspectionStore(s => s.fetchInspections);
+
+  const activeSession = useTrackingStore(s => s.activeSession);
+  const sessions = useTrackingStore(s => s.sessions);
+  const fetchSessions = useTrackingStore(s => s.fetchSessions);
+  const startSession = useTrackingStore(s => s.startSession);
+
+  // Pull-to-refresh
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchTasks(), fetchProperties(), fetchContacts(), fetchInspections(), fetchSessions()]);
+    setRefreshing(false);
+  }, [fetchTasks, fetchProperties, fetchContacts, fetchInspections, fetchSessions]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchTasks();
+      fetchProperties();
+      fetchContacts();
+      fetchInspections();
+      fetchSessions();
+    }, [fetchTasks, fetchProperties, fetchContacts, fetchInspections, fetchSessions])
   );
 
-  useEffect(() => {
-    fetchSavedSearches('contact');
-  }, [fetchSavedSearches]);
+  // ── Derived data ──────────────────────────────────────────────────
 
-  // Filter contacts in component to avoid selector issues
-  // Exclude quick notes (contacts without first_name) - they show in Notes tab
-  const contacts = useMemo(() => {
-    return allContacts.filter(contact => {
-      // Must have a first name (not a quick note)
-      if (!contact.first_name) {
-        return false;
-      }
+  const displayName = isDemoMode
+    ? 'Demo'
+    : profile?.display_name?.split(' ')[0] || 'there';
 
-      // Tag filter (from advanced filters)
-      if (filters.tagIds.length > 0) {
-        const contactTagIds = (contact.tags || []).map(t => t.id);
-        const hasMatchingTag = contactTagIds.some(id => filters.tagIds.includes(id));
-        if (!hasMatchingTag && !filters.tagIds.includes(contact.tag_id || '')) {
-          return false;
-        }
-      }
+  const overdueTasks = useMemo(() => {
+    return tasks
+      .filter(t => t.status !== 'completed' && isOverdue(t.due_at, t.status))
+      .filter(t => !currentUserId || t.assigned_to === currentUserId)
+      .sort((a, b) => {
+        if (!a.due_at) return 1;
+        if (!b.due_at) return -1;
+        return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
+      })
+      .slice(0, 5);
+  }, [tasks, currentUserId]);
 
-      // Has email filter
-      if (filters.hasEmail && !contact.email) {
-        return false;
-      }
+  const todayTasks = useMemo(() => {
+    return tasks
+      .filter(t => t.status !== 'completed' && t.due_at && isToday(t.due_at) && !isOverdue(t.due_at, t.status))
+      .filter(t => !currentUserId || t.assigned_to === currentUserId)
+      .sort((a, b) => new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime())
+      .slice(0, 5);
+  }, [tasks, currentUserId]);
 
-      // Has phone filter
-      if (filters.hasPhone && !contact.phone) {
-        return false;
-      }
+  const todayInspections = useMemo(() => {
+    return inspections
+      .filter(i => i.status !== 'cancelled' && isToday(i.scheduled_at))
+      .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+  }, [inspections]);
 
-      // Created after filter
-      if (filters.createdAfter && contact.created_at) {
-        if (contact.created_at < filters.createdAfter) {
-          return false;
-        }
-      }
+  const pipelineStats = useMemo(() => {
+    const active = properties.filter(p => p.status !== 'withdrawn' && p.status !== 'settled' && p.status !== 'leased');
+    const appraisals = active.filter(p => p.status === 'appraisal').length;
+    const listed = active.filter(p => p.status === 'available').length;
+    const underOffer = active.filter(p => p.status === 'under_offer' || p.status === 'exchanged').length;
+    const totalValue = active.reduce((sum, p) => sum + (p.advertised_price ?? p.appraisal_price ?? 0), 0);
+    return { appraisals, listed, underOffer, totalValue, total: active.length };
+  }, [properties]);
 
-      // Created before filter
-      if (filters.createdBefore && contact.created_at) {
-        if (contact.created_at > filters.createdBefore) {
-          return false;
-        }
-      }
+  const recentContacts = useMemo(() => {
+    return [...contacts]
+      .filter(c => c.first_name)
+      .sort((a, b) => {
+        const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bDate - aDate;
+      })
+      .slice(0, 4);
+  }, [contacts]);
 
-      // Source filter
-      if (filters.sources.length > 0) {
-        if (!contact.source || !filters.sources.includes(contact.source)) {
-          return false;
-        }
-      }
+  const recentSessions = useMemo(() => {
+    return [...sessions]
+      .sort((a, b) => {
+        const aTime = a.started_at ? new Date(a.started_at).getTime() : 0;
+        const bTime = b.started_at ? new Date(b.started_at).getTime() : 0;
+        return bTime - aTime;
+      })
+      .slice(0, 3);
+  }, [sessions]);
 
-      // Contact type filter
-      if (filters.contactTypes.length > 0) {
-        if (!contact.contact_type || !filters.contactTypes.includes(contact.contact_type)) {
-          return false;
-        }
-      }
+  const urgentCount = overdueTasks.length;
 
-      // Status filter
-      if (filters.statuses.length > 0) {
-        const contactStatus = contact.status ?? 'active';
-        if (!filters.statuses.includes(contactStatus)) {
-          return false;
-        }
-      }
-
-      // Search query
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const fullName = `${contact.first_name} ${contact.last_name || ''}`.toLowerCase();
-        const email = (contact.email || '').toLowerCase();
-        const address = (contact.address || '').toLowerCase();
-        if (!fullName.includes(query) && !email.includes(query) && !address.includes(query)) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [allContacts, filters, searchQuery]);
-
-  const handleContactPress = useCallback((contact: Contact) => {
-    router.push(`/contact/${contact.id}`);
-  }, [router]);
-
-  const handleAddContact = () => {
-    router.push('/contact/new');
-  };
-
-  const openFilterDialog = () => {
-    setDraftFilters({ ...filters });
-    setShowFilterDialog(true);
-  };
-
-  const applyFilters = () => {
-    setFilters({ ...draftFilters });
-    setShowFilterDialog(false);
-  };
-
-  const clearAllFilters = () => {
-    setDraftFilters({ ...DEFAULT_FILTERS });
-  };
-
-  const handleSaveSearch = async () => {
-    if (!saveSearchName.trim()) return;
-    await createSavedSearch({
-      name: saveSearchName.trim(),
-      entity_type: 'contact',
-      filters: filtersToRecord(filters),
-      is_shared: false,
-    });
-    setSaveSearchName('');
-    setShowSaveDialog(false);
-  };
-
-  const handleApplySavedSearch = (searchFilters: Record<string, unknown>) => {
-    setFilters(recordToFilters(searchFilters));
-  };
-
-  const handleDeleteSavedSearch = (id: string, name: string) => {
-    Alert.alert('Delete Saved Search', `Delete "${name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteSavedSearch(id) },
-    ]);
-  };
-
-  const toggleDraftTag = (tagId: string) => {
-    setDraftFilters(prev => ({
-      ...prev,
-      tagIds: prev.tagIds.includes(tagId)
-        ? prev.tagIds.filter(id => id !== tagId)
-        : [...prev.tagIds, tagId],
-    }));
-  };
-
-  const activeFilterLabels = useMemo(() => {
-    const labels: string[] = [];
-    if (filters.tagIds.length > 0) {
-      const tagNames = filters.tagIds
-        .map(id => tags.find(t => t.id === id)?.name)
-        .filter(Boolean);
-      if (tagNames.length > 0) labels.push(`Tags: ${tagNames.join(', ')}`);
-    }
-    if (filters.hasEmail) labels.push('Has Email');
-    if (filters.hasPhone) labels.push('Has Phone');
-    if (filters.createdAfter) labels.push(`After ${filters.createdAfter}`);
-    if (filters.createdBefore) labels.push(`Before ${filters.createdBefore}`);
-    if (filters.sources.length > 0) {
-      const sourceLabels = filters.sources.map(s => {
-        const found = SOURCE_OPTIONS.find(o => o.value === s);
-        return found ? found.label : s;
-      });
-      labels.push(`Source: ${sourceLabels.join(', ')}`);
-    }
-    if (filters.contactTypes.length > 0) {
-      const typeLabels = filters.contactTypes.map(t => {
-        const found = CONTACT_TYPE_OPTIONS.find(o => o.value === t);
-        return found ? found.label : t;
-      });
-      labels.push(`Type: ${typeLabels.join(', ')}`);
-    }
-    if (filters.statuses.length > 0 && !(filters.statuses.length === 1 && filters.statuses[0] === 'active')) {
-      const statusLabels = filters.statuses.map(s => {
-        const found = STATUS_OPTIONS.find(o => o.value === s);
-        return found ? found.label : s;
-      });
-      labels.push(`Status: ${statusLabels.join(', ')}`);
-    }
-    return labels;
-  }, [filters, tags]);
-
-  const renderItem = useCallback(({ item }: { item: Contact }) => (
-    <ContactCard contact={item} onPress={handleContactPress} />
-  ), [handleContactPress]);
-
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text variant="bodyLarge" style={{ color: theme.colors.onSurfaceVariant }}>
-        {searchQuery ? 'No contacts found' : 'No contacts yet'}
-      </Text>
-      <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8 }}>
-        {searchQuery ? 'Try a different search term' : 'Tap + to add your first contact'}
-      </Text>
-    </View>
-  );
-
-  const renderListHeader = () => (
-    <View style={styles.listHeader}>
-      {/* Saved searches */}
-      {contactSavedSearches.length > 0 && (
-        <View style={styles.savedSearchContainer}>
-          <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
-            Saved Searches
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.savedSearchRow}>
-              {contactSavedSearches.map(s => (
-                <Chip
-                  key={s.id}
-                  mode="outlined"
-                  onPress={() => handleApplySavedSearch(s.filters)}
-                  onLongPress={() => handleDeleteSavedSearch(s.id, s.name)}
-                  compact
-                  icon="magnify"
-                  style={styles.savedSearchChip}
-                >
-                  {s.name}
-                </Chip>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Active filter chips */}
-      {activeFilterLabels.length > 0 && (
-        <View style={styles.activeFiltersRow}>
-          {activeFilterLabels.map((label, idx) => (
-            <Chip
-              key={idx}
-              compact
-              style={{ backgroundColor: theme.colors.primaryContainer }}
-              textStyle={{ color: theme.colors.onPrimaryContainer, fontSize: 11 }}
-            >
-              {label}
-            </Chip>
-          ))}
-          <Chip
-            compact
-            onPress={() => setFilters({ ...DEFAULT_FILTERS })}
-            icon="close"
-            style={{ backgroundColor: theme.colors.errorContainer }}
-            textStyle={{ color: theme.colors.onErrorContainer, fontSize: 11 }}
-          >
-            Clear All
-          </Chip>
-        </View>
-      )}
-
-      {/* Save search button */}
-      {hasActiveFilters(filters) && (
-        <Button
-          mode="outlined"
-          icon="content-save"
-          compact
-          onPress={() => setShowSaveDialog(true)}
-          style={styles.saveSearchButton}
-        >
-          Save Search
-        </Button>
-      )}
-    </View>
-  );
+  // ── Render ────────────────────────────────────────────────────────
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <View style={styles.searchContainer}>
-        <View style={styles.searchRow}>
-          <Searchbar
-            placeholder="Search contacts..."
-            onChangeText={setSearchQuery}
-            value={searchQuery}
-            style={styles.searchbar}
-          />
-          <IconButton
-            icon="filter-variant"
-            mode={hasActiveFilters(filters) ? 'contained' : 'outlined'}
-            onPress={openFilterDialog}
-            size={20}
-          />
-        </View>
-        <Button
-          mode="outlined"
-          icon="import"
-          compact
-          onPress={() => router.push('/contacts/import')}
-          style={styles.importButton}
-        >
-          Import from Phone
-        </Button>
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      contentContainerStyle={styles.scrollContent}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+      }
+    >
+      {/* Greeting */}
+      <Text variant="headlineSmall" style={[styles.greeting, { color: theme.colors.onBackground }]}>
+        Hey {displayName}
+      </Text>
+      <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 20, marginHorizontal: 16 }}>
+        {urgentCount > 0
+          ? `You have ${urgentCount} overdue item${urgentCount > 1 ? 's' : ''} that need${urgentCount === 1 ? 's' : ''} attention.`
+          : 'You\'re all caught up. Time to prospect!'}
+      </Text>
+
+      {/* Quick Actions */}
+      <View style={styles.quickActionsRow}>
+        {QUICK_ACTIONS.map(action => (
+          <TouchableOpacity
+            key={action.key}
+            style={styles.quickAction}
+            onPress={() => router.push(action.route as never)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.quickActionIcon, { backgroundColor: action.color + '14' }]}>
+              <Icon name={action.icon} size={22} color={action.color} />
+            </View>
+            <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant, marginTop: 6, textAlign: 'center' }}>
+              {action.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" />
+      {/* Tracking / Field Activity */}
+      {!activeSession && (
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={[styles.startTrackingCard, { backgroundColor: theme.colors.primaryContainer }]}
+            onPress={() => {
+              Alert.alert(
+                'Start Tracking',
+                'This will record your location in the background for field prospecting. Continue?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Start', onPress: () => startSession() },
+                ],
+              );
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={styles.startTrackingLeft}>
+              <Icon name="walk" size={28} color={theme.colors.onPrimaryContainer} />
+              <View style={{ marginLeft: 12 }}>
+                <Text variant="titleSmall" style={{ color: theme.colors.onPrimaryContainer, fontWeight: '700' }}>
+                  Start Prospecting
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onPrimaryContainer, opacity: 0.7 }}>
+                  Track your field activity, drop notes, add contacts
+                </Text>
+              </View>
+            </View>
+            <Icon name="play-circle" size={32} color={theme.colors.onPrimaryContainer} />
+          </TouchableOpacity>
+          {recentSessions.length > 0 && (
+            <View style={styles.recentSessionsRow}>
+              {recentSessions.map(session => (
+                <TouchableOpacity
+                  key={session.id}
+                  style={[styles.sessionChip, { backgroundColor: theme.colors.surfaceVariant }]}
+                  onPress={() => router.push(`/tracking/${session.id}` as never)}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="map-marker-path" size={14} color={theme.colors.onSurfaceVariant} />
+                  <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginLeft: 4 }}>
+                    {formatDistance(session.total_distance_meters)} · {formatDuration(session.duration_seconds)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
-      ) : (
-        <FlatList
-          data={contacts}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          ListHeaderComponent={renderListHeader}
-          ListEmptyComponent={renderEmpty}
-          contentContainerStyle={contacts.length === 0 ? styles.emptyList : styles.list}
-        />
       )}
 
-      <FAB
-        icon="plus"
-        style={[styles.fab, { backgroundColor: theme.colors.primary, bottom: insets.bottom + 24 }]}
-        color={theme.colors.onPrimary}
-        onPress={handleAddContact}
-      />
-
-      {/* Filter Dialog */}
-      <Portal>
-        <Dialog visible={showFilterDialog} onDismiss={() => setShowFilterDialog(false)} style={styles.dialog}>
-          <Dialog.Title>Filter Contacts</Dialog.Title>
-          <Dialog.ScrollArea style={styles.dialogScrollArea}>
-            <ScrollView>
-              <View style={styles.dialogContent}>
-                {/* Tags */}
-                {tags.length > 0 && (
-                  <>
-                    <Text variant="labelLarge" style={styles.sectionLabel}>Tags</Text>
-                    <View style={styles.filterRow}>
-                      {tags.map(tag => (
-                        <Chip
-                          key={tag.id}
-                          selected={draftFilters.tagIds.includes(tag.id)}
-                          onPress={() => toggleDraftTag(tag.id)}
-                          style={[
-                            styles.filterChip,
-                            draftFilters.tagIds.includes(tag.id)
-                              ? { backgroundColor: tag.color + '30' }
-                              : {},
-                          ]}
-                          compact
-                        >
-                          {tag.name}
-                        </Chip>
-                      ))}
-                    </View>
-                  </>
-                )}
-
-                {/* Has Email */}
-                <View style={styles.switchRow}>
-                  <Text variant="bodyMedium">Has Email</Text>
-                  <Switch
-                    value={draftFilters.hasEmail}
-                    onValueChange={val =>
-                      setDraftFilters(prev => ({ ...prev, hasEmail: val }))
-                    }
-                  />
-                </View>
-
-                {/* Has Phone */}
-                <View style={styles.switchRow}>
-                  <Text variant="bodyMedium">Has Phone</Text>
-                  <Switch
-                    value={draftFilters.hasPhone}
-                    onValueChange={val =>
-                      setDraftFilters(prev => ({ ...prev, hasPhone: val }))
-                    }
-                  />
-                </View>
-
-                {/* Date range */}
-                <Text variant="labelLarge" style={styles.sectionLabel}>Date Range</Text>
-                <TextInput
-                  label="Created After (YYYY-MM-DD)"
-                  value={draftFilters.createdAfter}
-                  onChangeText={val =>
-                    setDraftFilters(prev => ({ ...prev, createdAfter: val }))
-                  }
-                  mode="outlined"
-                  dense
-                  placeholder="e.g. 2024-01-01"
-                />
-                <TextInput
-                  label="Created Before (YYYY-MM-DD)"
-                  value={draftFilters.createdBefore}
-                  onChangeText={val =>
-                    setDraftFilters(prev => ({ ...prev, createdBefore: val }))
-                  }
-                  mode="outlined"
-                  dense
-                  placeholder="e.g. 2025-12-31"
-                  style={{ marginTop: 8 }}
-                />
-
-                {/* Source */}
-                <Text variant="labelLarge" style={styles.sectionLabel}>Source</Text>
-                <View style={styles.filterRow}>
-                  {SOURCE_OPTIONS.map(opt => (
-                    <Chip
-                      key={opt.value}
-                      selected={draftFilters.sources.includes(opt.value)}
-                      onPress={() =>
-                        setDraftFilters(prev => ({
-                          ...prev,
-                          sources: prev.sources.includes(opt.value)
-                            ? prev.sources.filter(s => s !== opt.value)
-                            : [...prev.sources, opt.value],
-                        }))
-                      }
-                      compact
-                      style={styles.filterChip}
-                    >
-                      {opt.label}
-                    </Chip>
-                  ))}
-                </View>
-
-                {/* Contact Type */}
-                <Text variant="labelLarge" style={styles.sectionLabel}>Contact Type</Text>
-                <View style={styles.filterRow}>
-                  {CONTACT_TYPE_OPTIONS.map(opt => (
-                    <Chip
-                      key={opt.value}
-                      selected={draftFilters.contactTypes.includes(opt.value)}
-                      onPress={() =>
-                        setDraftFilters(prev => ({
-                          ...prev,
-                          contactTypes: prev.contactTypes.includes(opt.value)
-                            ? prev.contactTypes.filter(t => t !== opt.value)
-                            : [...prev.contactTypes, opt.value],
-                        }))
-                      }
-                      compact
-                      style={styles.filterChip}
-                    >
-                      {opt.label}
-                    </Chip>
-                  ))}
-                </View>
-
-                {/* Status */}
-                <Text variant="labelLarge" style={styles.sectionLabel}>Status</Text>
-                <View style={styles.filterRow}>
-                  {STATUS_OPTIONS.map(opt => (
-                    <Chip
-                      key={opt.value}
-                      selected={draftFilters.statuses.includes(opt.value)}
-                      onPress={() =>
-                        setDraftFilters(prev => ({
-                          ...prev,
-                          statuses: prev.statuses.includes(opt.value)
-                            ? prev.statuses.filter(s => s !== opt.value)
-                            : [...prev.statuses, opt.value],
-                        }))
-                      }
-                      compact
-                      style={styles.filterChip}
-                    >
-                      {opt.label}
-                    </Chip>
-                  ))}
-                </View>
-              </View>
-            </ScrollView>
-          </Dialog.ScrollArea>
-          <Dialog.Actions>
-            <Button onPress={clearAllFilters}>Clear</Button>
-            <Button onPress={() => setShowFilterDialog(false)}>Cancel</Button>
-            <Button mode="contained" onPress={applyFilters}>Apply</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-
-      {/* Save Search Dialog */}
-      <Portal>
-        <Dialog visible={showSaveDialog} onDismiss={() => setShowSaveDialog(false)}>
-          <Dialog.Title>Save Search</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Search Name"
-              value={saveSearchName}
-              onChangeText={setSaveSearchName}
-              mode="outlined"
-              autoFocus
+      {/* Overdue Tasks */}
+      {overdueTasks.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Icon name="alert-circle" size={18} color="#dc2626" />
+              <Text variant="titleSmall" style={{ color: '#dc2626', fontWeight: '700', marginLeft: 6 }}>
+                Overdue ({overdueTasks.length})
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/tasks' as never)}>
+              <Text variant="labelMedium" style={{ color: theme.colors.primary }}>See All</Text>
+            </TouchableOpacity>
+          </View>
+          {overdueTasks.map(task => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              isOverdue
+              onPress={() => router.push('/(tabs)/tasks' as never)}
+              onComplete={() => completeTask(task.id)}
             />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setShowSaveDialog(false)}>Cancel</Button>
-            <Button mode="contained" onPress={handleSaveSearch} disabled={!saveSearchName.trim()}>
-              Save
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+          ))}
+        </View>
+      )}
+
+      {/* Today's Schedule */}
+      {(todayTasks.length > 0 || todayInspections.length > 0) && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Icon name="calendar-today" size={18} color={theme.colors.primary} />
+              <Text variant="titleSmall" style={{ color: theme.colors.onBackground, fontWeight: '700', marginLeft: 6 }}>
+                Today
+              </Text>
+            </View>
+          </View>
+          {todayInspections.map(inspection => (
+            <InspectionCard
+              key={inspection.id}
+              inspection={inspection}
+              onPress={() => router.push(`/inspection/${inspection.id}` as never)}
+            />
+          ))}
+          {todayTasks.map(task => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              onPress={() => router.push('/(tabs)/tasks' as never)}
+              onComplete={() => completeTask(task.id)}
+            />
+          ))}
+        </View>
+      )}
+
+      {/* Pipeline Snapshot */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionTitleRow}>
+            <Icon name="chart-timeline-variant-shimmer" size={18} color={theme.colors.primary} />
+            <Text variant="titleSmall" style={{ color: theme.colors.onBackground, fontWeight: '700', marginLeft: 6 }}>
+              Pipeline
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/pipeline' as never)}>
+            <Text variant="labelMedium" style={{ color: theme.colors.primary }}>View Board</Text>
+          </TouchableOpacity>
+        </View>
+        <Surface style={[styles.pipelineCard, { backgroundColor: theme.colors.surface }]} elevation={1}>
+          <View style={styles.pipelineStages}>
+            <PipelineStat label="Appraisals" count={pipelineStats.appraisals} color="#6366f1" />
+            <View style={[styles.pipelineDivider, { backgroundColor: theme.colors.outlineVariant }]} />
+            <PipelineStat label="Listed" count={pipelineStats.listed} color="#16a34a" />
+            <View style={[styles.pipelineDivider, { backgroundColor: theme.colors.outlineVariant }]} />
+            <PipelineStat label="Under Offer" count={pipelineStats.underOffer} color="#f59e0b" />
+          </View>
+          <View style={[styles.pipelineTotal, { borderTopColor: theme.colors.outlineVariant }]}>
+            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              Total Pipeline Value
+            </Text>
+            <Text variant="titleMedium" style={{ color: theme.colors.primary, fontWeight: '700' }}>
+              {pipelineStats.totalValue > 0 ? formatPrice(pipelineStats.totalValue) : '$0'}
+            </Text>
+          </View>
+        </Surface>
+      </View>
+
+      {/* Recent Contacts */}
+      {recentContacts.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Icon name="account-clock" size={18} color={theme.colors.primary} />
+              <Text variant="titleSmall" style={{ color: theme.colors.onBackground, fontWeight: '700', marginLeft: 6 }}>
+                Recent Contacts
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/contacts' as never)}>
+              <Text variant="labelMedium" style={{ color: theme.colors.primary }}>All</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.recentContactsRow}>
+            {recentContacts.map(contact => (
+              <TouchableOpacity
+                key={contact.id}
+                style={styles.recentContact}
+                onPress={() => router.push(`/contact/${contact.id}`)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.contactAvatar, { backgroundColor: theme.colors.primaryContainer }]}>
+                  <Text style={{ color: theme.colors.onPrimaryContainer, fontWeight: '700', fontSize: 14 }}>
+                    {contact.first_name?.[0]?.toUpperCase() || '?'}
+                  </Text>
+                </View>
+                <Text
+                  variant="labelSmall"
+                  numberOfLines={1}
+                  style={{ color: theme.colors.onSurface, marginTop: 4, textAlign: 'center', maxWidth: 72 }}
+                >
+                  {contact.first_name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+
+      <View style={{ height: 32 }} />
+    </ScrollView>
+  );
+}
+
+// ── Sub-components ───────────────────────────────────────────────────
+
+function TaskCard({
+  task,
+  isOverdue,
+  onPress,
+  onComplete,
+}: {
+  task: Task;
+  isOverdue?: boolean;
+  onPress: () => void;
+  onComplete: () => void;
+}) {
+  const theme = useTheme();
+  const contactName = getContactName(task.contact);
+
+  return (
+    <TouchableOpacity activeOpacity={0.7} onPress={onPress}>
+      <Surface
+        style={[
+          styles.taskCard,
+          isOverdue && { borderLeftColor: '#dc2626', borderLeftWidth: 3 },
+        ]}
+        elevation={1}
+      >
+        <View style={styles.taskCardInner}>
+          <View style={{ flex: 1 }}>
+            <Text variant="bodyMedium" numberOfLines={1} style={{ fontWeight: '600' }}>
+              {task.title}
+            </Text>
+            <View style={styles.taskMeta}>
+              {task.due_at && (
+                <Text variant="bodySmall" style={{ color: isOverdue ? '#dc2626' : theme.colors.onSurfaceVariant }}>
+                  {formatTime(task.due_at)}
+                </Text>
+              )}
+              {contactName ? (
+                <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
+                  {contactName}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          <TouchableOpacity onPress={onComplete} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <Icon name="check-circle-outline" size={24} color="#16a34a" />
+          </TouchableOpacity>
+        </View>
+      </Surface>
+    </TouchableOpacity>
+  );
+}
+
+function InspectionCard({
+  inspection,
+  onPress,
+}: {
+  inspection: Inspection;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  const address = inspection.property?.address || 'Unknown property';
+
+  return (
+    <TouchableOpacity activeOpacity={0.7} onPress={onPress}>
+      <Surface
+        style={[styles.taskCard, { borderLeftColor: '#6366f1', borderLeftWidth: 3 }]}
+        elevation={1}
+      >
+        <View style={styles.taskCardInner}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Icon name="home-search" size={16} color="#6366f1" />
+              <Text variant="bodyMedium" numberOfLines={1} style={{ fontWeight: '600', flex: 1 }}>
+                {address}
+              </Text>
+            </View>
+            <View style={styles.taskMeta}>
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                {formatTime(inspection.scheduled_at)} · {inspection.type === 'open_home' ? 'Open Home' : 'Private'} · {inspection.duration_minutes}min
+              </Text>
+            </View>
+          </View>
+          <Icon name="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
+        </View>
+      </Surface>
+    </TouchableOpacity>
+  );
+}
+
+function PipelineStat({ label, count, color }: { label: string; count: number; color: string }) {
+  const theme = useTheme();
+  return (
+    <View style={styles.pipelineStatItem}>
+      <Text variant="headlineSmall" style={{ color, fontWeight: '700' }}>
+        {count}
+      </Text>
+      <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+        {label}
+      </Text>
     </View>
   );
 }
+
+// ── Styles ───────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  searchContainer: {
-    padding: 16,
-    paddingBottom: 8,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  searchbar: {
-    elevation: 0,
-    flex: 1,
-  },
-  importButton: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-  },
-  list: {
-    padding: 16,
+  scrollContent: {
     paddingTop: 8,
-  },
-  emptyList: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    padding: 32,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  listHeader: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  savedSearchContainer: {
-    marginBottom: 4,
-  },
-  savedSearchRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  savedSearchChip: {
-    marginRight: 0,
-  },
-  activeFiltersRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  saveSearchButton: {
-    alignSelf: 'flex-start',
-  },
-  dialog: {
-    maxHeight: '80%',
-  },
-  dialogScrollArea: {
-    paddingHorizontal: 0,
-  },
-  dialogContent: {
-    paddingHorizontal: 24,
     paddingBottom: 16,
-    gap: 8,
   },
-  sectionLabel: {
-    marginTop: 8,
+  greeting: {
+    fontWeight: '700',
+    marginHorizontal: 16,
+    marginBottom: 2,
   },
-  filterRow: {
+
+  // Quick actions
+  quickActionsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+    gap: 12,
   },
-  filterChip: {
-    marginBottom: 0,
+  quickAction: {
+    flex: 1,
+    alignItems: 'center',
   },
-  switchRow: {
+  quickActionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Sections
+  section: {
+    marginBottom: 20,
+    paddingHorizontal: 16,
+  },
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    marginBottom: 10,
   },
-  fab: {
-    position: 'absolute',
-    right: 16,
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  // Task cards
+  taskCard: {
+    borderRadius: 10,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  taskCardInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 12,
+  },
+  taskMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
+
+  // Pipeline
+  pipelineCard: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  pipelineStages: {
+    flexDirection: 'row',
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+  },
+  pipelineStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  pipelineDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+  },
+  pipelineTotal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+
+  // Tracking
+  startTrackingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 14,
+  },
+  startTrackingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
+  },
+  recentSessionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  sessionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+
+  // Recent contacts
+  recentContactsRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  recentContact: {
+    alignItems: 'center',
+  },
+  contactAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

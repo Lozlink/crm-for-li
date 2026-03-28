@@ -415,7 +415,9 @@ export default function ContactDetail({ contactId }: ContactDetailProps) {
               {contact.address && (
                 <div className="col-span-2">
                   <InfoLabel label="Address" />
-                  <p className="text-sm text-gray-700">{contact.address}</p>
+                  <p className="text-sm text-gray-700">
+                    {contact.unit_number ? `${contact.unit_number} / ` : ''}{contact.address}
+                  </p>
                 </div>
               )}
               {(contact.company_name || contact.title) && (

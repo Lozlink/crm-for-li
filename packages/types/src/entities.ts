@@ -19,6 +19,7 @@ export interface Contact {
   email?: string;
   phone?: string;
   address?: string;
+  unit_number?: string;
   latitude?: number;
   longitude?: number;
   tag_id?: string;
@@ -67,6 +68,7 @@ export interface ContactFormData {
   email: string;
   phone: string;
   address: string;
+  unit_number?: string;
   latitude?: number;
   longitude?: number;
   tag_id?: string;

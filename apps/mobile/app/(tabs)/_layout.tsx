@@ -1,22 +1,40 @@
+import React, { memo, useCallback } from 'react';
 import { Tabs, useRouter } from 'expo-router';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useTheme, Text } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuthStore, useTrackingStore } from '@realestate-crm/hooks';
 import { TrackingBanner } from '@realestate-crm/ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-function TopHeader() {
+const TopHeader = memo(function TopHeader() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const activeTeam = useAuthStore((s) => s.activeTeam);
   const isDemoMode = useAuthStore((s) => s.isDemoMode);
   const profile = useAuthStore((s) => s.profile);
+  const activeSession = useTrackingStore(s => s.activeSession);
+  const startSession = useTrackingStore(s => s.startSession);
 
   const displayName = isDemoMode
     ? 'Demo'
     : profile?.display_name?.split(' ')[0] || 'User';
+
+  const handleTrackingPress = useCallback(() => {
+    if (activeSession) {
+      router.push('/(tabs)/map' as never);
+      return;
+    }
+    Alert.alert(
+      'Start Tracking',
+      'This will record your location in the background for field prospecting. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Start', onPress: () => startSession() },
+      ],
+    );
+  }, [activeSession, router, startSession]);
 
   return (
     <View style={[styles.topHeader, { paddingTop: insets.top, backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.outlineVariant }]}>
@@ -27,14 +45,39 @@ function TopHeader() {
           style={styles.teamButton}
         >
           <View style={[styles.teamDot, { backgroundColor: theme.colors.primary }]} />
-          <Text variant="titleSmall" numberOfLines={1} style={{ maxWidth: 160 }}>
+          <Text variant="titleSmall" numberOfLines={1} style={{ maxWidth: 140 }}>
             {isDemoMode ? 'Demo Mode' : activeTeam?.name || 'No Team'}
           </Text>
           <Icon name="chevron-down" size={16} color={theme.colors.onSurfaceVariant} />
         </TouchableOpacity>
 
-        {/* Right: User actions */}
+        {/* Right: Tracking + Stats + Avatar */}
         <View style={styles.topHeaderRight}>
+          {/* Start/View Tracking button */}
+          <TouchableOpacity
+            onPress={handleTrackingPress}
+            style={[
+              styles.trackingButton,
+              { backgroundColor: activeSession ? theme.colors.tertiaryContainer : theme.colors.primaryContainer },
+            ]}
+          >
+            <Icon
+              name={activeSession ? 'walk' : 'play-circle-outline'}
+              size={16}
+              color={activeSession ? theme.colors.onTertiaryContainer : theme.colors.onPrimaryContainer}
+            />
+            <Text
+              variant="labelSmall"
+              style={{
+                color: activeSession ? theme.colors.onTertiaryContainer : theme.colors.onPrimaryContainer,
+                fontWeight: '600',
+                marginLeft: 4,
+              }}
+            >
+              {activeSession ? 'Tracking' : 'Track'}
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => router.push('/(tabs)/stats' as never)}
             style={styles.headerIcon}
@@ -53,7 +96,10 @@ function TopHeader() {
       </View>
     </View>
   );
-}
+});
+
+// Stable reference for Tabs screenOptions.header
+const renderHeader = () => <TopHeader />;
 
 export default function TabLayout() {
   const theme = useTheme();
@@ -73,33 +119,34 @@ export default function TabLayout() {
             fontSize: 10,
             fontWeight: '600',
           },
-          header: () => <TopHeader />,
+          header: renderHeader,
         }}
       >
+        {/* ─── Visible tabs (prospecting-focused) ─── */}
         <Tabs.Screen
-          name="properties"
+          name="index"
           options={{
-            title: 'Properties',
+            title: 'Today',
             tabBarIcon: ({ color, size }) => (
-              <Icon name="home-city" size={size} color={color} />
+              <Icon name="lightning-bolt" size={size} color={color} />
             ),
           }}
         />
         <Tabs.Screen
-          name="index"
+          name="pipeline"
+          options={{
+            title: 'Pipeline',
+            tabBarIcon: ({ color, size }) => (
+              <Icon name="view-column" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="contacts"
           options={{
             title: 'Contacts',
             tabBarIcon: ({ color, size }) => (
               <Icon name="account-group" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="tasks"
-          options={{
-            title: 'Tasks',
-            tabBarIcon: ({ color, size }) => (
-              <Icon name="checkbox-marked-circle-outline" size={size} color={color} />
             ),
           }}
         />
@@ -121,11 +168,18 @@ export default function TabLayout() {
             ),
           }}
         />
-        {/* Hidden tabs — accessible via More grid or top header */}
+
+        {/* ─── Hidden tabs — accessible via More grid or deep links ─── */}
         <Tabs.Screen
-          name="pipeline"
-          options={{ title: 'Pipeline', href: null,
-            tabBarIcon: ({ color, size }) => <Icon name="view-column" size={size} color={color} />,
+          name="properties"
+          options={{ title: 'Properties', href: null,
+            tabBarIcon: ({ color, size }) => <Icon name="home-city" size={size} color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="tasks"
+          options={{ title: 'Tasks', href: null,
+            tabBarIcon: ({ color, size }) => <Icon name="checkbox-marked-circle-outline" size={size} color={color} />,
           }}
         />
         <Tabs.Screen
@@ -185,7 +239,14 @@ const styles = StyleSheet.create({
   topHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+  },
+  trackingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   headerIcon: {
     padding: 6,
@@ -196,6 +257,5 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 4,
   },
 });
