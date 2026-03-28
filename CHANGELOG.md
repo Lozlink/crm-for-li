@@ -1,5 +1,64 @@
 # Changelog
 
+## [Unreleased] - 2026-03-28
+
+### Added
+
+#### Prospecting-First UX Overhaul
+
+- **Today dashboard** (`app/(tabs)/index.tsx`) — new home screen replacing Properties as the landing tab
+  - Greeting with overdue task count awareness
+  - Quick action buttons: Add Contact, Start Route, New Task, Add Listing
+  - "Start Prospecting" card — one-tap tracking session start with confirmation dialog
+  - Overdue tasks section with inline completion
+  - Today's schedule — inspections and due tasks with times
+  - Pipeline snapshot — Appraisals / Listed / Under Offer counts + total value
+  - Recent contacts avatar row
+  - Recent tracking session chips with distance + duration
+  - Pull-to-refresh across all data sources
+
+#### Multi-Dwelling Address Support
+
+- **`unit_number` field** on `Contact` and `ContactFormData` types (`packages/types/src/entities.ts`)
+- **Unit/Apt input** in `ContactForm` — both minimal (tracking) and full form modes (`packages/ui/src/ContactForm.tsx`)
+  - Input sanitization: trims whitespace and trailing slashes on submit
+- **Display format** `Unit 3 / 45 Smith St` in `ContactCard` and contact detail view
+- **Database migration** (`supabase/migrations/020_add_unit_number.sql`) — `unit_number text` column on contacts table
+
+#### Multi-Dwelling Tracking
+
+- **DropNoteDialog multi-dwelling mode** (`packages/ui/src/DropNoteDialog.tsx`) — upgraded from single-note to support per-unit logging
+  - Toggle from single note to "Multi-dwelling? Log units individually"
+  - Per-unit entry: unit number + quick outcome (Not Home, Spoke, Callback, Not Interested, Skip) + optional note
+  - GPS position cached once per building — reused for all unit annotations
+  - Structured annotation format: `[Unit 3] Spoke — John, interested in selling`
+  - Logged units displayed as colored outcome chips
+  - Compatible with existing annotation schema (no migration needed)
+
+#### Tracking Prominence
+
+- **Persistent "Track" button** in top header (`app/(tabs)/_layout.tsx`) — one-tap start (with confirmation) from any tab, shows active state when tracking
+
+### Changed
+
+- **Tab hierarchy** — restructured from Properties-first to prospecting-first:
+  - Visible: Today → Pipeline → Contacts → Map → More
+  - Pipeline promoted from hidden to main tab bar
+  - Properties and Tasks moved to More screen
+- **More screen** (`app/(tabs)/more.tsx`) — reorganised into Manage / Field Work / Insights sections with Properties, Tasks, Campaigns, Routes, Notes, Reports, Settings
+- **Contacts screen** renamed from `index.tsx` to `contacts.tsx` — content unchanged
+- **TopHeader** wrapped in `React.memo` with stable `renderHeader` reference to prevent unmount/remount on tab switches
+- **Tracking button colours** — replaced hardcoded hex with `theme.colors.tertiaryContainer` / `theme.colors.onTertiaryContainer` for dark mode support
+- **PipelineStat label** — replaced hardcoded `#6b7280` with `theme.colors.onSurfaceVariant`
+
+### Fixed
+
+- **Tracking session start** — added `Alert.alert` confirmation before `startSession()` in both header button and Today card to prevent accidental background location tracking
+- **Today screen contacts** — added `fetchContacts()` to `useFocusEffect` so Recent Contacts section loads on fresh app launch without visiting Contacts tab first
+- **Recent sessions ordering** — `recentSessions` now sorted by `started_at` descending before slicing
+
+---
+
 ## [Unreleased] - 2026-02-22
 
 ### Added

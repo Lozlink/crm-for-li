@@ -524,6 +524,7 @@ export default function ContactDetailScreen() {
                 email: contact.email || '',
                 phone: contact.phone || '',
                 address: contact.address || '',
+                unit_number: contact.unit_number || '',
                 latitude: contact.latitude,
                 longitude: contact.longitude,
                 tag_id: contact.tag_id,
@@ -655,7 +656,9 @@ export default function ContactDetailScreen() {
                 {contact.address && (
                   <View style={styles.infoRow}>
                     <Icon name="map-marker" size={18} color={theme.colors.onSurfaceVariant} />
-                    <Text variant="bodyMedium" style={styles.infoText}>{contact.address}</Text>
+                    <Text variant="bodyMedium" style={styles.infoText}>
+                      {contact.unit_number ? `${contact.unit_number} / ` : ''}{contact.address}
+                    </Text>
                   </View>
                 )}
                 {contact.company_name && (

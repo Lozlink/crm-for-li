@@ -4,9 +4,16 @@
 
 [38;5;142m[dotenvx@1.52.0] injecting env (4) from .env[39m
 Starting Metro Bundler
-iOS Bundled 2698ms apps/mobile/index.ts (1476 modules)
-Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1732/1732)
-Android Bundled 4806ms apps/mobile/index.ts (1732 modules)
+Android apps/mobile/index.ts ▓▓▓▓░░░░░░░░░░░░ 25.0% (156/312)
+iOS apps/mobile/index.ts ▓▓▓▓░░░░░░░░░░░░ 28.4% (172/323)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 70.7% (718/934)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 74.1% (692/922)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 95.9% (1278/1305)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 94.6% (1302/1379)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1733/1733)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.3% (1730/1736)
+iOS Bundled 14608ms apps/mobile/index.ts (1736 modules)
+Android Bundled 16532ms apps/mobile/index.ts (1733 modules)
 
 › Assets (33):
 ../../node_modules/.pnpm/@expo+vector-icons@15.0.3_expo-font@14.0.11_expo@54.0.33_react-native@0.81.5_@babel+cor_dffeba5e71c136362da807d9acd294ec/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf (1.31 MB)
@@ -25,10 +32,10 @@ Android Bundled 4806ms apps/mobile/index.ts (1732 modules)
 ../../node_modules/.pnpm/react-native-paper@5.15.0_react-native-safe-area-context@5.6.2_react-native@0.81.5_@bab_41d9b5c0467b7e446469252509ed76ee/node_modules/react-native-paper/src/assets/back-chevron.png (489 B)
 
 › ios bundles (1):
-_expo/static/js/ios/index-bf36bfdcd00e75a1eeef13f10e7e0cf3.hbc (5.71 MB)
+_expo/static/js/ios/index-8d82dea8f8991a496206e645350babd5.hbc (5.74 MB)
 
 › android bundles (1):
-_expo/static/js/android/index-86f19f9e3f02cc5284a8220a49723d26.hbc (5.71 MB)
+_expo/static/js/android/index-01eabd0636033d899bf09072bc5d5e53.hbc (5.73 MB)
 
 › Files (1):
 metadata.json (3.71 kB)

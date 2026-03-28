@@ -50,7 +50,7 @@ function ContactCard({ contact, onPress }: ContactCardProps) {
                 numberOfLines={1}
                 style={[styles.infoText, { color: theme.colors.onSurfaceVariant }]}
               >
-                {contact.address}
+                {contact.unit_number ? `${contact.unit_number} / ` : ''}{contact.address}
               </Text>
             </View>
           )}
