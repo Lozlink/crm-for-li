@@ -723,14 +723,21 @@ function ContactRow({
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
           <div
-            className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium text-white"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
             style={{ backgroundColor: contact.tag?.color || '#9CA3AF' }}
           >
             {(contact.first_name?.[0] || '?').toUpperCase()}
           </div>
-          <span className="text-sm font-medium text-gray-900">
-            {displayName || 'Unnamed'}
-          </span>
+          <div className="min-w-0">
+            <span className="text-sm font-medium text-gray-900">
+              {displayName || 'Unnamed'}
+            </span>
+            {contact.address && (
+              <p className="truncate text-xs text-gray-400">
+                {contact.unit_number ? `${contact.unit_number} / ` : ''}{contact.address}
+              </p>
+            )}
+          </div>
         </div>
       </td>
       <td className="px-4 py-3 text-sm text-gray-600">

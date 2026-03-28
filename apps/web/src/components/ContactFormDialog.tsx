@@ -64,6 +64,7 @@ export default function ContactFormDialog({
   const [email, setEmail] = useState(contact?.email || '');
   const [phone, setPhone] = useState(contact?.phone || '');
   const [address, setAddress] = useState(contact?.address || prefillAddress || '');
+  const [unitNumber, setUnitNumber] = useState(contact?.unit_number || '');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | undefined>(prefillCoords);
   const [selectedTags, setSelectedTags] = useState<string[]>(
     contact?.tags?.map((t) => t.id) || (contact?.tag_id ? [contact.tag_id] : [])
@@ -119,6 +120,7 @@ export default function ContactFormDialog({
             email: email.trim() || undefined,
             phone: phone.trim() || undefined,
             address: address.trim() || undefined,
+            unit_number: unitNumber.trim() || undefined,
             tag_id: selectedTags[0] || undefined,
             tags: tags.filter((t) => selectedTags.includes(t.id)),
             ...enrichmentFields,
@@ -130,6 +132,7 @@ export default function ContactFormDialog({
             email: email.trim() || undefined,
             phone: phone.trim() || undefined,
             address: address.trim() || undefined,
+            unit_number: unitNumber.trim() || undefined,
             tag_id: selectedTags[0] || undefined,
             tags: tags.filter((t) => selectedTags.includes(t.id)),
             latitude: coords?.lat,
@@ -158,6 +161,7 @@ export default function ContactFormDialog({
       email,
       phone,
       address,
+      unitNumber,
       selectedTags,
       tags,
       isEditing,
@@ -268,6 +272,20 @@ export default function ContactFormDialog({
                 }}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 placeholder="Street address, suburb, state"
+              />
+            </div>
+
+            {/* Unit / Apt # */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                Unit / Apt #
+              </label>
+              <input
+                type="text"
+                value={unitNumber}
+                onChange={(e) => setUnitNumber(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="e.g., Unit 3, Apt 2B"
               />
             </div>
 

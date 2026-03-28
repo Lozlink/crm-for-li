@@ -8,18 +8,26 @@ import type { Membership, Organisation } from '@realestate-crm/types';
 import TeamSetup from './TeamSetup';
 
 const NAV_ITEMS = [
-  { href: '/', label: 'Dashboard', icon: DashboardIcon },
-  { href: '/properties', label: 'Properties', icon: PropertiesIcon },
-  { href: '/pipeline', label: 'Pipeline', icon: PipelineIcon },
-  { href: '/contacts', label: 'Contacts', icon: ContactsIcon },
-  { href: '/tasks', label: 'Tasks', icon: TasksIcon },
-  { href: '/map', label: 'Map', icon: MapIcon },
-  { href: '/routes', label: 'Routes', icon: RoutesIcon },
-  { href: '/notes', label: 'Notes', icon: NotesIcon },
-  { href: '/reports', label: 'Reports', icon: ReportsIcon },
-  { href: '/campaigns', label: 'Campaigns', icon: CampaignsIcon },
-  { href: '/tracking', label: 'Tracking', icon: TrackingIcon },
-  { href: '/settings', label: 'Settings', icon: SettingsIcon },
+  { href: '/', label: 'Dashboard', icon: DashboardIcon, group: 'prospecting' },
+  { href: '/pipeline', label: 'Pipeline', icon: PipelineIcon, group: 'prospecting' },
+  { href: '/contacts', label: 'Contacts', icon: ContactsIcon, group: 'prospecting' },
+  { href: '/map', label: 'Map', icon: MapIcon, group: 'prospecting' },
+  { href: '/properties', label: 'Properties', icon: PropertiesIcon, group: 'listings' },
+  { href: '/tasks', label: 'Tasks', icon: TasksIcon, group: 'operations' },
+  { href: '/routes', label: 'Routes', icon: RoutesIcon, group: 'operations' },
+  { href: '/tracking', label: 'Tracking', icon: TrackingIcon, group: 'operations' },
+  { href: '/campaigns', label: 'Campaigns', icon: CampaignsIcon, group: 'grow' },
+  { href: '/notes', label: 'Notes', icon: NotesIcon, group: 'grow' },
+  { href: '/reports', label: 'Reports', icon: ReportsIcon, group: 'grow' },
+  { href: '/settings', label: 'Settings', icon: SettingsIcon, group: 'system' },
+];
+
+const NAV_GROUPS: { key: string; label: string }[] = [
+  { key: 'prospecting', label: 'PROSPECTING' },
+  { key: 'listings', label: 'LISTINGS' },
+  { key: 'operations', label: 'OPERATIONS' },
+  { key: 'grow', label: 'GROW' },
+  { key: 'system', label: '' },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -236,27 +244,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-1 px-2 py-3">
-          {NAV_ITEMS.map((item) => {
-            const isActive =
-              item.href === '/'
-                ? pathname === '/'
-                : pathname.startsWith(item.href);
+        <nav className="flex-1 overflow-y-auto px-2 py-3">
+          {NAV_GROUPS.map((group, groupIndex) => {
+            const groupItems = NAV_ITEMS.filter((item) => item.group === group.key);
+            if (groupItems.length === 0) return null;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <item.icon
-                  className={`h-5 w-5 ${isActive ? 'text-primary-500' : 'text-gray-400'}`}
-                />
-                {item.label}
-              </Link>
+              <div key={group.key}>
+                {groupIndex > 0 && (
+                  <hr className="mx-3 my-2 border-gray-100" />
+                )}
+                {group.label && (
+                  <p className="mb-1 px-3 pt-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    {group.label}
+                  </p>
+                )}
+                <div className="space-y-0.5">
+                  {groupItems.map((item) => {
+                    const isActive =
+                      item.href === '/'
+                        ? pathname === '/'
+                        : pathname.startsWith(item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                          isActive
+                            ? 'bg-primary-50 text-primary-700'
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        }`}
+                      >
+                        <item.icon
+                          className={`h-5 w-5 ${isActive ? 'text-primary-500' : 'text-gray-400'}`}
+                        />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </nav>

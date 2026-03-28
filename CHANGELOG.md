@@ -39,6 +39,33 @@
 
 - **Persistent "Track" button** in top header (`app/(tabs)/_layout.tsx`) — one-tap start (with confirmation) from any tab, shows active state when tracking
 
+#### Web Dashboard Overhaul
+
+- **CRM command centre** (`apps/web/src/components/Dashboard.tsx`) — rewritten from contact-centric to property-pipeline-centric
+  - KPI cards: Active Listings, Pipeline Value (formatted $X.XM), Overdue Tasks (red when > 0), This Week's Contacts
+  - Property pipeline stage bars: Appraisal → Listed → Under Offer → Exchanged with counts and aggregate values
+  - Upcoming inspections list with property address, time, type badge, attendee count
+  - Tasks due section: overdue (red accent) + today's tasks with type badges and linked contacts
+  - Field activity summary: sessions this week, total distance, doors knocked (annotation count)
+  - Recent activity feed with SVG type icons replacing emojis
+  - Australian locale formatting (`en-AU`) for dates and times
+
+#### Web Navigation Restructure
+
+- **Sidebar grouped by workflow** (`apps/web/src/components/AppShell.tsx`)
+  - Prospecting: Dashboard, Pipeline, Contacts, Map
+  - Listings: Properties
+  - Operations: Tasks, Routes, Tracking
+  - Grow: Campaigns, Notes, Reports
+  - System: Settings
+  - Uppercase section labels with dividers between groups
+
+#### Web Multi-Dwelling Support
+
+- **ContactsTable** — address column shows `Unit X / Address` format
+- **ContactFormDialog** — added Unit/Apt # input field, included in create/update payloads
+- **ContactDetail** — address display includes unit_number prefix
+
 ### Changed
 
 - **Tab hierarchy** — restructured from Properties-first to prospecting-first:
