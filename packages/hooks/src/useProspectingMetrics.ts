@@ -330,19 +330,25 @@ function computeWeeklyTrend(
 
 function computeStreak(sessions: TrackingSession[]): ProspectingStreak {
   const now = new Date();
-  const todayStr = startOfDay(now).toISOString().slice(0, 10);
   const weeklyTarget = 50; // default doors/week target
 
-  // Get unique days with sessions (sorted descending)
+  // Use LOCAL date strings to avoid UTC timezone offset issues
+  // A session at 9pm AEST should count as "today" in AEST, not tomorrow in UTC
+  function toLocalDateStr(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }
+
+  const todayStr = toLocalDateStr(now);
+
+  // Get unique LOCAL days with sessions
   const sessionDays = new Set<string>();
   for (const s of sessions) {
     if (s.started_at) {
-      sessionDays.add(new Date(s.started_at).toISOString().slice(0, 10));
+      sessionDays.add(toLocalDateStr(new Date(s.started_at)));
     }
   }
-  const sortedDays = [...sessionDays].sort().reverse();
 
-  const isActiveToday = sortedDays[0] === todayStr;
+  const isActiveToday = sessionDays.has(todayStr);
 
   // Count consecutive days backward from today (or yesterday if not active today)
   let currentDays = 0;
@@ -352,24 +358,32 @@ function computeStreak(sessions: TrackingSession[]): ProspectingStreak {
   }
 
   const checkDate = new Date(startCheck);
-  while (sessionDays.has(checkDate.toISOString().slice(0, 10))) {
+  while (sessionDays.has(toLocalDateStr(checkDate))) {
     currentDays++;
     checkDate.setDate(checkDate.getDate() - 1);
   }
 
-  // Find longest streak
+  // Find longest streak using local date strings
   let longestDays = 0;
   let streakCount = 0;
-  let prevDay: Date | null = null;
-  for (const dayStr of [...sessionDays].sort()) {
-    const day = new Date(dayStr);
-    if (prevDay && (day.getTime() - prevDay.getTime()) === 86400000) {
-      streakCount++;
+  const sortedLocalDays = [...sessionDays].sort();
+  let prevDateStr: string | null = null;
+  for (const dayStr of sortedLocalDays) {
+    if (prevDateStr) {
+      const prev = new Date(prevDateStr);
+      const curr = new Date(dayStr);
+      const diffMs = curr.getTime() - prev.getTime();
+      // Allow for DST: 23-25 hours counts as consecutive
+      if (diffMs >= 79200000 && diffMs <= 90000000) {
+        streakCount++;
+      } else {
+        streakCount = 1;
+      }
     } else {
       streakCount = 1;
     }
     longestDays = Math.max(longestDays, streakCount);
-    prevDay = day;
+    prevDateStr = dayStr;
   }
 
   // Weekly progress (doors this week)
