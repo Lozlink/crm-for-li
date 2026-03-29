@@ -159,29 +159,49 @@ export default function ContactForm({
       if (contact) {
         const rawFirst = contact.firstName || '';
         const rawLast = contact.lastName || '';
-        const fullName = `${rawFirst} ${rawLast}`.trim();
 
-        // Try smart parsing — contact name may contain an embedded address
-        const parsed = parseContactNameField(fullName);
+        // Build address from phone's structured address fields
+        let phoneAddress = '';
+        if (contact.addresses && contact.addresses.length > 0) {
+          const addr = contact.addresses[0];
+          const parts = [addr.street, addr.city, addr.region, addr.postalCode].filter(Boolean);
+          if (parts.length > 0) phoneAddress = parts.join(', ');
+        }
 
-        if (parsed && parsed.address) {
-          setFormData(prev => ({
-            ...prev,
-            first_name: parsed.first_name,
-            last_name: parsed.last_name,
-            address: parsed.address,
-            unit_number: parsed.unit_number || '',
-            email: contact.emails?.[0]?.email || '',
-            phone: contact.phoneNumbers?.[0]?.number || '',
-          }));
-        } else {
+        // If phone has a structured address, use it directly
+        if (phoneAddress) {
           setFormData(prev => ({
             ...prev,
             first_name: rawFirst,
             last_name: rawLast,
+            address: phoneAddress,
             email: contact.emails?.[0]?.email || '',
             phone: contact.phoneNumbers?.[0]?.number || '',
           }));
+        } else {
+          // Fallback: try smart parsing — name may contain an embedded address
+          const fullName = `${rawFirst} ${rawLast}`.trim();
+          const parsed = parseContactNameField(fullName);
+
+          if (parsed && parsed.address) {
+            setFormData(prev => ({
+              ...prev,
+              first_name: parsed.first_name,
+              last_name: parsed.last_name,
+              address: parsed.address,
+              unit_number: parsed.unit_number || '',
+              email: contact.emails?.[0]?.email || '',
+              phone: contact.phoneNumbers?.[0]?.number || '',
+            }));
+          } else {
+            setFormData(prev => ({
+              ...prev,
+              first_name: rawFirst,
+              last_name: rawLast,
+              email: contact.emails?.[0]?.email || '',
+              phone: contact.phoneNumbers?.[0]?.number || '',
+            }));
+          }
         }
       }
     } catch (error) {
@@ -196,10 +216,10 @@ export default function ContactForm({
         <Button 
           mode="outlined" 
           onPress={handleImportContact} 
-          icon="account-import"
+          icon="phone-outline"
           style={styles.importButton}
         >
-          Import from Contacts
+          Fill from Phone Contact
         </Button>
       )}
 

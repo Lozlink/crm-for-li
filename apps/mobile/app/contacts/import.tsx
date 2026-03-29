@@ -13,6 +13,7 @@ import {
 } from 'react-native-paper';
 import { Stack, useRouter } from 'expo-router';
 import * as Contacts from 'expo-contacts';
+import * as Linking from 'expo-linking';
 import { useCRMStore } from '@realestate-crm/hooks';
 import { findDuplicates, parseContactNameField } from '@realestate-crm/utils';
 import type { Contact as CRMContact } from '@realestate-crm/types';
@@ -68,6 +69,7 @@ export default function ImportContactsScreen() {
           Contacts.Fields.LastName,
           Contacts.Fields.PhoneNumbers,
           Contacts.Fields.Emails,
+          Contacts.Fields.Addresses,
         ],
       });
       // Filter out contacts without a name
@@ -105,14 +107,23 @@ export default function ImportContactsScreen() {
   const handlePreview = useCallback(() => {
     const selected = deviceContacts.filter((c) => selectedIds.has(c.id!));
     const mappedList: MappedContact[] = selected.map((c) => {
+      // Build address from phone's structured address fields
+      let phoneAddress: string | undefined;
+      if (c.addresses && c.addresses.length > 0) {
+        const addr = c.addresses[0];
+        const parts = [addr.street, addr.city, addr.region, addr.postalCode].filter(Boolean);
+        if (parts.length > 0) phoneAddress = parts.join(', ');
+      }
+
       const contact: MappedContact = {
         first_name: c.firstName || c.lastName || 'Unknown',
         last_name: c.lastName && c.firstName ? c.lastName : undefined,
         phone: c.phoneNumbers?.[0]?.number,
         email: c.emails?.[0]?.email,
+        address: phoneAddress,
       };
 
-      // Smart address parsing: if no address but name contains an address pattern, try to extract
+      // Fallback: if still no address, try smart parsing from name field
       if (!contact.address) {
         const fullName = `${contact.first_name} ${contact.last_name || ''}`.trim();
         const parsed = parseContactNameField(fullName);
@@ -172,7 +183,10 @@ export default function ImportContactsScreen() {
           <Text variant="bodyLarge" style={{ textAlign: 'center', margin: 32 }}>
             Contact permission is required to import phone contacts.
           </Text>
-          <Button mode="contained" onPress={() => router.back()}>
+          <Button mode="contained" onPress={() => Linking.openSettings()} style={{ marginBottom: 12 }}>
+            Open Settings
+          </Button>
+          <Button mode="outlined" onPress={() => router.back()}>
             Go Back
           </Button>
         </View>
@@ -219,6 +233,15 @@ export default function ImportContactsScreen() {
                 <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                   {selectedIds.size} selected
                 </Text>
+                <View style={{ flex: 1 }} />
+                <Button
+                  compact
+                  onPress={() => Linking.openSettings()}
+                  icon="cog-outline"
+                  textColor={theme.colors.onSurfaceVariant}
+                >
+                  Permissions
+                </Button>
               </View>
             </View>
 
@@ -287,6 +310,11 @@ export default function ImportContactsScreen() {
                       {item.phone && (
                         <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                           {item.phone}
+                        </Text>
+                      )}
+                      {item.address && (
+                        <Text variant="bodySmall" style={{ color: theme.colors.primary }} numberOfLines={1}>
+                          {item.unit_number ? `${item.unit_number}/` : ''}{item.address}
                         </Text>
                       )}
                     </View>
