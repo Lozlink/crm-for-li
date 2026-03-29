@@ -5,9 +5,11 @@ import * as Contacts from 'expo-contacts';
 import * as Linking from 'expo-linking';
 import { ContactFormData } from '@realestate-crm/types';
 import { useCRMStore } from '@realestate-crm/hooks';
-import { parseContactNameField } from '@realestate-crm/utils';
+import { parseContactNameField, geocodeAddress } from '@realestate-crm/utils';
 import TagPicker from './TagPicker';
 import AddressAutocomplete from './AddressAutocomplete';
+
+const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '';
 
 interface ContactFormProps {
   initialData?: ContactFormData;
@@ -168,41 +170,45 @@ export default function ContactForm({
           if (parts.length > 0) phoneAddress = parts.join(', ');
         }
 
-        // If phone has a structured address, use it directly
-        if (phoneAddress) {
-          setFormData(prev => ({
-            ...prev,
-            first_name: rawFirst,
-            last_name: rawLast,
-            address: phoneAddress,
-            email: contact.emails?.[0]?.email || '',
-            phone: contact.phoneNumbers?.[0]?.number || '',
-          }));
-        } else {
-          // Fallback: try smart parsing — name may contain an embedded address
+        let finalFirst = rawFirst;
+        let finalLast = rawLast;
+        let finalAddress = phoneAddress;
+        let finalUnit = '';
+
+        // If no structured address, try smart parsing from name field
+        if (!finalAddress) {
           const fullName = `${rawFirst} ${rawLast}`.trim();
           const parsed = parseContactNameField(fullName);
-
           if (parsed && parsed.address) {
-            setFormData(prev => ({
-              ...prev,
-              first_name: parsed.first_name,
-              last_name: parsed.last_name,
-              address: parsed.address,
-              unit_number: parsed.unit_number || '',
-              email: contact.emails?.[0]?.email || '',
-              phone: contact.phoneNumbers?.[0]?.number || '',
-            }));
-          } else {
-            setFormData(prev => ({
-              ...prev,
-              first_name: rawFirst,
-              last_name: rawLast,
-              email: contact.emails?.[0]?.email || '',
-              phone: contact.phoneNumbers?.[0]?.number || '',
-            }));
+            finalFirst = parsed.first_name;
+            finalLast = parsed.last_name;
+            finalAddress = parsed.address;
+            finalUnit = parsed.unit_number || '';
           }
         }
+
+        // Geocode the address to get coordinates
+        let lat: number | undefined;
+        let lng: number | undefined;
+        if (finalAddress && GOOGLE_API_KEY) {
+          const coords = await geocodeAddress(finalAddress, GOOGLE_API_KEY);
+          if (coords) {
+            lat = coords.lat;
+            lng = coords.lng;
+          }
+        }
+
+        setFormData(prev => ({
+          ...prev,
+          first_name: finalFirst,
+          last_name: finalLast,
+          address: finalAddress || '',
+          unit_number: finalUnit,
+          latitude: lat,
+          longitude: lng,
+          email: contact.emails?.[0]?.email || '',
+          phone: contact.phoneNumbers?.[0]?.number || '',
+        }));
       }
     } catch (error) {
       console.error('Error importing contact:', error);

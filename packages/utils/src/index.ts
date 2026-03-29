@@ -24,3 +24,5 @@ export {
 } from './validation';
 
 export type { DedupContact, ParsedContactName } from './validation';
+
+export { geocodeAddress, batchGeocodeAddresses } from './geocode';

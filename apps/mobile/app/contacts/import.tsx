@@ -15,7 +15,7 @@ import { Stack, useRouter } from 'expo-router';
 import * as Contacts from 'expo-contacts';
 import * as Linking from 'expo-linking';
 import { useCRMStore } from '@realestate-crm/hooks';
-import { findDuplicates, parseContactNameField } from '@realestate-crm/utils';
+import { findDuplicates, parseContactNameField, batchGeocodeAddresses } from '@realestate-crm/utils';
 import type { Contact as CRMContact } from '@realestate-crm/types';
 
 type Step = 'select' | 'preview' | 'importing' | 'done';
@@ -27,8 +27,12 @@ interface MappedContact {
   email?: string;
   address?: string;
   unit_number?: string;
+  latitude?: number;
+  longitude?: number;
   addressExtracted?: boolean;
 }
+
+const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '';
 
 export default function ImportContactsScreen() {
   const theme = useTheme();
@@ -104,7 +108,7 @@ export default function ImportContactsScreen() {
     setSelectedIds(new Set());
   }, []);
 
-  const handlePreview = useCallback(() => {
+  const handlePreview = useCallback(async () => {
     const selected = deviceContacts.filter((c) => selectedIds.has(c.id!));
     const mappedList: MappedContact[] = selected.map((c) => {
       // Build address from phone's structured address fields
@@ -138,6 +142,21 @@ export default function ImportContactsScreen() {
 
       return contact;
     });
+
+    // Geocode addresses to get lat/lng for map display
+    if (GOOGLE_API_KEY) {
+      const toGeocode = mappedList
+        .map((c, i) => (c.address ? { index: i, address: c.address } : null))
+        .filter((x): x is { index: number; address: string } => x !== null);
+
+      if (toGeocode.length > 0) {
+        const coords = await batchGeocodeAddresses(toGeocode, GOOGLE_API_KEY);
+        for (const [idx, { lat, lng }] of coords) {
+          mappedList[idx].latitude = lat;
+          mappedList[idx].longitude = lng;
+        }
+      }
+    }
 
     setMapped(mappedList);
     const dupes = findDuplicates(mappedList, existingContacts);

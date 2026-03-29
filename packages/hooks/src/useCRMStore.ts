@@ -4,6 +4,25 @@ import type { Contact, Tag, Activity, ActivityWithContact, MapRegion, SavedSubur
 import { supabase, isDemoMode, generateUUID } from '@realestate-crm/api';
 import { useAuthStore } from './useAuthStore';
 
+// Valid columns in the contacts table — used to strip form-only fields before Supabase operations
+const CONTACT_DB_COLUMNS = new Set([
+  'first_name', 'last_name', 'email', 'phone', 'address', 'unit_number',
+  'latitude', 'longitude', 'tag_id', 'user_id', 'team_id',
+  'source', 'contact_type', 'company_name', 'title',
+  'preferred_contact_method', 'do_not_contact', 'notes',
+  'status', 'lead_score', 'last_contacted_at', 'next_follow_up_at',
+]);
+
+function pickContactColumns(data: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (CONTACT_DB_COLUMNS.has(key) && value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 interface CRMState {
   // Data
   contacts: Contact[];
@@ -403,7 +422,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         ? tagObjects.map((t: Tag) => t.id)
         : contact.tag_id ? [contact.tag_id] : [];
 
-      const insertData: any = { ...contactFields };
+      const insertData: any = pickContactColumns(contactFields);
       if (teamId) insertData.team_id = teamId;
       if (userId) insertData.user_id = userId;
       // Keep tag_id for backward compat (first tag or null)
@@ -470,19 +489,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
       // Extract tags and whitelist only valid DB columns
       const { tags: tagObjects, ...contactFields } = contact as any;
-      const VALID_COLUMNS = new Set([
-        'first_name', 'last_name', 'email', 'phone', 'address', 'unit_number',
-        'latitude', 'longitude', 'tag_id', 'user_id', 'team_id',
-        'source', 'contact_type', 'company_name', 'title',
-        'preferred_contact_method', 'do_not_contact', 'notes',
-        'status', 'lead_score', 'last_contacted_at', 'next_follow_up_at',
-      ]);
-      const updateData: any = { updated_at: new Date().toISOString() };
-      for (const [key, value] of Object.entries(contactFields)) {
-        if (VALID_COLUMNS.has(key) && value !== undefined) {
-          updateData[key] = value;
-        }
-      }
+      const updateData: any = { ...pickContactColumns(contactFields), updated_at: new Date().toISOString() };
 
       // If tags array is provided, sync junction table and update tag_id for compat
       if (tagObjects !== undefined) {

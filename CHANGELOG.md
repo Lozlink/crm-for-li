@@ -1,5 +1,34 @@
 # Changelog
 
+## [Unreleased] - 2026-03-30
+
+### Added
+
+#### Smart Contact Import
+- **Phone address import** — bulk import and single contact picker now fetch structured addresses from device contacts (`Contacts.Fields.Addresses`), mapping street/city/state/postcode into the address field
+- **`parseContactNameField()` utility** (`packages/utils/src/validation.ts`) — regex-based parser that detects Australian addresses embedded in messy name fields (e.g. `"Data: Jason Li – 713/45 Macquarie Street, Parramatta"` → name: Jason Li, address: 713/45 Macquarie Street, unit: 713)
+- **Smart parsing on import** — applied as fallback when phone contact has no structured address but name field contains an address pattern; shows "Address extracted" chip in preview
+- **Address shown in import preview** — preview list now displays the imported/extracted address for each contact
+- **"Clean Up Imports" button** (web) — scans existing contacts for addresses stuck in name fields, shows before/after preview, batch updates
+
+#### Mass Delete Contacts
+- **`bulkDeleteContacts()`** store method — batch deletes via Supabase `.in('id', ids)` in 500-row batches, with demo mode support
+- **Web multi-select** — checkbox column on contacts table, select-all toggle, floating action bar with count + "Delete Selected" + "Clear"
+- **Mobile multi-select** — long-press a contact to enter select mode, checkboxes appear on each row, header bar with Select All / Delete / Cancel actions
+
+#### Import UX Improvements
+- **Permissions management** — "Permissions" button on import select screen opens device settings (for expanding from limited to full contact access)
+- **Permission denied screen** — now shows "Open Settings" button instead of just "Go Back"
+- **"Fill from Phone Contact"** — renamed from "Import from Contacts" in the contact form to clarify it pre-fills the form rather than importing directly
+
+### Fixed
+
+- **Contact edit bug** — `updateContact` now whitelists valid DB columns, preventing silent Supabase failures when form-only fields (`tag_ids`, `initial_note`) were passed through; `handleUpdate` checks for store errors before closing the form
+- **Long-press not working** — `ContactCard` component now accepts and forwards `onLongPress` to its `TouchableOpacity`
+- **Missing icon** — replaced `account-import` icon with `phone-outline` on the fill-from-phone button
+
+---
+
 ## [Unreleased] - 2026-03-29
 
 ### Added

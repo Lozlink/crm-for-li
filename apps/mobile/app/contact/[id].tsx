@@ -18,6 +18,7 @@ import {
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCRMStore, useEmailCampaignStore, useBuyerMatchStore, usePropertyStore, useInspectionStore, useCustomFieldStore } from '@realestate-crm/hooks';
+import { geocodeAddress } from '@realestate-crm/utils';
 import type {
   Contact, ContactFormData, ContactSource, ContactType as CType,
   ContactStatus, PreferredContactMethod, ContactRequirement, Property,
@@ -662,12 +663,40 @@ export default function ContactDetailScreen() {
                   </View>
                 )}
                 {contact.address && (
-                  <View style={styles.infoRow}>
-                    <Icon name="map-marker" size={18} color={theme.colors.onSurfaceVariant} />
-                    <Text variant="bodyMedium" style={styles.infoText}>
+                  <TouchableOpacity
+                    style={styles.infoRow}
+                    activeOpacity={0.6}
+                    onPress={async () => {
+                      let lat = contact.latitude;
+                      let lng = contact.longitude;
+
+                      // Geocode on-demand if no coordinates
+                      if (lat == null || lng == null) {
+                        const apiKey = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '';
+                        if (apiKey && contact.address) {
+                          const coords = await geocodeAddress(contact.address, apiKey);
+                          if (coords) {
+                            lat = coords.lat;
+                            lng = coords.lng;
+                            // Persist coordinates so we don't geocode again
+                            await updateContact(contact.id, { latitude: lat, longitude: lng });
+                          }
+                        }
+                      }
+
+                      if (lat != null && lng != null) {
+                        router.push(`/(tabs)/map?lat=${lat}&lng=${lng}&zoom=0.005&layer=contacts&label=${encodeURIComponent(contact.first_name)}` as never);
+                      } else {
+                        Alert.alert('No Location', 'Could not determine coordinates for this address.');
+                      }
+                    }}
+                  >
+                    <Icon name="map-marker" size={18} color={theme.colors.primary} />
+                    <Text variant="bodyMedium" style={[styles.infoText, { color: theme.colors.primary }]}>
                       {contact.unit_number ? `${contact.unit_number} / ` : ''}{contact.address}
                     </Text>
-                  </View>
+                    <Icon name="chevron-right" size={16} color={theme.colors.primary} />
+                  </TouchableOpacity>
                 )}
                 {contact.company_name && (
                   <View style={styles.infoRow}>
