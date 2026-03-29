@@ -118,6 +118,7 @@ export default function Dashboard() {
   const contacts = useCRMStore((s) => s.contacts);
   const recentActivities = useCRMStore((s) => s.recentActivities);
   const fetchRecentActivities = useCRMStore((s) => s.fetchRecentActivities);
+  const fetchContacts = useCRMStore((s) => s.fetchContacts);
 
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
@@ -140,6 +141,7 @@ export default function Dashboard() {
 
   // --- Data fetching on mount ---
   useEffect(() => {
+    fetchContacts();
     fetchProperties();
     fetchTasks();
     fetchInspections();
@@ -147,6 +149,7 @@ export default function Dashboard() {
     fetchSessions();
     fetchAllAnnotations();
   }, [
+    fetchContacts,
     fetchProperties,
     fetchTasks,
     fetchInspections,

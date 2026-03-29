@@ -55,14 +55,6 @@ function formatSalePrice(price: number | undefined | null): string {
   return `$${price.toLocaleString()}`;
 }
 
-function parseSuburb(address: string | undefined): string | null {
-  if (!address) return null;
-  const parts = address.split(',').map(s => s.trim());
-  if (parts.length >= 3) return parts[1];
-  if (parts.length === 2) return parts[0];
-  return null;
-}
-
 type ViewMode = 'daily' | 'weekly' | 'funnel' | 'territory';
 
 // ── Funnel colors ────────────────────────────────────────────────────
@@ -104,9 +96,9 @@ export default function ProspectingScreen() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([fetchSessions(), fetchAllAnnotations(), fetchContacts(), fetchProperties()]);
+    await Promise.all([fetchSessions(), fetchAllAnnotations(), fetchContacts(), fetchProperties(), fetchSuburbStats()]);
     setRefreshing(false);
-  }, [fetchSessions, fetchAllAnnotations, fetchContacts, fetchProperties]);
+  }, [fetchSessions, fetchAllAnnotations, fetchContacts, fetchProperties, fetchSuburbStats]);
 
   useFocusEffect(
     useCallback(() => {
@@ -118,27 +110,12 @@ export default function ProspectingScreen() {
     }, [fetchSessions, fetchAllAnnotations, fetchContacts, fetchProperties, fetchSuburbStats])
   );
 
-  // Compute suburb contact counts from stale streets (more reliable than parsing addresses)
-  const suburbContactCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const street of metrics.staleStreets) {
-      if (!street.suburb) continue;
-      const key = street.suburb.toLowerCase();
-      counts.set(key, (counts.get(key) || 0) + street.contactCount);
-    }
-    // Also check recommended areas for suburbs not in stale streets
-    for (const area of metrics.recommendedAreas) {
-      if (!area.suburb) continue;
-      const key = area.suburb.toLowerCase();
-      if (!counts.has(key)) {
-        counts.set(key, area.contactCount);
-      }
-    }
-    return counts;
-  }, [metrics.staleStreets, metrics.recommendedAreas]);
+  // Use pre-computed suburb contact counts from the hook (covers ALL contacts, not just stale streets)
+  const suburbContactCounts = metrics.suburbContactCounts;
 
   // Build suburb intelligence rows
   const suburbIntelligence = useMemo(() => {
+    console.log('[SuburbIntel] suburbStats:', suburbStats.length, 'suburbContactCounts size:', suburbContactCounts.size);
     if (suburbStats.length === 0) return [];
 
     const rows: {

@@ -63,6 +63,7 @@ export default function MapScreen() {
   const params = useLocalSearchParams<{ lat?: string; lng?: string; zoom?: string; label?: string; layer?: string }>();
 
   const contacts = useCRMStore(state => state.contacts);
+  const fetchContacts = useCRMStore(state => state.fetchContacts);
   const mapRegion = useCRMStore(state => state.mapRegion);
   const setMapRegion = useCRMStore(state => state.setMapRegion);
   const selectedTagIds = useCRMStore(state => state.selectedTagIds);
@@ -147,13 +148,16 @@ export default function MapScreen() {
     }, [params.lat, params.lng, params.zoom, params.layer])
   );
 
-  // Fetch data on mount
-  useEffect(() => {
-    fetchProperties();
-    fetchSessions();
-    fetchAllAnnotations();
-    fetchRecentActivities(200);
-  }, [fetchProperties, fetchSessions, fetchAllAnnotations, fetchRecentActivities]);
+  // Fetch data on focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchContacts();
+      fetchProperties();
+      fetchSessions();
+      fetchAllAnnotations();
+      fetchRecentActivities(200);
+    }, [fetchContacts, fetchProperties, fetchSessions, fetchAllAnnotations, fetchRecentActivities])
+  );
 
   // Get user location on mount
   useEffect(() => {

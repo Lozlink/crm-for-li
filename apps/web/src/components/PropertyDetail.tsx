@@ -161,17 +161,19 @@ function formatSaleMonth(dateStr: string): string {
 function RecentSalesNearby({
   lat,
   lng,
+  suburb,
 }: {
   lat: number;
   lng: number;
+  suburb?: string;
 }) {
   const soldRecords = useDataEnrichmentStore((s) => s.soldRecords);
   const soldRecordsLoading = useDataEnrichmentStore((s) => s.soldRecordsLoading);
   const fetchSoldHistoryNearby = useDataEnrichmentStore((s) => s.fetchSoldHistoryNearby);
 
   useEffect(() => {
-    fetchSoldHistoryNearby(lat, lng, 0.5);
-  }, [lat, lng, fetchSoldHistoryNearby]);
+    fetchSoldHistoryNearby(lat, lng, 0.5, suburb);
+  }, [lat, lng, suburb, fetchSoldHistoryNearby]);
 
   const topFive = useMemo(() => {
     return [...soldRecords]
@@ -785,6 +787,7 @@ export default function PropertyDetail({ propertyId }: PropertyDetailProps) {
             <RecentSalesNearby
               lat={activeProperty.latitude}
               lng={activeProperty.longitude}
+              suburb={activeProperty.suburb}
             />
           )}
 

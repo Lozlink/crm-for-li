@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { StyleSheet, View, FlatList, ScrollView, Alert } from 'react-native';
 import {
   Searchbar, FAB, useTheme, Text, ActivityIndicator, Button,
@@ -6,6 +6,7 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useCRMStore, useSavedSearchStore } from '@realestate-crm/hooks';
 import { ContactCard } from '@realestate-crm/ui';
 import type { Contact, ContactSource, ContactType, ContactStatus } from '@realestate-crm/types';
@@ -107,6 +108,8 @@ export default function ContactsScreen() {
   const isLoading = useCRMStore(state => state.isLoading);
   const searchQuery = useCRMStore(state => state.searchQuery);
   const setSearchQuery = useCRMStore(state => state.setSearchQuery);
+  const fetchContacts = useCRMStore(state => state.fetchContacts);
+  const fetchTags = useCRMStore(state => state.fetchTags);
 
   const savedSearches = useSavedSearchStore(state => state.savedSearches);
   const fetchSavedSearches = useSavedSearchStore(state => state.fetchSavedSearches);
@@ -124,9 +127,13 @@ export default function ContactsScreen() {
     [savedSearches]
   );
 
-  useEffect(() => {
-    fetchSavedSearches('contact');
-  }, [fetchSavedSearches]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchContacts();
+      fetchTags();
+      fetchSavedSearches('contact');
+    }, [fetchContacts, fetchTags, fetchSavedSearches])
+  );
 
   // Filter contacts in component to avoid selector issues
   // Exclude quick notes (contacts without first_name) - they show in Notes tab

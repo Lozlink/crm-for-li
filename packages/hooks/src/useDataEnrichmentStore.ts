@@ -184,14 +184,36 @@ export const useDataEnrichmentStore = create<DataEnrichmentState>()((set, get) =
     }
 
     try {
-      let query = supabase.from('suburb_stats').select('*');
       if (suburb) {
-        query = query.ilike('suburb', suburb);
+        const { data, error } = await supabase
+          .from('suburb_stats')
+          .select('*')
+          .ilike('suburb', suburb);
+        if (error) throw error;
+        set({ suburbStats: data || [], suburbStatsLoading: false });
+        return;
       }
-      const { data, error } = await query.order('suburb').limit(100);
 
-      if (error) throw error;
-      set({ suburbStats: data || [], suburbStatsLoading: false });
+      // Supabase caps at 1000 rows per request — paginate to get all
+      const allRows: SuburbStats[] = [];
+      const PAGE_SIZE = 1000;
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('suburb_stats')
+          .select('*')
+          .order('suburb')
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error) throw error;
+        if (data) allRows.push(...data);
+        hasMore = (data?.length ?? 0) === PAGE_SIZE;
+        from += PAGE_SIZE;
+      }
+
+      set({ suburbStats: allRows, suburbStatsLoading: false });
     } catch (error) {
       console.error('fetchSuburbStats error:', error);
       set({ suburbStatsLoading: false });

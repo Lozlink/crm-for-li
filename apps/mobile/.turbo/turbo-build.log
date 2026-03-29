@@ -4,16 +4,14 @@
 
 [38;5;142m[dotenvx@1.52.0] injecting env (4) from .env[39m
 Starting Metro Bundler
-Android apps/mobile/index.ts ▓▓▓▓▓░░░░░░░░░░░ 36.8% (365/616)
-iOS apps/mobile/index.ts ▓▓▓▓▓░░░░░░░░░░░ 32.7% (375/745)
-Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 92.4% (1248/1298)
-iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.4% (1276/1342)
-Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1736/1736)
-iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.4% (1554/1617)
-iOS Bundled 20229ms apps/mobile/index.ts (1617 modules)
-Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1736/1736)
-iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.4% (1554/1617)
-Android Bundled 23039ms apps/mobile/index.ts (1736 modules)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓░░░░░░ 64.0% ( 907/1134)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 81.9% (1112/1229)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.5% (1609/1638)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1740/1740)
+Android Bundled 8091ms apps/mobile/index.ts (1638 modules)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.5% (1609/1638)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1740/1740)
+iOS Bundled 10984ms apps/mobile/index.ts (1740 modules)
 
 › Assets (33):
 ../../node_modules/.pnpm/@expo+vector-icons@15.0.3_expo-font@14.0.11_expo@54.0.33_react-native@0.81.5_@babel+cor_dffeba5e71c136362da807d9acd294ec/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf (1.31 MB)
@@ -31,11 +29,11 @@ Android Bundled 23039ms apps/mobile/index.ts (1736 modules)
 ../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/unmatched.png (4.75 kB)
 ../../node_modules/.pnpm/react-native-paper@5.15.0_react-native-safe-area-context@5.6.2_react-native@0.81.5_@bab_41d9b5c0467b7e446469252509ed76ee/node_modules/react-native-paper/src/assets/back-chevron.png (489 B)
 
-› ios bundles (1):
-_expo/static/js/ios/index-7615dafb81540756e05c6c9a2a66feef.hbc (5.85 MB)
-
 › android bundles (1):
-_expo/static/js/android/index-a5c735ab42c1b60cb25887f2fed82b72.hbc (5.84 MB)
+_expo/static/js/android/index-98ba959fce88ceffa406e491c878c1f2.hbc (5.84 MB)
+
+› ios bundles (1):
+_expo/static/js/ios/index-ce10e19fb6c5fdcc3e1299fba4a4a0da.hbc (5.85 MB)
 
 › Files (1):
 metadata.json (3.71 kB)

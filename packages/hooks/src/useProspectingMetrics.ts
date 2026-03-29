@@ -123,6 +123,8 @@ export interface ProspectingMetrics {
   recommendedAreas: RecommendedArea[];
   multiDwellingBuildings: MultiDwellingBuilding[];
   monthlyDoorsTrend: WeeklyTrendPoint[];
+  /** Contact counts per suburb (lowercase key), computed from full contacts array */
+  suburbContactCounts: Map<string, number>;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -170,13 +172,52 @@ function formatWeekLabel(date: Date): string {
 function parseSuburb(address: string | undefined): string | null {
   if (!address) return null;
   const parts = address.split(',').map(s => s.trim());
-  let suburb: string | null = null;
-  if (parts.length >= 3) suburb = parts[1];
-  else if (parts.length === 2) suburb = parts[0];
-  if (!suburb) return null;
-  // Strip state + postcode suffix: "Greenfield Park NSW 2176" → "Greenfield Park"
-  return suburb.replace(/\s+(NSW|VIC|QLD|SA|WA|TAS|NT|ACT)\s*\d{0,4}\s*$/i, '').trim() || null;
+  let raw: string | null = null;
+
+  if (parts.length >= 3) {
+    // "15 Hornet St, Greenfield Park NSW 2176, Australia" → parts[1]
+    raw = parts[1];
+  } else if (parts.length === 2) {
+    // "15 Hornet St, Parramatta NSW 2150" → parts[1] (suburb is AFTER the comma)
+    // "Parramatta, NSW" → parts[0]
+    const second = parts[1];
+    // If second part is just a state or "Australia", suburb is first part
+    if (/^(NSW|VIC|QLD|SA|WA|TAS|NT|ACT|Australia)\s*\d{0,4}$/i.test(second)) {
+      raw = parts[0];
+    } else {
+      raw = second;
+    }
+  } else {
+    // No commas: "15 Hornet Street Greenfield Park NSW 2176"
+    // Try to extract suburb before state code
+    const stateMatch = address.match(/(.+?)\s+(NSW|VIC|QLD|SA|WA|TAS|NT|ACT)\s*\d{0,4}\s*$/i);
+    if (stateMatch) {
+      // Take the last 1-3 words before the state as suburb
+      const beforeState = stateMatch[1].trim();
+      const words = beforeState.split(/\s+/);
+      // Skip the street number + street name (usually first 2-4 words)
+      // Suburb is typically the last 1-3 capitalized words
+      if (words.length >= 4) {
+        // Heuristic: find where suburb starts by looking for the transition after street type
+        const streetTypes = /^(st|street|rd|road|ave|avenue|cres|crescent|dr|drive|pl|place|ct|court|ln|lane|way|blvd|pde|parade|tce|terrace|cir|close|grove|hwy|highway)$/i;
+        for (let i = 1; i < words.length - 1; i++) {
+          if (streetTypes.test(words[i])) {
+            raw = words.slice(i + 1).join(' ');
+            break;
+          }
+        }
+        if (!raw) raw = words.slice(-2).join(' ');
+      }
+    }
+  }
+
+  if (!raw) return null;
+  // Strip state + postcode suffix
+  return raw.replace(/\s+(NSW|VIC|QLD|SA|WA|TAS|NT|ACT)\s*\d{0,4}\s*$/i, '').trim() || null;
 }
+
+/** Export for reuse — avoids duplicate implementations */
+export { parseSuburb };
 
 // ── Metric computation ───────────────────────────────────────────────
 
@@ -301,7 +342,25 @@ function computeStaleStreets(contacts: Contact[]): StaleStreet[] {
       if (bDays !== aDays) return bDays - aDays;
       return b.contactCount - a.contactCount;
     })
-    .slice(0, 10);
+    .slice(0, 50);
+}
+
+/** Compute suburb contact counts directly from the full contacts array — not filtered/capped like staleStreets */
+function computeSuburbContactCounts(contacts: Contact[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const c of contacts) {
+    if (!c.first_name) continue;
+    const suburb = parseSuburb(c.address);
+    if (!suburb) continue;
+    const key = suburb.toLowerCase();
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  // Debug
+  if (counts.size > 0) {
+    console.log('[SuburbContactCounts]', Object.fromEntries(counts));
+  }
+  console.log('[SuburbContactCounts] total contacts scanned:', contacts.length, 'suburbs found:', counts.size);
+  return counts;
 }
 
 function computeWeeklyTrend(
@@ -328,7 +387,7 @@ function computeWeeklyTrend(
 
 // ── Phase 2+3 Computations ───────────────────────────────────────────
 
-function computeStreak(sessions: TrackingSession[]): ProspectingStreak {
+function computeStreak(sessions: TrackingSession[], annotations: TrackingAnnotation[]): ProspectingStreak {
   const now = new Date();
   const weeklyTarget = 50; // default doors/week target
 
@@ -386,14 +445,11 @@ function computeStreak(sessions: TrackingSession[]): ProspectingStreak {
     prevDateStr = dayStr;
   }
 
-  // Weekly progress (doors this week)
+  // Weekly progress (actual doors knocked = annotation count this week)
   const thisWeekStart = startOfWeek(now);
   const thisWeekEnd = new Date(thisWeekStart);
   thisWeekEnd.setDate(thisWeekEnd.getDate() + 7);
-  // We don't have annotations here, so use session count * rough estimate
-  // The actual door count comes from the main metrics — this is a lightweight proxy
-  const weekSessions = sessions.filter(s => isInRange(s.started_at, thisWeekStart, thisWeekEnd));
-  const weeklyProgress = weekSessions.length;
+  const weeklyProgress = annotations.filter(a => isInRange(a.created_at, thisWeekStart, thisWeekEnd)).length;
 
   return {
     currentDays,
@@ -573,7 +629,7 @@ export function useProspectingMetrics(): ProspectingMetrics {
     );
 
     // Phase 2: Streak
-    const streak = computeStreak(sessions);
+    const streak = computeStreak(sessions, allAnnotations);
 
     // Phase 2: Inspection metrics
     const inspectionMetrics = computeInspectionMetrics(inspections);
@@ -604,6 +660,7 @@ export function useProspectingMetrics(): ProspectingMetrics {
       recommendedAreas,
       multiDwellingBuildings,
       monthlyDoorsTrend,
+      suburbContactCounts: computeSuburbContactCounts(contacts),
     };
   }, [sessions, allAnnotations, contacts, properties, inspections]);
 }

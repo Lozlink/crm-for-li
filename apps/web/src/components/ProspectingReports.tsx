@@ -7,6 +7,7 @@ import {
   useTrackingStore,
   useInspectionStore,
   useDataEnrichmentStore,
+  useCRMStore,
 } from '@realestate-crm/hooks';
 import type {
   ProspectingTrend,
@@ -843,30 +844,33 @@ function opportunityBadgeClass(opp: 'High' | 'Medium' | 'Low'): string {
   return 'bg-gray-100 text-gray-500';
 }
 
+type SortKey = 'suburb' | 'totalDwellings' | 'yourContacts' | 'penetrationPct' | 'medianPrice' | 'opportunity';
+type SortDir = 'asc' | 'desc';
+
+const OPPORTUNITY_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
+const PAGE_SIZE = 50;
+
 function SuburbIntelligenceCard({
   suburbStats,
   suburbStatsLoading,
   getSuburbPenetration,
-  staleStreets,
+  suburbContactCounts,
 }: {
   suburbStats: SuburbStats[];
   suburbStatsLoading: boolean;
   getSuburbPenetration: (suburb: string, contactCount: number) => number | null;
-  staleStreets: StaleStreet[];
+  suburbContactCounts: Map<string, number>;
 }) {
-  const suburbRows: SuburbRow[] = useMemo(() => {
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('yourContacts');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [page, setPage] = useState(0);
+
+  const allRows: SuburbRow[] = useMemo(() => {
     if (suburbStats.length === 0) return [];
 
-    // Aggregate contact counts per suburb from street-level tracking data
-    const contactCounts = new Map<string, number>();
-    for (const street of staleStreets) {
-      if (!street.suburb) continue;
-      const key = street.suburb.toLowerCase();
-      contactCounts.set(key, (contactCounts.get(key) ?? 0) + street.contactCount);
-    }
-
-    const rows: SuburbRow[] = suburbStats.map((stat) => {
-      const yourContacts = contactCounts.get(stat.suburb.toLowerCase()) ?? 0;
+    return suburbStats.map((stat) => {
+      const yourContacts = suburbContactCounts.get(stat.suburb.toLowerCase()) ?? 0;
       const penetrationPct = getSuburbPenetration(stat.suburb, yourContacts);
 
       const houses = stat.separate_houses ?? 0;
@@ -897,73 +901,227 @@ function SuburbIntelligenceCard({
         opportunity,
       };
     });
+  }, [suburbStats, suburbContactCounts, getSuburbPenetration]);
 
-    // Sort by penetration ascending — nulls (no contacts) first
-    return rows.sort((a, b) => {
-      if (a.penetrationPct === null && b.penetrationPct === null) return 0;
-      if (a.penetrationPct === null) return -1;
-      if (b.penetrationPct === null) return 1;
-      return a.penetrationPct - b.penetrationPct;
+  const filteredSortedRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    // When not searching: only show suburbs where agent has contacts (sorted to top by default).
+    // When searching: show all matching suburbs so agent can explore new territories.
+    const filtered = q
+      ? allRows.filter((r) => r.suburb.toLowerCase().includes(q))
+      : allRows.filter((r) => r.yourContacts > 0);
+
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'suburb') {
+        cmp = a.suburb.localeCompare(b.suburb);
+      } else if (sortKey === 'totalDwellings') {
+        cmp = (a.totalDwellings ?? 0) - (b.totalDwellings ?? 0);
+      } else if (sortKey === 'yourContacts') {
+        // Contacts > 0 always sort before 0
+        if (a.yourContacts > 0 && b.yourContacts === 0) cmp = -1;
+        else if (a.yourContacts === 0 && b.yourContacts > 0) cmp = 1;
+        else cmp = a.yourContacts - b.yourContacts;
+      } else if (sortKey === 'penetrationPct') {
+        const aVal = a.penetrationPct ?? -1;
+        const bVal = b.penetrationPct ?? -1;
+        cmp = aVal - bVal;
+      } else if (sortKey === 'medianPrice') {
+        cmp = (a.medianPrice ?? 0) - (b.medianPrice ?? 0);
+      } else if (sortKey === 'opportunity') {
+        cmp = (OPPORTUNITY_ORDER[a.opportunity] ?? 1) - (OPPORTUNITY_ORDER[b.opportunity] ?? 1);
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [suburbStats, staleStreets, getSuburbPenetration]);
+  }, [allRows, search, sortKey, sortDir]);
+
+  // Reset to page 0 when search changes
+  const handleSearch = (val: string) => {
+    setSearch(val);
+    setPage(0);
+  };
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'suburb' ? 'asc' : 'desc');
+    }
+    setPage(0);
+  };
+
+  const totalPages = Math.ceil(filteredSortedRows.length / PAGE_SIZE);
+  const pageRows = filteredSortedRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  function SortIcon({ col }: { col: SortKey }) {
+    if (sortKey !== col) {
+      return (
+        <svg className="ml-1 inline h-3 w-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      );
+    }
+    return sortDir === 'asc' ? (
+      <svg className="ml-1 inline h-3 w-3 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+      </svg>
+    ) : (
+      <svg className="ml-1 inline h-3 w-3 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-sm font-semibold text-gray-900">Suburb Intelligence</h2>
-          <p className="mt-0.5 text-xs text-gray-400">ABS dwelling data cross-referenced with your contact coverage</p>
+          <p className="mt-0.5 text-xs text-gray-400">
+            ABS dwelling data cross-referenced with your contact coverage
+            {allRows.length > 0 && (
+              <span className="ml-1 text-gray-300">
+                &mdash; {search ? allRows.length.toLocaleString() : filteredSortedRows.length.toLocaleString()} of {allRows.length.toLocaleString()} suburbs
+              </span>
+            )}
+          </p>
         </div>
-        {suburbStatsLoading && (
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {suburbStatsLoading && (
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+          )}
+          {allRows.length > 0 && (
+            <div className="relative">
+              <svg className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search suburbs..."
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="h-8 w-52 rounded-lg border border-gray-200 pl-8 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
-      {!suburbStatsLoading && suburbRows.length === 0 ? (
+      {!suburbStatsLoading && allRows.length === 0 ? (
         <p className="text-sm text-gray-400">
           No suburb data available &mdash; import ABS data to see penetration analysis.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
-                <th className="pb-2 pr-4">Suburb</th>
-                <th className="pb-2 pr-4 text-right">Total Dwellings</th>
-                <th className="pb-2 pr-4 text-right">Your Contacts</th>
-                <th className="pb-2 pr-4 text-center">Penetration %</th>
-                <th className="pb-2 pr-4 text-right">Median Price</th>
-                <th className="pb-2 pr-4">Dwelling Mix</th>
-                <th className="pb-2 text-center">Opportunity</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {suburbRows.map((row) => (
-                <tr key={row.suburb} className="hover:bg-gray-50">
-                  <td className="py-2.5 pr-4 font-medium text-gray-900">{row.suburb}</td>
-                  <td className="py-2.5 pr-4 text-right text-gray-700">
-                    {(row.totalDwellings ?? 0).toLocaleString()}
-                  </td>
-                  <td className="py-2.5 pr-4 text-right text-gray-700">{row.yourContacts}</td>
-                  <td className="py-2.5 pr-4 text-center">
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${penetrationChipClass(row.penetrationPct)}`}>
-                      {row.penetrationPct !== null ? `${row.penetrationPct}%` : '0%'}
-                    </span>
-                  </td>
-                  <td className="py-2.5 pr-4 text-right text-gray-700">
-                    {formatMedianPrice(row.medianPrice)}
-                  </td>
-                  <td className="py-2.5 pr-4 text-xs text-gray-500">{row.dwellingMix}</td>
-                  <td className="py-2.5 text-center">
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${opportunityBadgeClass(row.opportunity)}`}>
-                      {row.opportunity}
-                    </span>
-                  </td>
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
+                  {(
+                    [
+                      { key: 'suburb', label: 'Suburb', align: 'left' },
+                      { key: 'totalDwellings', label: 'Total Dwellings', align: 'right' },
+                      { key: 'yourContacts', label: 'Your Contacts', align: 'right' },
+                      { key: 'penetrationPct', label: 'Penetration %', align: 'center' },
+                      { key: 'medianPrice', label: 'Median Price', align: 'right' },
+                      { key: 'opportunity', label: 'Opportunity', align: 'center' },
+                    ] as { key: SortKey; label: string; align: string }[]
+                  ).map(({ key, label, align }) => (
+                    <th
+                      key={key}
+                      className={`cursor-pointer select-none pb-2 pr-4 hover:text-gray-600 text-${align}`}
+                      onClick={() => handleSort(key)}
+                    >
+                      {label}
+                      <SortIcon col={key} />
+                    </th>
+                  ))}
+                  <th className="pb-2 text-left">Dwelling Mix</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {pageRows.map((row) => (
+                  <tr
+                    key={row.suburb}
+                    className={`hover:bg-gray-50 ${row.yourContacts > 0 ? 'bg-indigo-50/30' : ''}`}
+                  >
+                    <td className="py-2.5 pr-4 font-medium text-gray-900">{row.suburb}</td>
+                    <td className="py-2.5 pr-4 text-right text-gray-700">
+                      {(row.totalDwellings ?? 0).toLocaleString()}
+                    </td>
+                    <td className="py-2.5 pr-4 text-right">
+                      <span className={row.yourContacts > 0 ? 'font-semibold text-indigo-700' : 'text-gray-400'}>
+                        {row.yourContacts}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-4 text-center">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${penetrationChipClass(row.penetrationPct)}`}>
+                        {row.penetrationPct !== null ? `${row.penetrationPct}%` : '0%'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-4 text-right text-gray-700">
+                      {formatMedianPrice(row.medianPrice)}
+                    </td>
+                    <td className="py-2.5 pr-4 text-center">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${opportunityBadgeClass(row.opportunity)}`}>
+                        {row.opportunity}
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-xs text-gray-500">{row.dwellingMix}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
+              <p className="text-xs text-gray-400">
+                Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filteredSortedRows.length)} of {filteredSortedRows.length.toLocaleString()}
+                {search ? ` matching "${search}"` : ''}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Prev
+                </button>
+                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                  const pageNum = totalPages <= 7
+                    ? i
+                    : page < 4
+                      ? i
+                      : page > totalPages - 5
+                        ? totalPages - 7 + i
+                        : page - 3 + i;
+                  return (
+                    <button
+                      key={pageNum}
+                      type="button"
+                      onClick={() => setPage(pageNum)}
+                      className={`rounded px-2 py-1 text-xs ${pageNum === page ? 'bg-indigo-100 font-semibold text-indigo-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                    >
+                      {pageNum + 1}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page === totalPages - 1}
+                  className="rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -1188,6 +1346,7 @@ export default function ProspectingReports() {
   const fetchSessions = useTrackingStore((s) => s.fetchSessions);
   const fetchAllAnnotations = useTrackingStore((s) => s.fetchAllAnnotations);
   const fetchInspections = useInspectionStore((s) => s.fetchInspections);
+  const fetchContacts = useCRMStore((s) => s.fetchContacts);
 
   // Data enrichment
   const suburbStats = useDataEnrichmentStore((s) => s.suburbStats);
@@ -1198,12 +1357,13 @@ export default function ProspectingReports() {
   const importSuburbStatsCSV = useDataEnrichmentStore((s) => s.importSuburbStatsCSV);
 
   useEffect(() => {
+    fetchContacts();
     fetchProperties();
     fetchSessions();
     fetchAllAnnotations();
     fetchInspections();
     fetchSuburbStats();
-  }, [fetchProperties, fetchSessions, fetchAllAnnotations, fetchInspections, fetchSuburbStats]);
+  }, [fetchContacts, fetchProperties, fetchSessions, fetchAllAnnotations, fetchInspections, fetchSuburbStats]);
 
   const metrics = useProspectingMetrics();
   const {
@@ -1318,7 +1478,7 @@ export default function ProspectingReports() {
         suburbStats={suburbStats}
         suburbStatsLoading={suburbStatsLoading}
         getSuburbPenetration={getSuburbPenetration}
-        staleStreets={staleStreets}
+        suburbContactCounts={metrics.suburbContactCounts}
       />
 
       {/* Row 7: Data Import (collapsible, full width) */}
