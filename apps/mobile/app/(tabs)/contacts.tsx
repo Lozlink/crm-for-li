@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { StyleSheet, View, FlatList, ScrollView, Alert } from 'react-native';
 import {
   Searchbar, FAB, useTheme, Text, ActivityIndicator, Button,
-  IconButton, Portal, Dialog, Chip, TextInput, Switch,
+  IconButton, Portal, Dialog, Chip, TextInput, Switch, Checkbox,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -110,6 +110,7 @@ export default function ContactsScreen() {
   const setSearchQuery = useCRMStore(state => state.setSearchQuery);
   const fetchContacts = useCRMStore(state => state.fetchContacts);
   const fetchTags = useCRMStore(state => state.fetchTags);
+  const bulkDeleteContacts = useCRMStore((s) => s.bulkDeleteContacts);
 
   const savedSearches = useSavedSearchStore(state => state.savedSearches);
   const fetchSavedSearches = useSavedSearchStore(state => state.fetchSavedSearches);
@@ -121,6 +122,10 @@ export default function ContactsScreen() {
   const [showFilterDialog, setShowFilterDialog] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveSearchName, setSaveSearchName] = useState('');
+
+  // Multi-select state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const contactSavedSearches = useMemo(
     () => savedSearches.filter(s => s.entity_type === 'contact'),
@@ -213,9 +218,55 @@ export default function ContactsScreen() {
     });
   }, [allContacts, filters, searchQuery]);
 
+  const handleLongPress = useCallback((id: string) => {
+    setSelectMode(true);
+    setSelectedIds(prev => new Set([...prev, id]));
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(new Set(contacts.map(c => c.id)));
+  }, [contacts]);
+
+  const exitSelectMode = useCallback(() => {
+    setSelectedIds(new Set());
+    setSelectMode(false);
+  }, []);
+
+  const handleBulkDelete = useCallback(() => {
+    Alert.alert(
+      'Delete Contacts',
+      `Delete ${selectedIds.size} contact${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await bulkDeleteContacts([...selectedIds]);
+            setSelectedIds(new Set());
+            setSelectMode(false);
+          },
+        },
+      ]
+    );
+  }, [selectedIds, bulkDeleteContacts]);
+
   const handleContactPress = useCallback((contact: Contact) => {
+    if (selectMode) {
+      toggleSelect(contact.id);
+      return;
+    }
     router.push(`/contact/${contact.id}`);
-  }, [router]);
+  }, [router, selectMode, toggleSelect]);
 
   const handleAddContact = () => {
     router.push('/contact/new');
@@ -309,9 +360,34 @@ export default function ContactsScreen() {
     }
   }, [router]);
 
-  const renderItem = useCallback(({ item }: { item: Contact }) => (
-    <ContactCard contact={item} onPress={handleContactPress} onMapPress={handleMapPress} />
-  ), [handleContactPress, handleMapPress]);
+  const renderItem = useCallback(({ item }: { item: Contact }) => {
+    if (selectMode) {
+      return (
+        <View style={styles.selectableRow}>
+          <Checkbox
+            status={selectedIds.has(item.id) ? 'checked' : 'unchecked'}
+            onPress={() => toggleSelect(item.id)}
+          />
+          <View style={styles.selectableCardWrapper}>
+            <ContactCard
+              contact={item}
+              onPress={() => toggleSelect(item.id)}
+              onLongPress={() => handleLongPress(item.id)}
+              onMapPress={handleMapPress}
+            />
+          </View>
+        </View>
+      );
+    }
+    return (
+      <ContactCard
+        contact={item}
+        onPress={handleContactPress}
+        onLongPress={() => handleLongPress(item.id)}
+        onMapPress={handleMapPress}
+      />
+    );
+  }, [handleContactPress, handleLongPress, handleMapPress, selectMode, selectedIds, toggleSelect]);
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -419,6 +495,23 @@ export default function ContactsScreen() {
           Import from Phone
         </Button>
       </View>
+
+      {selectMode && selectedIds.size > 0 && (
+        <View style={[styles.selectBar, { backgroundColor: theme.colors.primaryContainer }]}>
+          <Text variant="labelLarge" style={{ color: theme.colors.onPrimaryContainer, flex: 1 }}>
+            {selectedIds.size} selected
+          </Text>
+          <Button compact onPress={handleSelectAll} textColor={theme.colors.onPrimaryContainer}>
+            Select All
+          </Button>
+          <Button compact onPress={handleBulkDelete} textColor={theme.colors.error}>
+            Delete
+          </Button>
+          <Button compact onPress={exitSelectMode} textColor={theme.colors.onPrimaryContainer}>
+            Cancel
+          </Button>
+        </View>
+      )}
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
@@ -715,5 +808,19 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 16,
+  },
+  selectBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  selectableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 4,
+  },
+  selectableCardWrapper: {
+    flex: 1,
   },
 });

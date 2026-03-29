@@ -20,6 +20,7 @@ export {
   isDuplicateContact,
   findDuplicates,
   findSingleDuplicate,
+  parseContactNameField,
 } from './validation';
 
-export type { DedupContact } from './validation';
+export type { DedupContact, ParsedContactName } from './validation';

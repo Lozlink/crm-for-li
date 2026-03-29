@@ -47,6 +47,7 @@ interface CRMState {
   addActivity: (activity: Omit<Activity, 'id' | 'created_at'>) => Promise<Activity | null>;
   updateActivity: (id: string, updates: Partial<Activity>) => Promise<void>;
   bulkAddContacts: (contacts: Omit<Contact, 'id' | 'created_at' | 'updated_at'>[]) => Promise<Contact[]>;
+  bulkDeleteContacts: (ids: string[]) => Promise<void>;
 
   // Saved Suburbs
   addSavedSuburb: (suburb: Omit<SavedSuburb, 'id'>) => void;
@@ -808,6 +809,46 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
     } catch (error: any) {
       set({ error: error.message });
       return [];
+    }
+  },
+
+  bulkDeleteContacts: async (ids) => {
+    if (ids.length === 0) return;
+    set({ isLoading: true, error: null });
+    try {
+      const { isDemo } = getTeamContext();
+
+      if (isDemo) {
+        const idSet = new Set(ids);
+        set(state => ({
+          contacts: state.contacts.filter(c => !idSet.has(c.id)),
+          activities: state.activities.filter(a => !idSet.has(a.contact_id)),
+          isLoading: false,
+        }));
+        get().persist();
+        return;
+      }
+
+      // Delete in batches to avoid PostgREST limits
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+        const batch = ids.slice(i, i + BATCH_SIZE);
+        const { error } = await supabase
+          .from('contacts')
+          .delete()
+          .in('id', batch);
+
+        if (error) throw error;
+      }
+
+      const idSet = new Set(ids);
+      set(state => ({
+        contacts: state.contacts.filter(c => !idSet.has(c.id)),
+        isLoading: false,
+      }));
+      get().persist();
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
     }
   },
 }));

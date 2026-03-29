@@ -338,7 +338,15 @@ export default function ContactDetailScreen() {
 
   const handleUpdate = async (data: ContactFormData) => {
     if (!id) return;
-    await updateContact(id, data);
+    // Strip form-only fields that aren't DB columns
+    const { tag_ids, initial_note, ...contactData } = data as any;
+    await updateContact(id, contactData);
+    // Check if store reported an error
+    const storeError = useCRMStore.getState().error;
+    if (storeError) {
+      Alert.alert('Error', 'Failed to save changes. Please try again.');
+      return;
+    }
     setIsEditing(false);
   };
 

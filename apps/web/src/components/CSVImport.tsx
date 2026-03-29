@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import Papa from 'papaparse';
 import { useCRMStore } from '@realestate-crm/hooks';
-import { findDuplicates } from '@realestate-crm/utils';
+import { findDuplicates, parseContactNameField } from '@realestate-crm/utils';
 import type { Contact } from '@realestate-crm/types';
 
 type Step = 'upload' | 'mapping' | 'preview' | 'importing' | 'done';
@@ -58,6 +58,7 @@ export default function CSVImport({ onClose }: CSVImportProps) {
   const [dupeMap, setDupeMap] = useState<Map<number, Contact>>(new Map());
   const [skipIndices, setSkipIndices] = useState<Set<number>>(new Set());
   const [errorIndices, setErrorIndices] = useState<Set<number>>(new Set());
+  const [smartParsedIndices, setSmartParsedIndices] = useState<Set<number>>(new Set());
 
   // Results
   const [importedCount, setImportedCount] = useState(0);
@@ -163,6 +164,23 @@ export default function CSVImport({ onClose }: CSVImportProps) {
       if (!c.first_name) c.first_name = '';
       return c;
     });
+
+    // Smart parse second pass: if address is empty and first_name is set, try parseContactNameField
+    const autoParsed = new Set<number>();
+    contacts.forEach((c, i) => {
+      if (!c.address && c.first_name) {
+        const raw = `${c.first_name} ${c.last_name || ''}`.trim();
+        const parsed = parseContactNameField(raw);
+        if (parsed) {
+          c.first_name = parsed.first_name;
+          c.last_name = parsed.last_name;
+          c.address = parsed.address;
+          if (parsed.unit_number) c.unit_number = parsed.unit_number;
+          autoParsed.add(i);
+        }
+      }
+    });
+    setSmartParsedIndices(autoParsed);
 
     setMappedContacts(contacts);
 
@@ -375,6 +393,7 @@ export default function CSVImport({ onClose }: CSVImportProps) {
                       const isDupe = dupeMap.has(i);
                       const isError = errorIndices.has(i);
                       const isSkipped = skipIndices.has(i);
+                      const isSmartParsed = smartParsedIndices.has(i);
                       const dupeOf = dupeMap.get(i);
                       return (
                         <tr key={i} className={`border-t ${isError ? 'bg-red-50' : isSkipped ? 'bg-gray-50' : ''}`}>
@@ -388,7 +407,14 @@ export default function CSVImport({ onClose }: CSVImportProps) {
                             />
                           </td>
                           <td className="px-3 py-2">
-                            {c.first_name} {c.last_name || ''}
+                            <span className="inline-flex items-center gap-1.5">
+                              <span>{c.first_name} {c.last_name || ''}</span>
+                              {isSmartParsed && (
+                                <span className="inline-block rounded-full bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-700">
+                                  Parsed
+                                </span>
+                              )}
+                            </span>
                           </td>
                           <td className="px-3 py-2 text-gray-500">{c.phone || '-'}</td>
                           <td className="px-3 py-2 text-gray-500">{c.email || '-'}</td>

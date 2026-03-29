@@ -59,7 +59,7 @@
 #### Data Enrichment (Phase 4)
 
 - **Database migration** (`021_sold_history_and_suburb_stats.sql`) — `sold_history` + `suburb_stats` tables with RLS
-- **`useDataEnrichmentStore`** — sold history queries (by suburb, address, nearby with suburb fallback), suburb stats, CSV import methods, demo data for 5 Western Sydney suburbs
+- **`useDataEnrichmentStore`** — sold history queries (by suburb, address, nearby with suburb fallback), suburb stats, CSV import methods, dmo data for 5 Western Sydney suburbse
 - **`fetchMultiDwellingBuildings`** Overpass API function — queries OSM for apartments/flats/multi-story residential buildings in viewport
 - **`OSMBuilding` type** with coordinates, center, levels, estimatedUnits
 - **Import scripts** for real data:
@@ -77,7 +77,7 @@
 
 - **Tab bar** — Today → Prospecting → Map → Contacts → More (Pipeline moved to More → Manage)
 - **More screen** — reorganised: Manage (Pipeline, Properties, Tasks) / Field Work (Routes, Notes, Campaigns) / Insights (Reports, Settings)
-- **TopHeader** wrapped in `React.memo` with stable `renderHeader` reference
+                                                     - **TopHeader** wrapped in `React.memo` with stable `renderHeader` reference
 - **Pipeline cards** — replaced `onTouchEnd` with `TouchableOpacity` to fix touch propagation for map icon
 - **Overpass servers** — replaced dead `maps.mail.ru` with `overpass.openstreetmap.ru`, building queries always start from primary server, 403 added to retry conditions
 - **`parseSuburb` helper** — now strips state + postcode suffix (`"Greenfield Park NSW 2176"` → `"Greenfield Park"`) for ABS matching
@@ -87,10 +87,23 @@
 ### Fixed
 
 - **Tracking session start** — confirmation dialog prevents accidental background location tracking
-- **Today screen contacts** — added `fetchContacts()` to `useFocusEffect`
-- **Recent sessions** — sorted by `started_at` descending before slicing
+                              - **Today screen contacts** — added `fetchContacts()` to `useFocusEffect`
+                              - **Recent sessions** — sorted by `started_at` descending before slicing
 - **Supabase migration** — fixed `unnest(get_user_team_ids())` to match existing RLS pattern
 - **Web ProspectingReports** — fixed `SuburbRow.totalDwellings` type to allow undefined, fixed `contacts` reference in useMemo dependency
+
+#### Data Integrity Fixes (post-audit)
+
+- **Web Dashboard + ProspectingReports** — added missing `fetchContacts()` call to `useEffect`, fixing all-zeros KPI and empty prospecting metrics
+- **Suburb Intelligence data matching** — replaced staleStreets-based suburb counting (capped at 50, filtered for staleness) with `suburbContactCounts` computed from full contacts array in `useProspectingMetrics` hook
+- **`parseSuburb` improved** — handles no-comma addresses, 2-part addresses with state-only second segment, street-type heuristic for suburb extraction, strips all AU state codes + postcodes
+- **Supabase 1000-row limit** — `fetchSuburbStats` now paginates with `.range()` in 1000-row chunks to fetch all 4,235 NSW suburbs (previously capped at 1000 by Supabase default)
+- **Streak weekly progress** — now uses actual annotation count (doors knocked) instead of session count
+- **Web sold history suburb fallback** — `PropertyDetail.tsx` now passes `suburb` to `fetchSoldHistoryNearby` matching mobile behavior, so VG data without geocoded lat/lng is found via suburb name match
+- **Web SuburbIntelligenceCard** — accepts `suburbContactCounts` Map from hook instead of staleStreets, filters zero-contact suburbs when not searching, searchable with text input, sortable columns, paginated (50/page)
+- **Mobile contacts + map screens** — added missing `fetchContacts`/`fetchTags` calls via `useFocusEffect`
+- **Removed duplicate `parseSuburb`** in mobile `prospecting.tsx` — now uses shared version from `useProspectingMetrics`
+- **Overpass servers** — replaced dead `maps.mail.ru` with `overpass.openstreetmap.ru`, building queries always start from primary server
 
 ---
 

@@ -14,7 +14,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import * as Contacts from 'expo-contacts';
 import { useCRMStore } from '@realestate-crm/hooks';
-import { findDuplicates } from '@realestate-crm/utils';
+import { findDuplicates, parseContactNameField } from '@realestate-crm/utils';
 import type { Contact as CRMContact } from '@realestate-crm/types';
 
 type Step = 'select' | 'preview' | 'importing' | 'done';
@@ -24,6 +24,9 @@ interface MappedContact {
   last_name?: string;
   phone?: string;
   email?: string;
+  address?: string;
+  unit_number?: string;
+  addressExtracted?: boolean;
 }
 
 export default function ImportContactsScreen() {
@@ -101,12 +104,29 @@ export default function ImportContactsScreen() {
 
   const handlePreview = useCallback(() => {
     const selected = deviceContacts.filter((c) => selectedIds.has(c.id!));
-    const mappedList: MappedContact[] = selected.map((c) => ({
-      first_name: c.firstName || c.lastName || 'Unknown',
-      last_name: c.lastName && c.firstName ? c.lastName : undefined,
-      phone: c.phoneNumbers?.[0]?.number,
-      email: c.emails?.[0]?.email,
-    }));
+    const mappedList: MappedContact[] = selected.map((c) => {
+      const contact: MappedContact = {
+        first_name: c.firstName || c.lastName || 'Unknown',
+        last_name: c.lastName && c.firstName ? c.lastName : undefined,
+        phone: c.phoneNumbers?.[0]?.number,
+        email: c.emails?.[0]?.email,
+      };
+
+      // Smart address parsing: if no address but name contains an address pattern, try to extract
+      if (!contact.address) {
+        const fullName = `${contact.first_name} ${contact.last_name || ''}`.trim();
+        const parsed = parseContactNameField(fullName);
+        if (parsed && parsed.address) {
+          contact.first_name = parsed.first_name ?? contact.first_name;
+          contact.last_name = parsed.last_name ?? contact.last_name;
+          contact.address = parsed.address;
+          contact.unit_number = parsed.unit_number;
+          contact.addressExtracted = true;
+        }
+      }
+
+      return contact;
+    });
 
     setMapped(mappedList);
     const dupes = findDuplicates(mappedList, existingContacts);
@@ -131,7 +151,7 @@ export default function ImportContactsScreen() {
     setImportError(null);
     const toImport = mapped
       .filter((_, i) => !skipIndices.has(i))
-      .map((c) => ({ ...c, source: 'import' as const }));
+      .map(({ addressExtracted: _ae, ...c }) => ({ ...c, source: 'import' as const }));
     const created = await bulkAddContacts(toImport);
     if (created.length === 0 && toImport.length > 0) {
       // bulkAddContacts returns [] on error — check the store for details
@@ -270,15 +290,22 @@ export default function ImportContactsScreen() {
                         </Text>
                       )}
                     </View>
-                    {isDupe ? (
-                      <Chip compact style={{ backgroundColor: '#fef3c7' }} textStyle={{ fontSize: 11 }}>
-                        Duplicate of {dupeOf?.first_name}
-                      </Chip>
-                    ) : (
-                      <Chip compact style={{ backgroundColor: '#d1fae5' }} textStyle={{ fontSize: 11 }}>
-                        New
-                      </Chip>
-                    )}
+                    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                      {isDupe ? (
+                        <Chip compact style={{ backgroundColor: '#fef3c7' }} textStyle={{ fontSize: 11 }}>
+                          Duplicate of {dupeOf?.first_name}
+                        </Chip>
+                      ) : (
+                        <Chip compact style={{ backgroundColor: '#d1fae5' }} textStyle={{ fontSize: 11 }}>
+                          New
+                        </Chip>
+                      )}
+                      {item.addressExtracted && (
+                        <Chip compact style={{ backgroundColor: '#dbeafe' }} textStyle={{ fontSize: 11 }}>
+                          Address extracted
+                        </Chip>
+                      )}
+                    </View>
                   </Surface>
                 );
               }}

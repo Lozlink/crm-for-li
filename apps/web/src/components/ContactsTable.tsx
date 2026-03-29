@@ -4,6 +4,8 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCRMStore, useSavedSearchStore } from '@realestate-crm/hooks';
+import { parseContactNameField } from '@realestate-crm/utils';
+import type { ParsedContactName } from '@realestate-crm/utils';
 import type {
   Contact,
   ContactSource,
@@ -44,7 +46,16 @@ export default function ContactsTable() {
   const contacts = useCRMStore((s) => s.contacts);
   const tags = useCRMStore((s) => s.tags);
   const deleteContact = useCRMStore((s) => s.deleteContact);
+  const bulkDeleteContacts = useCRMStore((s) => s.bulkDeleteContacts);
+  const updateContact = useCRMStore((s) => s.updateContact);
   const router = useRouter();
+
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Cleanup imports state
+  const [showCleanup, setShowCleanup] = useState(false);
+  const [cleanupPreviews, setCleanupPreviews] = useState<Array<{ contact: Contact; parsed: ParsedContactName }>>([]);
 
   const savedSearches = useSavedSearchStore((s) => s.savedSearches);
   const fetchSavedSearches = useSavedSearchStore((s) => s.fetchSavedSearches);
@@ -292,6 +303,70 @@ export default function ContactsTable() {
     [deleteContact]
   );
 
+  // Multi-select handlers
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      const allVisible = filtered.map((c) => c.id);
+      const allSelected = allVisible.every((id) => prev.has(id));
+      if (allSelected) return new Set();
+      return new Set(allVisible);
+    });
+  }, [filtered]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleBulkDelete = useCallback(async () => {
+    const count = selectedIds.size;
+    if (window.confirm(`Delete ${count} contact${count === 1 ? '' : 's'}? This cannot be undone.`)) {
+      await bulkDeleteContacts([...selectedIds]);
+      setSelectedIds(new Set());
+    }
+  }, [selectedIds, bulkDeleteContacts]);
+
+  // Cleanup imports handlers
+  const handleScanCleanup = useCallback(() => {
+    const previews: Array<{ contact: Contact; parsed: ParsedContactName }> = [];
+    for (const contact of contacts) {
+      if (!contact.address) {
+        const raw = `${contact.first_name || ''} ${contact.last_name || ''}`.trim();
+        const parsed = parseContactNameField(raw);
+        if (parsed) {
+          previews.push({ contact, parsed });
+        }
+      }
+    }
+    if (previews.length === 0) {
+      window.alert('No contacts need cleanup');
+      return;
+    }
+    setCleanupPreviews(previews);
+    setShowCleanup(true);
+  }, [contacts]);
+
+  const handleApplyCleanup = useCallback(async () => {
+    for (const { contact, parsed } of cleanupPreviews) {
+      await updateContact(contact.id, {
+        first_name: parsed.first_name,
+        last_name: parsed.last_name,
+        address: parsed.address,
+        unit_number: parsed.unit_number,
+      });
+    }
+    setShowCleanup(false);
+    setCleanupPreviews([]);
+  }, [cleanupPreviews, updateContact]);
+
   return (
     <div className="p-6">
       {/* Header */}
@@ -308,6 +383,12 @@ export default function ContactsTable() {
             className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Import CSV
+          </button>
+          <button
+            onClick={handleScanCleanup}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Clean Up Imports
           </button>
           <button
             onClick={() => {
@@ -542,11 +623,40 @@ export default function ContactsTable() {
         </div>
       )}
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="mb-3 flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 shadow-sm">
+          <span className="text-sm font-medium text-gray-700">
+            {selectedIds.size} selected
+          </span>
+          <button
+            onClick={handleBulkDelete}
+            className="rounded-lg bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-600"
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={clearSelection}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
+              <th className="w-10 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id))}
+                  onChange={toggleSelectAll}
+                  className="rounded border-gray-300"
+                />
+              </th>
               <SortHeader
                 label="Name"
                 field="name"
@@ -604,7 +714,7 @@ export default function ContactsTable() {
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="py-12 text-center text-sm text-gray-400"
                 >
                   {contacts.length === 0
@@ -617,6 +727,8 @@ export default function ContactsTable() {
                 <ContactRow
                   key={contact.id}
                   contact={contact}
+                  isSelected={selectedIds.has(contact.id)}
+                  onToggleSelect={() => toggleSelect(contact.id)}
                   onEdit={() => {
                     setEditingContact(contact);
                     setShowForm(true);
@@ -649,6 +761,70 @@ export default function ContactsTable() {
       {/* CSV Import dialog */}
       {showCSVImport && (
         <CSVImport onClose={() => setShowCSVImport(false)} />
+      )}
+
+      {/* Cleanup dialog */}
+      {showCleanup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="relative mx-4 max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Clean Up Imports</h2>
+              <button
+                onClick={() => setShowCleanup(false)}
+                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="max-h-[calc(85vh-128px)] overflow-y-auto p-6">
+              <p className="mb-4 text-sm text-gray-500">
+                {cleanupPreviews.length} contact{cleanupPreviews.length === 1 ? '' : 's'} will be updated with parsed name and address:
+              </p>
+              <div className="space-y-3">
+                {cleanupPreviews.map(({ contact, parsed }) => (
+                  <div key={contact.id} className="rounded-lg border border-gray-200 p-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium uppercase text-gray-400">Before</p>
+                        <p className="text-sm text-gray-700">
+                          {[contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Unnamed'}
+                        </p>
+                      </div>
+                      <svg className="mt-3 h-4 w-4 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                      </svg>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium uppercase text-gray-400">After</p>
+                        <p className="text-sm font-medium text-gray-900">
+                          {[parsed.first_name, parsed.last_name].filter(Boolean).join(' ')}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {parsed.unit_number ? `${parsed.unit_number} / ` : ''}{parsed.address}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t px-6 py-4">
+              <button
+                onClick={() => setShowCleanup(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApplyCleanup}
+                className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600"
+              >
+                Apply Changes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -702,11 +878,15 @@ const TYPE_COLORS: Record<string, string> = {
 
 function ContactRow({
   contact,
+  isSelected,
+  onToggleSelect,
   onEdit,
   onDelete,
   onClick,
 }: {
   contact: Contact;
+  isSelected: boolean;
+  onToggleSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onClick: () => void;
@@ -720,6 +900,14 @@ function ContactRow({
       className="cursor-pointer hover:bg-gray-50 transition-colors"
       onClick={onClick}
     >
+      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={onToggleSelect}
+          className="rounded border-gray-300"
+        />
+      </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
           <div
