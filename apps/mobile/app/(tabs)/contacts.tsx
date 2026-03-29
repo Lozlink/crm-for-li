@@ -296,9 +296,15 @@ export default function ContactsScreen() {
     return labels;
   }, [filters, tags]);
 
+  const handleMapPress = useCallback((contact: Contact) => {
+    if (contact.latitude != null && contact.longitude != null) {
+      router.push(`/(tabs)/map?lat=${contact.latitude}&lng=${contact.longitude}&zoom=0.005&layer=contacts&label=${encodeURIComponent(contact.first_name)}` as never);
+    }
+  }, [router]);
+
   const renderItem = useCallback(({ item }: { item: Contact }) => (
-    <ContactCard contact={item} onPress={handleContactPress} />
-  ), [handleContactPress]);
+    <ContactCard contact={item} onPress={handleContactPress} onMapPress={handleMapPress} />
+  ), [handleContactPress, handleMapPress]);
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>

@@ -15,3 +15,10 @@ export { useOrganisationStore } from './useOrganisationStore';
 export { useEmailCampaignStore } from './useEmailCampaignStore';
 export { useCustomFieldStore } from './useCustomFieldStore';
 export { useDuplicateCheck } from './useDuplicateCheck';
+export { useProspectingMetrics } from './useProspectingMetrics';
+export { useDataEnrichmentStore } from './useDataEnrichmentStore';
+export type {
+  ProspectingMetrics, ProspectingPeriodMetrics, ProspectingTrend, ConversionFunnel,
+  StaleStreet, WeeklyTrendPoint, ProspectingStreak, InspectionMetrics,
+  RecommendedArea, MultiDwellingBuilding, TeamMemberMetrics,
+} from './useProspectingMetrics';

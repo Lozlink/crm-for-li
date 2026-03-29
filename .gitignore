@@ -58,3 +58,6 @@ yarn-error.*
 /.claude/
 /supabase/.temp/
 /.aiassistant/
+
+# Data imports (raw CSVs)
+/data/

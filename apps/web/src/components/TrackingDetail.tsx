@@ -510,6 +510,20 @@ export default function TrackingDetail({ sessionId }: TrackingDetailProps) {
     return 'Linked Contact';
   }
 
+  /**
+   * Parse the [Unit X] prefix pattern written by the mobile DropNoteDialog.
+   * e.g. "[Unit 2] Spoke with owner, interested in selling"
+   * Returns { unit: "2", body: "Spoke with owner, interested in selling" }
+   * or { unit: null, body: <full note> } if no prefix is present.
+   */
+  function parseAnnotationNote(note: string): { unit: string | null; body: string } {
+    const match = note.match(/^\[Unit ([^\]]+)\]\s*/);
+    if (match) {
+      return { unit: match[1], body: note.slice(match[0].length) };
+    }
+    return { unit: null, body: note };
+  }
+
   // Loading state
   if (isLoading && sessions.length === 0) {
     return (
@@ -535,7 +549,7 @@ export default function TrackingDetail({ sessionId }: TrackingDetailProps) {
   }
 
   const sessionDate = session
-    ? new Date(session.started_at).toLocaleDateString('en-US', {
+    ? new Date(session.started_at).toLocaleDateString('en-AU', {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
@@ -568,7 +582,7 @@ export default function TrackingDetail({ sessionId }: TrackingDetailProps) {
                 d="M15.75 19.5L8.25 12l7.5-7.5"
               />
             </svg>
-            Tracking Sessions
+            Field Activity
           </Link>
 
           {/* Title */}
@@ -578,12 +592,12 @@ export default function TrackingDetail({ sessionId }: TrackingDetailProps) {
 
           {/* Stats grid */}
           {session && (
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-3 gap-2">
               <div className="rounded-lg border border-gray-200 p-3">
                 <p className="text-xs font-medium uppercase text-gray-500">
                   Duration
                 </p>
-                <p className="mt-1 text-lg font-semibold text-gray-900">
+                <p className="mt-1 text-base font-semibold text-gray-900">
                   {formatDuration(session.duration_seconds)}
                 </p>
               </div>
@@ -591,8 +605,16 @@ export default function TrackingDetail({ sessionId }: TrackingDetailProps) {
                 <p className="text-xs font-medium uppercase text-gray-500">
                   Distance
                 </p>
-                <p className="mt-1 text-lg font-semibold text-gray-900">
+                <p className="mt-1 text-base font-semibold text-gray-900">
                   {formatDistance(session.total_distance_meters)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-gray-200 p-3">
+                <p className="text-xs font-medium uppercase text-gray-500">
+                  Notes
+                </p>
+                <p className="mt-1 text-base font-semibold text-gray-900">
+                  {annotations.length}
                 </p>
               </div>
             </div>
@@ -625,7 +647,7 @@ export default function TrackingDetail({ sessionId }: TrackingDetailProps) {
                   if (isLast) dotColor = 'bg-red-500';
 
                   const time = new Date(bc.recorded_at).toLocaleTimeString(
-                    'en-US',
+                    'en-AU',
                     { hour: 'numeric', minute: '2-digit', second: '2-digit' }
                   );
 
@@ -674,11 +696,12 @@ export default function TrackingDetail({ sessionId }: TrackingDetailProps) {
                   const contactName = getAnnotationContactName(ann);
                   const isSelected = selectedAnnotation?.id === ann.id;
                   const time = ann.created_at
-                    ? new Date(ann.created_at).toLocaleTimeString('en-US', {
+                    ? new Date(ann.created_at).toLocaleTimeString('en-AU', {
                         hour: 'numeric',
                         minute: '2-digit',
                       })
                     : '';
+                  const { unit, body } = parseAnnotationNote(ann.note || '');
 
                   return (
                     <button
@@ -699,8 +722,13 @@ export default function TrackingDetail({ sessionId }: TrackingDetailProps) {
                         {/* Amber dot */}
                         <div className="mt-0.5 h-2.5 w-2.5 flex-shrink-0 rounded-full bg-amber-500" />
                         <div className="min-w-0 flex-1">
+                          {unit && (
+                            <span className="mb-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                              Unit {unit}
+                            </span>
+                          )}
                           <p className="text-xs font-medium text-gray-800 line-clamp-2">
-                            {ann.note || '(empty note)'}
+                            {body || '(empty note)'}
                           </p>
                           <div className="mt-0.5 flex items-center gap-2">
                             {time && (

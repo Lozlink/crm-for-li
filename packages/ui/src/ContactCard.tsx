@@ -7,9 +7,10 @@ import type { Contact } from '@realestate-crm/types';
 interface ContactCardProps {
   contact: Contact;
   onPress: (contact: Contact) => void;
+  onMapPress?: (contact: Contact) => void;
 }
 
-function ContactCard({ contact, onPress }: ContactCardProps) {
+function ContactCard({ contact, onPress, onMapPress }: ContactCardProps) {
   const theme = useTheme();
   const fullName = `${contact.first_name} ${contact.last_name || ''}`.trim();
   const initials = `${contact.first_name[0]}${contact.last_name?.[0] || ''}`.toUpperCase();
@@ -89,6 +90,19 @@ function ContactCard({ contact, onPress }: ContactCardProps) {
           )}
         </View>
 
+        {onMapPress && contact.latitude != null && contact.longitude != null && (
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onMapPress(contact);
+            }}
+            activeOpacity={0.6}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ padding: 4, marginRight: 2 }}
+          >
+            <Icon name="map-marker-radius-outline" size={20} color={theme.colors.primary} />
+          </TouchableOpacity>
+        )}
         <Icon name="chevron-right" size={24} color={theme.colors.onSurfaceVariant} />
       </Surface>
     </TouchableOpacity>

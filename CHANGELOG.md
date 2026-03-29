@@ -1,88 +1,96 @@
 # Changelog
 
-## [Unreleased] - 2026-03-28
+## [Unreleased] - 2026-03-29
 
 ### Added
 
-#### Prospecting-First UX Overhaul
+#### Prospecting-First UX Overhaul (Mobile)
 
-- **Today dashboard** (`app/(tabs)/index.tsx`) — new home screen replacing Properties as the landing tab
-  - Greeting with overdue task count awareness
-  - Quick action buttons: Add Contact, Start Route, New Task, Add Listing
-  - "Start Prospecting" card — one-tap tracking session start with confirmation dialog
-  - Overdue tasks section with inline completion
-  - Today's schedule — inspections and due tasks with times
-  - Pipeline snapshot — Appraisals / Listed / Under Offer counts + total value
-  - Recent contacts avatar row
-  - Recent tracking session chips with distance + duration
+- **Today dashboard** (`app/(tabs)/index.tsx`) — new home screen
+  - Prospecting stat grid (doors, sessions, distance, contacts) with WoW trend badges
+  - Streak banner with fire icon, best streak, weekly progress
+  - "Where to Go Next" — top 3 recommended streets with scores
+  - Quick action buttons, tracking card, overdue tasks, pipeline snapshot, recent contacts
   - Pull-to-refresh across all data sources
+- **Prospecting tab** (`app/(tabs)/prospecting.tsx`) — new tab with 4 views:
+  - Daily: stat grid, phone capture rate, session list, streak card, inspection summary
+  - Weekly: WoW comparison cards, 4-week doors trend bar chart
+  - Funnel: conversion funnel (Field Contact → Phone → Appraisal → Listed → Settled), inspection performance metrics
+  - Territory: recommended areas with scores, building coverage, 12-week trend, suburb intelligence (ABS data)
+- **"Start Prospecting" FAB** on Prospecting tab — confirms, starts tracking, navigates to map
+- **Tab structure** — Today → Prospecting → Map → Contacts → More
 
-#### Multi-Dwelling Address Support
+#### Multi-Dwelling Support
 
-- **`unit_number` field** on `Contact` and `ContactFormData` types (`packages/types/src/entities.ts`)
-- **Unit/Apt input** in `ContactForm` — both minimal (tracking) and full form modes (`packages/ui/src/ContactForm.tsx`)
-  - Input sanitization: trims whitespace and trailing slashes on submit
-- **Display format** `Unit 3 / 45 Smith St` in `ContactCard` and contact detail view
-- **Database migration** (`supabase/migrations/020_add_unit_number.sql`) — `unit_number text` column on contacts table
+- **`unit_number` field** on Contact + ContactFormData types, migration `020_add_unit_number.sql`
+- **Unit/Apt input** in ContactForm (both modes), sanitised on submit
+- **Display format** `Unit 3 / 45 Smith St` across ContactCard, ContactDetail, ContactsTable, ContactFormDialog
+- **DropNoteDialog multi-dwelling mode** — per-unit logging with quick outcomes (Not Home, Spoke, Callback, Not Interested, Skip), GPS cached per building, structured `[Unit X]` annotation format
 
-#### Multi-Dwelling Tracking
+#### Map Overhaul (Mobile)
 
-- **DropNoteDialog multi-dwelling mode** (`packages/ui/src/DropNoteDialog.tsx`) — upgraded from single-note to support per-unit logging
-  - Toggle from single note to "Multi-dwelling? Log units individually"
-  - Per-unit entry: unit number + quick outcome (Not Home, Spoke, Callback, Not Interested, Skip) + optional note
-  - GPS position cached once per building — reused for all unit annotations
-  - Structured annotation format: `[Unit 3] Spoke — John, interested in selling`
-  - Logged units displayed as colored outcome chips
-  - Compatible with existing annotation schema (no migration needed)
+- **Consolidated layers** — replaced 5 separate toggles with Layers pill + bottom sheet with labeled switches
+- **Field Activity layer** — merged routes + annotations into one layer with time windowing (7d/30d/All) and per-session selection
+- **Buildings layer** — OSM multi-dwelling building footprints via Overpass API, color-coded by prospecting coverage %, tap for building detail dialog with unit coverage
+- **"View on Map"** links throughout the app (contact detail, property detail, pipeline cards, properties list, contacts list) with auto-layer activation via `?layer=` param
+- **GPS center button**, cleaned up FAB (Add Contact + Quick Note only)
+
+#### Prospecting Performance System (All Phases)
+
+- **`useProspectingMetrics` hook** — shared computation across mobile + web:
+  - Period metrics (today/week/last week), WoW trends, conversion funnel
+  - Streak tracking (consecutive days, longest streak, weekly target progress)
+  - Inspection metrics (completed count, avg attendees, interest distribution, conversion rate)
+  - Recommended areas (scored algorithm: staleness × density × past success)
+  - Multi-dwelling building coverage (parsed from `[Unit X]` annotations)
+  - 4-week and 12-week rolling trend data
+
+#### Web Dashboard + Reports Overhaul
+
+- **Dashboard rewrite** — property pipeline KPIs, upcoming inspections, tasks due, field activity, recent activity with SVG icons
+- **Sidebar grouped by workflow** — Prospecting / Listings / Operations / Grow / System
+- **Prospecting Reports page** (`/prospecting`) — all 3 phases:
+  - KPI cards with WoW trends, conversion funnel, weekly + 12-week trend charts
+  - Streak banner (gradient), inspection metrics, recommended areas table with scores
+  - Multi-dwelling buildings card, suburb intelligence with penetration %
+  - CSV import section for NSW VG sold history + ABS suburb stats
+- **Field Activity** page — renamed from "Tracking", time window chips (7d/30d/All), per-session annotation counts, `[Unit X]` parsed into structured badges
+
+#### Data Enrichment (Phase 4)
+
+- **Database migration** (`021_sold_history_and_suburb_stats.sql`) — `sold_history` + `suburb_stats` tables with RLS
+- **`useDataEnrichmentStore`** — sold history queries (by suburb, address, nearby with suburb fallback), suburb stats, CSV import methods, demo data for 5 Western Sydney suburbs
+- **`fetchMultiDwellingBuildings`** Overpass API function — queries OSM for apartments/flats/multi-story residential buildings in viewport
+- **`OSMBuilding` type** with coordinates, center, levels, estimatedUnits
+- **Import scripts** for real data:
+  - `scripts/import-nsw-vg.ts` — parses NSW Valuer General `.DAT` files (semicolon-delimited B-records), deduplicates, batch imports
+  - `scripts/import-abs-suburbs.ts` — joins ABS Census G01+G02+G34+G36 tables via SAL code lookup, imports dwelling counts + medians
+- **Recent Sales Nearby** on property detail — fetches VG sold data within 500m (falls back to suburb match when lat/lng unavailable)
+- **Suburb Intelligence** on Prospecting tab — real ABS dwelling counts, penetration %, dwelling mix
 
 #### Tracking Prominence
 
-- **Persistent "Track" button** in top header (`app/(tabs)/_layout.tsx`) — one-tap start (with confirmation) from any tab, shows active state when tracking
-
-#### Web Dashboard Overhaul
-
-- **CRM command centre** (`apps/web/src/components/Dashboard.tsx`) — rewritten from contact-centric to property-pipeline-centric
-  - KPI cards: Active Listings, Pipeline Value (formatted $X.XM), Overdue Tasks (red when > 0), This Week's Contacts
-  - Property pipeline stage bars: Appraisal → Listed → Under Offer → Exchanged with counts and aggregate values
-  - Upcoming inspections list with property address, time, type badge, attendee count
-  - Tasks due section: overdue (red accent) + today's tasks with type badges and linked contacts
-  - Field activity summary: sessions this week, total distance, doors knocked (annotation count)
-  - Recent activity feed with SVG type icons replacing emojis
-  - Australian locale formatting (`en-AU`) for dates and times
-
-#### Web Navigation Restructure
-
-- **Sidebar grouped by workflow** (`apps/web/src/components/AppShell.tsx`)
-  - Prospecting: Dashboard, Pipeline, Contacts, Map
-  - Listings: Properties
-  - Operations: Tasks, Routes, Tracking
-  - Grow: Campaigns, Notes, Reports
-  - System: Settings
-  - Uppercase section labels with dividers between groups
-
-#### Web Multi-Dwelling Support
-
-- **ContactsTable** — address column shows `Unit X / Address` format
-- **ContactFormDialog** — added Unit/Apt # input field, included in create/update payloads
-- **ContactDetail** — address display includes unit_number prefix
+- **Persistent "Track" button** in top header with confirmation dialog, theme-aware colours
+- **Tracking start** from Today screen + Prospecting tab + header
 
 ### Changed
 
-- **Tab hierarchy** — restructured from Properties-first to prospecting-first:
-  - Visible: Today → Pipeline → Contacts → Map → More
-  - Pipeline promoted from hidden to main tab bar
-  - Properties and Tasks moved to More screen
-- **More screen** (`app/(tabs)/more.tsx`) — reorganised into Manage / Field Work / Insights sections with Properties, Tasks, Campaigns, Routes, Notes, Reports, Settings
-- **Contacts screen** renamed from `index.tsx` to `contacts.tsx` — content unchanged
-- **TopHeader** wrapped in `React.memo` with stable `renderHeader` reference to prevent unmount/remount on tab switches
-- **Tracking button colours** — replaced hardcoded hex with `theme.colors.tertiaryContainer` / `theme.colors.onTertiaryContainer` for dark mode support
-- **PipelineStat label** — replaced hardcoded `#6b7280` with `theme.colors.onSurfaceVariant`
+- **Tab bar** — Today → Prospecting → Map → Contacts → More (Pipeline moved to More → Manage)
+- **More screen** — reorganised: Manage (Pipeline, Properties, Tasks) / Field Work (Routes, Notes, Campaigns) / Insights (Reports, Settings)
+- **TopHeader** wrapped in `React.memo` with stable `renderHeader` reference
+- **Pipeline cards** — replaced `onTouchEnd` with `TouchableOpacity` to fix touch propagation for map icon
+- **Overpass servers** — replaced dead `maps.mail.ru` with `overpass.openstreetmap.ru`, building queries always start from primary server, 403 added to retry conditions
+- **`parseSuburb` helper** — now strips state + postcode suffix (`"Greenfield Park NSW 2176"` → `"Greenfield Park"`) for ABS matching
+- **Sold history nearby** — falls back to suburb-name query when VG records lack geocoded coordinates
+- **Xcode Node path** — `.xcode.env.local` updated to stable `/opt/homebrew/bin/node` symlink
 
 ### Fixed
 
-- **Tracking session start** — added `Alert.alert` confirmation before `startSession()` in both header button and Today card to prevent accidental background location tracking
-- **Today screen contacts** — added `fetchContacts()` to `useFocusEffect` so Recent Contacts section loads on fresh app launch without visiting Contacts tab first
-- **Recent sessions ordering** — `recentSessions` now sorted by `started_at` descending before slicing
+- **Tracking session start** — confirmation dialog prevents accidental background location tracking
+- **Today screen contacts** — added `fetchContacts()` to `useFocusEffect`
+- **Recent sessions** — sorted by `started_at` descending before slicing
+- **Supabase migration** — fixed `unnest(get_user_team_ids())` to match existing RLS pattern
+- **Web ProspectingReports** — fixed `SuburbRow.totalDwellings` type to allow undefined, fixed `contacts` reference in useMemo dependency
 
 ---
 

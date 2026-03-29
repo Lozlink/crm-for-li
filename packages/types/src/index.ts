@@ -29,9 +29,10 @@ export type {
   CustomFieldType, CustomFieldEntityType,
   CustomFieldDefinition, CustomFieldValue, CustomFieldWithValue,
 } from './entities';
+export type { SoldRecord, SuburbStats } from './entities';
 
 // Map types
-export type { MapRegion, SavedSuburb, SuburbBoundary } from './map';
+export type { MapRegion, SavedSuburb, SuburbBoundary, OSMBuilding } from './map';
 
 // Google Places types
 export type { PlacePrediction, PlaceDetails } from './google-places';

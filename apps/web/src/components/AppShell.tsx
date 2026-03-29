@@ -9,6 +9,7 @@ import TeamSetup from './TeamSetup';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: DashboardIcon, group: 'prospecting' },
+  { href: '/prospecting', label: 'Prospecting', icon: ProspectingIcon, group: 'prospecting' },
   { href: '/pipeline', label: 'Pipeline', icon: PipelineIcon, group: 'prospecting' },
   { href: '/contacts', label: 'Contacts', icon: ContactsIcon, group: 'prospecting' },
   { href: '/map', label: 'Map', icon: MapIcon, group: 'prospecting' },
@@ -435,6 +436,14 @@ function CampaignsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+    </svg>
+  );
+}
+
+function ProspectingIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
     </svg>
   );
 }

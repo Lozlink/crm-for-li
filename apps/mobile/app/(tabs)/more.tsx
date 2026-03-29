@@ -7,9 +7,9 @@ const SECTIONS = [
   {
     title: 'Manage',
     items: [
+      { label: 'Pipeline', icon: 'view-column', route: '/(tabs)/pipeline', color: '#6366f1' },
       { label: 'Properties', icon: 'home-city', route: '/(tabs)/properties', color: '#3b82f6' },
       { label: 'Tasks', icon: 'checkbox-marked-circle-outline', route: '/(tabs)/tasks', color: '#f59e0b' },
-      { label: 'Campaigns', icon: 'email-multiple-outline', route: '/campaigns/', color: '#ec4899' },
     ],
   },
   {
@@ -17,6 +17,7 @@ const SECTIONS = [
     items: [
       { label: 'Routes', icon: 'map-marker-path', route: '/(tabs)/routes', color: '#10b981' },
       { label: 'Notes', icon: 'note-text-outline', route: '/(tabs)/notes', color: '#6366f1' },
+      { label: 'Campaigns', icon: 'email-multiple-outline', route: '/campaigns/', color: '#ec4899' },
     ],
   },
   {

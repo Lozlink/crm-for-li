@@ -449,3 +449,47 @@ export interface CustomFieldWithValue {
   definition: CustomFieldDefinition;
   value: CustomFieldValue | null;
 }
+
+// --- Sold History (NSW Valuer General) ---
+
+export interface SoldRecord {
+  id: string;
+  address: string;
+  suburb: string;
+  postcode?: string;
+  state?: string;
+  property_type?: string;
+  sale_price?: number;
+  sale_date?: string;
+  settlement_date?: string;
+  area_sqm?: number;
+  latitude?: number;
+  longitude?: number;
+  source?: string;
+  team_id?: string;
+  created_at?: string;
+}
+
+// --- Suburb Statistics (abs Census) ---
+
+export interface SuburbStats {
+  id: string;
+  suburb: string;
+  state?: string;
+  postcode?: string;
+  total_dwellings?: number;
+  separate_houses?: number;
+  semi_detached?: number;
+  flats_units?: number;
+  other_dwellings?: number;
+  population?: number;
+  median_household_income?: number;
+  median_age?: number;
+  median_sale_price?: number;
+  median_rent_weekly?: number;
+  avg_days_on_market?: number;
+  latitude?: number;
+  longitude?: number;
+  census_year?: number;
+  source?: string;
+}

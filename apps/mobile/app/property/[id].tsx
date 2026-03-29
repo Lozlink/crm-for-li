@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import {
   useTheme,
   Text,
@@ -15,7 +15,7 @@ import {
   TextInput,
 } from 'react-native-paper';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { usePropertyStore, useCRMStore, useBuyerMatchStore, useInspectionStore } from '@realestate-crm/hooks';
+import { usePropertyStore, useCRMStore, useBuyerMatchStore, useInspectionStore, useDataEnrichmentStore } from '@realestate-crm/hooks';
 import type {
   Property,
   PropertyStatus,
@@ -26,6 +26,7 @@ import type {
   Inspection,
   InspectionType,
   InspectionAttendee,
+  SoldRecord,
 } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { CustomFieldRenderer } from '@realestate-crm/ui';
@@ -119,6 +120,34 @@ function formatSqm(val: number | undefined): string {
   if (val == null) return '-';
   return `${val.toLocaleString()} sqm`;
 }
+
+function formatSalePrice(price: number | undefined | null): string {
+  if (price == null) return '-';
+  if (price >= 1_000_000) {
+    const millions = price / 1_000_000;
+    return `$${millions % 1 === 0 ? millions.toFixed(0) : millions.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}M`;
+  }
+  if (price >= 1_000) {
+    const thousands = Math.round(price / 1_000);
+    return `$${thousands}K`;
+  }
+  return `$${price.toLocaleString()}`;
+}
+
+function formatSaleDate(dateStr: string | undefined | null): string {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
+}
+
+const PROPERTY_TYPE_COLORS: Record<string, string> = {
+  house: '#6366f1',
+  unit: '#0d9488',
+  townhouse: '#f59e0b',
+  apartment: '#2563eb',
+  land: '#16a34a',
+  villa: '#9333ea',
+};
 
 const MATCH_STRENGTH_COLORS: Record<MatchStrength, string> = {
   strong: '#16a34a',
@@ -215,6 +244,12 @@ export default function PropertyDetailScreen() {
 
   const contacts = useCRMStore(state => state.contacts);
 
+  // Data enrichment - nearby sold records
+  const soldRecords = useDataEnrichmentStore(s => s.soldRecords);
+  const soldRecordsLoading = useDataEnrichmentStore(s => s.soldRecordsLoading);
+  const fetchSoldHistoryNearby = useDataEnrichmentStore(s => s.fetchSoldHistoryNearby);
+  const fetchSoldHistory = useDataEnrichmentStore(s => s.fetchSoldHistory);
+
   // Buyer matching
   const buyerMatches = useBuyerMatchStore(state => state.matches);
   const isBuyerMatchLoading = useBuyerMatchStore(state => state.isLoading);
@@ -260,6 +295,15 @@ export default function PropertyDetailScreen() {
       clearActiveProperty();
     };
   }, [id]);
+
+  // Fetch nearby sold records — passes suburb as fallback when VG data lacks lat/lng
+  useEffect(() => {
+    if (activeProperty?.latitude != null && activeProperty?.longitude != null) {
+      fetchSoldHistoryNearby(activeProperty.latitude, activeProperty.longitude, 0.5, activeProperty.suburb);
+    } else if (activeProperty?.suburb) {
+      fetchSoldHistory(activeProperty.suburb);
+    }
+  }, [activeProperty?.latitude, activeProperty?.longitude, activeProperty?.suburb, fetchSoldHistoryNearby, fetchSoldHistory]);
 
   // Populate edit fields when entering edit mode
   const startEditing = useCallback(() => {
@@ -385,6 +429,17 @@ export default function PropertyDetailScreen() {
     if (!activeProperty) return [];
     return getNextStatuses(activeProperty);
   }, [activeProperty]);
+
+  // Nearby sold records sorted by date descending, limited to 5
+  const nearbySoldRecords = useMemo(() => {
+    return [...soldRecords]
+      .sort((a, b) => {
+        const dateA = a.sale_date ? new Date(a.sale_date).getTime() : 0;
+        const dateB = b.sale_date ? new Date(b.sale_date).getTime() : 0;
+        return dateB - dateA;
+      })
+      .slice(0, 5);
+  }, [soldRecords]);
 
   // Available contacts not already linked
   const availableContacts = useMemo(() => {
@@ -555,9 +610,22 @@ export default function PropertyDetailScreen() {
                   {property.address}
                 </Text>
                 {property.suburb && (
-                  <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
+                  <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
                     {property.suburb}{property.state ? `, ${property.state}` : ''}{property.postcode ? ` ${property.postcode}` : ''}
                   </Text>
+                )}
+
+                {property.latitude != null && property.longitude != null && (
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}
+                    onPress={() => router.push(`/(tabs)/map?lat=${property.latitude}&lng=${property.longitude}&zoom=0.005&layer=properties` as never)}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="map-marker-radius" size={16} color={theme.colors.primary} />
+                    <Text variant="bodySmall" style={{ color: theme.colors.primary, marginLeft: 4 }}>
+                      View on Map
+                    </Text>
+                  </TouchableOpacity>
                 )}
 
                 <View style={styles.badgeRow}>
@@ -698,6 +766,61 @@ export default function PropertyDetailScreen() {
 
                 {/* Inline custom fields for this property */}
                 <CustomFieldRenderer entityType="property" entityId={id as string} inline />
+              </Surface>
+
+              {/* Recent Sales Nearby */}
+              <Surface style={styles.sectionCard} elevation={1}>
+                <View style={styles.sectionHeader}>
+                  <Icon name="home-analytics" size={20} color={theme.colors.primary} />
+                  <Text variant="titleSmall" style={styles.sectionTitleText}>Recent Sales Nearby</Text>
+                </View>
+
+                {soldRecordsLoading && (
+                  <View style={styles.emptyContacts}>
+                    <ActivityIndicator size="small" />
+                    <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8 }}>
+                      Loading nearby sales...
+                    </Text>
+                  </View>
+                )}
+
+                {!soldRecordsLoading && nearbySoldRecords.length === 0 && (
+                  <View style={styles.emptyContacts}>
+                    <Icon name="home-off-outline" size={32} color={theme.colors.onSurfaceVariant} />
+                    <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8, textAlign: 'center' }}>
+                      No recent sales data available
+                    </Text>
+                  </View>
+                )}
+
+                {!soldRecordsLoading && nearbySoldRecords.map((record) => (
+                  <View key={record.id} style={styles.soldRecordRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text variant="bodyMedium" style={{ fontWeight: '600' }} numberOfLines={1}>
+                        {record.address}
+                      </Text>
+                      <View style={styles.soldRecordMeta}>
+                        <Text variant="bodyMedium" style={{ fontWeight: '700', color: theme.colors.primary }}>
+                          {formatSalePrice(record.sale_price)}
+                        </Text>
+                        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                          {formatSaleDate(record.sale_date)}
+                        </Text>
+                      </View>
+                    </View>
+                    {record.property_type && (
+                      <Chip
+                        compact
+                        style={{
+                          backgroundColor: PROPERTY_TYPE_COLORS[record.property_type] || theme.colors.surfaceVariant,
+                        }}
+                        textStyle={{ color: '#fff', fontSize: 10 }}
+                      >
+                        {record.property_type.charAt(0).toUpperCase() + record.property_type.slice(1)}
+                      </Chip>
+                    )}
+                  </View>
+                ))}
               </Surface>
 
               {/* Contacts Card */}
@@ -1355,5 +1478,19 @@ const styles = StyleSheet.create({
   },
   matchFieldChip: {
     height: 24,
+  },
+  soldRecordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+    gap: 10,
+  },
+  soldRecordMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 2,
   },
 });

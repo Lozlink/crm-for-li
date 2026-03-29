@@ -9,6 +9,7 @@ import {
   useCRMStore,
   useBuyerMatchStore,
   useInspectionStore,
+  useDataEnrichmentStore,
 } from '@realestate-crm/hooks';
 import type {
   Property,
@@ -141,6 +142,90 @@ function formatDate(dateStr: string): string {
     month: 'short',
     year: 'numeric',
   });
+}
+
+// ---------------------------------------------------------------------------
+// Recent Sales Nearby
+// ---------------------------------------------------------------------------
+
+function formatSalePrice(price: number): string {
+  if (price >= 1_000_000) return `$${(price / 1_000_000).toFixed(2)}M`;
+  return `$${Math.round(price / 1000)}K`;
+}
+
+function formatSaleMonth(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
+}
+
+function RecentSalesNearby({
+  lat,
+  lng,
+}: {
+  lat: number;
+  lng: number;
+}) {
+  const soldRecords = useDataEnrichmentStore((s) => s.soldRecords);
+  const soldRecordsLoading = useDataEnrichmentStore((s) => s.soldRecordsLoading);
+  const fetchSoldHistoryNearby = useDataEnrichmentStore((s) => s.fetchSoldHistoryNearby);
+
+  useEffect(() => {
+    fetchSoldHistoryNearby(lat, lng, 0.5);
+  }, [lat, lng, fetchSoldHistoryNearby]);
+
+  const topFive = useMemo(() => {
+    return [...soldRecords]
+      .sort((a, b) => {
+        const ta = a.sale_date ? new Date(a.sale_date).getTime() : 0;
+        const tb = b.sale_date ? new Date(b.sale_date).getTime() : 0;
+        return tb - ta;
+      })
+      .slice(0, 5);
+  }, [soldRecords]);
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900">Recent Sales Nearby</h2>
+        {soldRecordsLoading && (
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />
+        )}
+      </div>
+
+      {!soldRecordsLoading && topFive.length === 0 ? (
+        <p className="text-sm text-gray-400">No recent sales found within 500m.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
+                <th className="pb-2 pr-4">Address</th>
+                <th className="pb-2 pr-4 text-right">Price</th>
+                <th className="pb-2 pr-4 text-right">Date</th>
+                <th className="pb-2">Type</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {topFive.map((record) => (
+                <tr key={record.id} className="hover:bg-gray-50">
+                  <td className="py-2.5 pr-4 font-medium text-gray-900">{record.address}</td>
+                  <td className="py-2.5 pr-4 text-right font-semibold text-gray-900">
+                    {record.sale_price != null ? formatSalePrice(record.sale_price) : '\u2014'}
+                  </td>
+                  <td className="py-2.5 pr-4 text-right text-gray-500">
+                    {record.sale_date ? formatSaleMonth(record.sale_date) : '\u2014'}
+                  </td>
+                  <td className="py-2.5 capitalize text-gray-500">
+                    {record.property_type ?? '\u2014'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface PropertyDetailProps {
@@ -694,6 +779,14 @@ export default function PropertyDetail({ propertyId }: PropertyDetailProps) {
               </div>
             )}
           </div>
+
+          {/* Recent Sales Nearby — only when lat/lng available */}
+          {activeProperty.latitude && activeProperty.longitude && (
+            <RecentSalesNearby
+              lat={activeProperty.latitude}
+              lng={activeProperty.longitude}
+            />
+          )}
 
           {/* Linked Contacts */}
           <div className="rounded-xl border border-gray-200 bg-white p-6">

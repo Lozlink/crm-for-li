@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
-import { useTheme, Text, Surface } from 'react-native-paper';
+import { useTheme, Text, Surface, ProgressBar } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import {
   useTaskStore, usePropertyStore, useCRMStore, useAuthStore, useInspectionStore, useTrackingStore,
+  useProspectingMetrics,
 } from '@realestate-crm/hooks';
 import type { Task, Property, Contact, Inspection, TrackingSession } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -173,6 +174,8 @@ export default function TodayScreen() {
 
   const urgentCount = overdueTasks.length;
 
+  const prospecting = useProspectingMetrics();
+
   // ── Render ────────────────────────────────────────────────────────
 
   return (
@@ -192,6 +195,106 @@ export default function TodayScreen() {
           ? `You have ${urgentCount} overdue item${urgentCount > 1 ? 's' : ''} that need${urgentCount === 1 ? 's' : ''} attention.`
           : 'You\'re all caught up. Time to prospect!'}
       </Text>
+
+      {/* Streak Banner */}
+      <View style={styles.section}>
+        {prospecting.streak.currentDays > 0 || prospecting.streak.isActiveToday ? (
+          <Surface
+            style={[
+              styles.streakBanner,
+              {
+                backgroundColor: prospecting.streak.currentDays > 3
+                  ? theme.colors.primaryContainer
+                  : theme.colors.surfaceVariant,
+              },
+            ]}
+            elevation={1}
+          >
+            <View style={styles.streakBannerInner}>
+              <Icon name="fire" size={28} color="#f59e0b" />
+              <View style={styles.streakBannerCenter}>
+                <Text variant="titleSmall" style={{ fontWeight: '700', color: theme.colors.onSurface }}>
+                  {prospecting.streak.currentDays}-day streak
+                </Text>
+                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  Best: {prospecting.streak.longestDays} days
+                </Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text variant="labelMedium" style={{ fontWeight: '700', color: theme.colors.onSurface }}>
+                  {prospecting.thisWeek.doors}/50
+                </Text>
+                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  this week
+                </Text>
+              </View>
+            </View>
+          </Surface>
+        ) : (
+          <Surface
+            style={[styles.streakBanner, { backgroundColor: theme.colors.surfaceVariant }]}
+            elevation={1}
+          >
+            <View style={styles.streakBannerInner}>
+              <Icon name="fire" size={28} color={theme.colors.onSurfaceVariant} style={{ opacity: 0.5 }} />
+              <View style={styles.streakBannerCenter}>
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                  Start a streak! Prospect today to begin.
+                </Text>
+              </View>
+            </View>
+          </Surface>
+        )}
+      </View>
+
+      {/* Today's Prospecting */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionTitleRow}>
+            <Icon name="chart-timeline-variant" size={18} color={theme.colors.primary} />
+            <Text variant="titleSmall" style={{ color: theme.colors.onBackground, fontWeight: '700', marginLeft: 6 }}>
+              Today's Prospecting
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/prospecting' as never)}>
+            <Text variant="labelMedium" style={{ color: theme.colors.primary }}>Details</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.prospectingGrid}>
+          <View style={styles.prospectingRow}>
+            <ProspectingStatCell
+              icon="door-open"
+              label="Doors"
+              value={String(prospecting.today.doors)}
+              color="#6366f1"
+              trend={prospecting.trends.doors}
+            />
+            <ProspectingStatCell
+              icon="walk"
+              label="Sessions"
+              value={String(prospecting.today.sessions)}
+              color="#0d9488"
+              trend={null}
+            />
+          </View>
+          <View style={styles.prospectingRow}>
+            <ProspectingStatCell
+              icon="map-marker-distance"
+              label="Distance"
+              value={`${(prospecting.today.distanceMeters / 1000).toFixed(1)} km`}
+              color="#f59e0b"
+              trend={prospecting.trends.distance}
+            />
+            <ProspectingStatCell
+              icon="account-plus-outline"
+              label="Contacts"
+              value={String(prospecting.today.contactsCreated)}
+              color="#16a34a"
+              trend={prospecting.trends.contacts}
+            />
+          </View>
+        </View>
+      </View>
 
       {/* Quick Actions */}
       <View style={styles.quickActionsRow}>
@@ -349,6 +452,57 @@ export default function TodayScreen() {
         </Surface>
       </View>
 
+      {/* Where to Go Next */}
+      {prospecting.recommendedAreas.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Icon name="map-marker-star" size={18} color={theme.colors.primary} />
+              <Text variant="titleSmall" style={{ color: theme.colors.onBackground, fontWeight: '700', marginLeft: 6 }}>
+                Where to Go Next
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/prospecting' as never)}>
+              <Text variant="labelMedium" style={{ color: theme.colors.primary }}>See All</Text>
+            </TouchableOpacity>
+          </View>
+          {prospecting.recommendedAreas.slice(0, 3).map((area, idx) => {
+            const scoreBg = area.score > 70 ? '#16a34a' : area.score >= 40 ? '#f59e0b' : '#9ca3af';
+            return (
+              <TouchableOpacity
+                key={`${area.streetName}-${area.suburb}-${idx}`}
+                activeOpacity={0.7}
+                onPress={() => router.push(`/(tabs)/map?lat=${area.averageLatitude}&lng=${area.averageLongitude}&zoom=0.01&layer=contacts` as never)}
+              >
+                <Surface style={[styles.recommendedAreaRow, { backgroundColor: theme.colors.surface }]} elevation={1}>
+                  <View style={styles.recommendedAreaInner}>
+                    <View style={{ flex: 1 }}>
+                      <Text variant="bodyMedium" style={{ fontWeight: '600' }} numberOfLines={1}>
+                        {area.streetName}
+                      </Text>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {area.suburb}
+                      </Text>
+                      <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                        {area.reason}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'center', gap: 4 }}>
+                      <View style={[styles.scoreBadge, { backgroundColor: scoreBg }]}>
+                        <Text variant="labelSmall" style={{ color: '#ffffff', fontWeight: '700' }}>
+                          {area.score}
+                        </Text>
+                      </View>
+                      <Icon name="chevron-right" size={16} color={theme.colors.onSurfaceVariant} />
+                    </View>
+                  </View>
+                </Surface>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
       {/* Recent Contacts */}
       {recentContacts.length > 0 && (
         <View style={styles.section}>
@@ -480,6 +634,55 @@ function InspectionCard({
         </View>
       </Surface>
     </TouchableOpacity>
+  );
+}
+
+function ProspectingStatCell({
+  icon,
+  label,
+  value,
+  color,
+  trend,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  color: string;
+  trend: { changePercent: number | null } | null;
+}) {
+  const theme = useTheme();
+
+  let trendText = '';
+  let trendColor = theme.colors.onSurfaceVariant;
+  if (trend && trend.changePercent !== null) {
+    if (trend.changePercent >= 0) {
+      trendText = `\u25B2 +${trend.changePercent}%`;
+      trendColor = '#16a34a';
+    } else {
+      trendText = `\u25BC ${trend.changePercent}%`;
+      trendColor = '#dc2626';
+    }
+  } else if (trend) {
+    trendText = '\u2014';
+  }
+
+  return (
+    <Surface style={[styles.prospectingCell, { backgroundColor: theme.colors.surface }]} elevation={1}>
+      <View style={styles.prospectingCellInner}>
+        <View style={[styles.prospectingIconBg, { backgroundColor: color + '14' }]}>
+          <Icon name={icon} size={18} color={color} />
+        </View>
+        <View style={{ flex: 1, marginLeft: 8 }}>
+          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>{label}</Text>
+          <Text variant="titleMedium" style={{ fontWeight: '700', color: theme.colors.onSurface }}>{value}</Text>
+          {trendText !== '' && (
+            <Text variant="labelSmall" style={{ color: trendColor, fontWeight: '600', marginTop: 1 }}>
+              {trendText}
+            </Text>
+          )}
+        </View>
+      </View>
+    </Surface>
   );
 }
 
@@ -620,6 +823,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
+  },
+
+  // Prospecting grid
+  prospectingGrid: {
+    gap: 8,
+  },
+  prospectingRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  prospectingCell: {
+    flex: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  prospectingCellInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+  },
+  prospectingIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Streak banner
+  streakBanner: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  streakBannerInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    gap: 12,
+  },
+  streakBannerCenter: {
+    flex: 1,
+  },
+
+  // Recommended areas
+  recommendedAreaRow: {
+    borderRadius: 10,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  recommendedAreaInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+  },
+  scoreBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    minWidth: 32,
+    alignItems: 'center',
   },
 
   // Recent contacts
