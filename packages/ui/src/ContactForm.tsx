@@ -5,6 +5,7 @@ import * as Contacts from 'expo-contacts';
 import * as Linking from 'expo-linking';
 import { ContactFormData } from '@realestate-crm/types';
 import { useCRMStore } from '@realestate-crm/hooks';
+import { parseContactNameField } from '@realestate-crm/utils';
 import TagPicker from './TagPicker';
 import AddressAutocomplete from './AddressAutocomplete';
 
@@ -156,13 +157,32 @@ export default function ContactForm({
       const contact = await Contacts.presentContactPickerAsync();
       
       if (contact) {
-        setFormData(prev => ({
-          ...prev,
-          first_name: contact.firstName || '',
-          last_name: contact.lastName || '',
-          email: contact.emails?.[0]?.email || '',
-          phone: contact.phoneNumbers?.[0]?.number || '',
-        }));
+        const rawFirst = contact.firstName || '';
+        const rawLast = contact.lastName || '';
+        const fullName = `${rawFirst} ${rawLast}`.trim();
+
+        // Try smart parsing — contact name may contain an embedded address
+        const parsed = parseContactNameField(fullName);
+
+        if (parsed && parsed.address) {
+          setFormData(prev => ({
+            ...prev,
+            first_name: parsed.first_name,
+            last_name: parsed.last_name,
+            address: parsed.address,
+            unit_number: parsed.unit_number || '',
+            email: contact.emails?.[0]?.email || '',
+            phone: contact.phoneNumbers?.[0]?.number || '',
+          }));
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            first_name: rawFirst,
+            last_name: rawLast,
+            email: contact.emails?.[0]?.email || '',
+            phone: contact.phoneNumbers?.[0]?.number || '',
+          }));
+        }
       }
     } catch (error) {
       console.error('Error importing contact:', error);

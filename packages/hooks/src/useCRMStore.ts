@@ -468,9 +468,21 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         return;
       }
 
-      // Extract tags before updating contacts row
+      // Extract tags and whitelist only valid DB columns
       const { tags: tagObjects, ...contactFields } = contact as any;
-      const updateData: any = { ...contactFields, updated_at: new Date().toISOString() };
+      const VALID_COLUMNS = new Set([
+        'first_name', 'last_name', 'email', 'phone', 'address', 'unit_number',
+        'latitude', 'longitude', 'tag_id', 'user_id', 'team_id',
+        'source', 'contact_type', 'company_name', 'title',
+        'preferred_contact_method', 'do_not_contact', 'notes',
+        'status', 'lead_score', 'last_contacted_at', 'next_follow_up_at',
+      ]);
+      const updateData: any = { updated_at: new Date().toISOString() };
+      for (const [key, value] of Object.entries(contactFields)) {
+        if (VALID_COLUMNS.has(key) && value !== undefined) {
+          updateData[key] = value;
+        }
+      }
 
       // If tags array is provided, sync junction table and update tag_id for compat
       if (tagObjects !== undefined) {

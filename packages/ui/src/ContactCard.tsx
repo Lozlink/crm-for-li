@@ -7,16 +7,17 @@ import type { Contact } from '@realestate-crm/types';
 interface ContactCardProps {
   contact: Contact;
   onPress: (contact: Contact) => void;
+  onLongPress?: () => void;
   onMapPress?: (contact: Contact) => void;
 }
 
-function ContactCard({ contact, onPress, onMapPress }: ContactCardProps) {
+function ContactCard({ contact, onPress, onLongPress, onMapPress }: ContactCardProps) {
   const theme = useTheme();
   const fullName = `${contact.first_name} ${contact.last_name || ''}`.trim();
   const initials = `${contact.first_name[0]}${contact.last_name?.[0] || ''}`.toUpperCase();
 
   return (
-    <TouchableOpacity onPress={() => onPress(contact)} activeOpacity={0.7}>
+    <TouchableOpacity onPress={() => onPress(contact)} onLongPress={onLongPress} activeOpacity={0.7}>
       <Surface style={styles.card} elevation={1}>
         <Avatar.Text
           size={48}
