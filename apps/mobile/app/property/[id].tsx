@@ -296,10 +296,10 @@ export default function PropertyDetailScreen() {
     };
   }, [id]);
 
-  // Fetch nearby sold records — try coordinates first, fall back to suburb name
+  // Fetch nearby sold records — passes suburb as fallback when VG data lacks lat/lng
   useEffect(() => {
     if (activeProperty?.latitude != null && activeProperty?.longitude != null) {
-      fetchSoldHistoryNearby(activeProperty.latitude, activeProperty.longitude, 0.5);
+      fetchSoldHistoryNearby(activeProperty.latitude, activeProperty.longitude, 0.5, activeProperty.suburb);
     } else if (activeProperty?.suburb) {
       fetchSoldHistory(activeProperty.suburb);
     }

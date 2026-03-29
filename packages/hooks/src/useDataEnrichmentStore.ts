@@ -9,7 +9,7 @@ interface DataEnrichmentState {
   soldRecordsLoading: boolean;
   fetchSoldHistory: (suburb: string) => Promise<void>;
   fetchSoldHistoryByAddress: (address: string) => Promise<void>;
-  fetchSoldHistoryNearby: (lat: number, lng: number, radiusKm?: number) => Promise<void>;
+  fetchSoldHistoryNearby: (lat: number, lng: number, radiusKm?: number, suburb?: string) => Promise<void>;
 
   // Suburb stats
   suburbStats: SuburbStats[];
@@ -113,17 +113,17 @@ export const useDataEnrichmentStore = create<DataEnrichmentState>()((set, get) =
     }
   },
 
-  fetchSoldHistoryNearby: async (lat: number, lng: number, radiusKm: number = 1) => {
+  fetchSoldHistoryNearby: async (lat: number, lng: number, radiusKm: number = 1, suburb?: string) => {
     const { isDemo } = getTeamContext();
     set({ soldRecordsLoading: true });
 
     if (isDemo) {
-      // Simple bounding box for demo
       const degBuffer = radiusKm / 111;
       const filtered = DEMO_SOLD_RECORDS.filter(r =>
-        r.latitude && r.longitude &&
-        Math.abs(r.latitude - lat) < degBuffer &&
-        Math.abs(r.longitude - lng) < degBuffer
+        (suburb && r.suburb.toLowerCase() === suburb.toLowerCase()) ||
+        (r.latitude && r.longitude &&
+          Math.abs(r.latitude - lat) < degBuffer &&
+          Math.abs(r.longitude - lng) < degBuffer)
       );
       set({ soldRecords: filtered, soldRecordsLoading: false });
       return;
@@ -149,34 +149,19 @@ export const useDataEnrichmentStore = create<DataEnrichmentState>()((set, get) =
         return;
       }
 
-      // Fallback: reverse geocode to get suburb, then query by suburb
-      // Use the suburb from the property if we can find it
-      try {
-        const response = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&result_type=locality|sublocality&key=${
-            typeof process !== 'undefined' ? (process.env?.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '') : ''
-          }`
-        );
-        const geocodeData = await response.json();
-        const suburb = geocodeData?.results?.[0]?.address_components?.find(
-          (c: { types: string[] }) => c.types.includes('locality') || c.types.includes('sublocality')
-        )?.long_name;
+      // Fallback: query by suburb name directly (no geocoding needed)
+      if (suburb) {
+        const { data: suburbData, error: suburbError } = await supabase
+          .from('sold_history')
+          .select('*')
+          .ilike('suburb', suburb)
+          .order('sale_date', { ascending: false })
+          .limit(20);
 
-        if (suburb) {
-          const { data: suburbData, error: suburbError } = await supabase
-            .from('sold_history')
-            .select('*')
-            .ilike('suburb', suburb)
-            .order('sale_date', { ascending: false })
-            .limit(20);
-
-          if (!suburbError && suburbData) {
-            set({ soldRecords: suburbData, soldRecordsLoading: false });
-            return;
-          }
+        if (!suburbError && suburbData && suburbData.length > 0) {
+          set({ soldRecords: suburbData, soldRecordsLoading: false });
+          return;
         }
-      } catch {
-        // Geocode failed, that's okay
       }
 
       set({ soldRecords: [], soldRecordsLoading: false });

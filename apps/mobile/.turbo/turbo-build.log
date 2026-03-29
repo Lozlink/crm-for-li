@@ -4,12 +4,16 @@
 
 [38;5;142m[dotenvx@1.52.0] injecting env (4) from .env[39m
 Starting Metro Bundler
-Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 77.6% (1048/1190)
-iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 77.6% (1063/1207)
+Android apps/mobile/index.ts ▓▓▓▓▓░░░░░░░░░░░ 36.8% (365/616)
+iOS apps/mobile/index.ts ▓▓▓▓▓░░░░░░░░░░░ 32.7% (375/745)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 92.4% (1248/1298)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.4% (1276/1342)
 Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1736/1736)
-iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.4% (1313/1395)
-Android Bundled 6607ms apps/mobile/index.ts (1736 modules)
-iOS Bundled 9016ms apps/mobile/index.ts (1395 modules)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.4% (1554/1617)
+iOS Bundled 20229ms apps/mobile/index.ts (1617 modules)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1736/1736)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.4% (1554/1617)
+Android Bundled 23039ms apps/mobile/index.ts (1736 modules)
 
 › Assets (33):
 ../../node_modules/.pnpm/@expo+vector-icons@15.0.3_expo-font@14.0.11_expo@54.0.33_react-native@0.81.5_@babel+cor_dffeba5e71c136362da807d9acd294ec/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf (1.31 MB)
@@ -27,11 +31,11 @@ iOS Bundled 9016ms apps/mobile/index.ts (1395 modules)
 ../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/unmatched.png (4.75 kB)
 ../../node_modules/.pnpm/react-native-paper@5.15.0_react-native-safe-area-context@5.6.2_react-native@0.81.5_@bab_41d9b5c0467b7e446469252509ed76ee/node_modules/react-native-paper/src/assets/back-chevron.png (489 B)
 
-› android bundles (1):
-_expo/static/js/android/index-b9f308786ccf005ddb71908996a4e2fa.hbc (5.84 MB)
-
 › ios bundles (1):
-_expo/static/js/ios/index-aec26a9d76bb32e79e9867e807442180.hbc (5.85 MB)
+_expo/static/js/ios/index-7615dafb81540756e05c6c9a2a66feef.hbc (5.85 MB)
+
+› android bundles (1):
+_expo/static/js/android/index-a5c735ab42c1b60cb25887f2fed82b72.hbc (5.84 MB)
 
 › Files (1):
 metadata.json (3.71 kB)
