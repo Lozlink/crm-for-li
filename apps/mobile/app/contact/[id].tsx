@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform, Linking, AppState, Pressable } from 'react-native';
+import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform, Linking, AppState, Pressable, TouchableOpacity } from 'react-native';
 import {
   Text,
   Button,
@@ -727,13 +727,18 @@ export default function ContactDetailScreen() {
                   </View>
                 )}
 
-                {/* Coordinates */}
+                {/* Coordinates + View on Map */}
                 {contact.latitude != null && contact.longitude != null && (
-                  <View style={styles.coordinatesRow}>
-                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                      {contact.latitude.toFixed(6)}, {contact.longitude.toFixed(6)}
+                  <TouchableOpacity
+                    style={styles.coordinatesRow}
+                    onPress={() => router.push(`/(tabs)/map?lat=${contact.latitude}&lng=${contact.longitude}&zoom=0.005&layer=contacts&label=${encodeURIComponent(contact.first_name)}` as never)}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="map-marker-radius" size={16} color={theme.colors.primary} />
+                    <Text variant="bodySmall" style={{ color: theme.colors.primary, marginLeft: 4 }}>
+                      View on Map
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 )}
 
                 {/* Inline custom fields for this contact */}

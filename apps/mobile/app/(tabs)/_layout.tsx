@@ -122,7 +122,7 @@ export default function TabLayout() {
           header: renderHeader,
         }}
       >
-        {/* ─── Visible tabs (prospecting-focused) ─── */}
+        {/* ─── Visible tabs ─── */}
         <Tabs.Screen
           name="index"
           options={{
@@ -133,20 +133,11 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="pipeline"
+          name="prospecting"
           options={{
-            title: 'Pipeline',
+            title: 'Prospecting',
             tabBarIcon: ({ color, size }) => (
-              <Icon name="view-column" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="contacts"
-          options={{
-            title: 'Contacts',
-            tabBarIcon: ({ color, size }) => (
-              <Icon name="account-group" size={size} color={color} />
+              <Icon name="chart-timeline-variant" size={size} color={color} />
             ),
           }}
         />
@@ -156,6 +147,15 @@ export default function TabLayout() {
             title: 'Map',
             tabBarIcon: ({ color, size }) => (
               <Icon name="map-outline" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="contacts"
+          options={{
+            title: 'Contacts',
+            tabBarIcon: ({ color, size }) => (
+              <Icon name="account-group" size={size} color={color} />
             ),
           }}
         />
@@ -170,6 +170,12 @@ export default function TabLayout() {
         />
 
         {/* ─── Hidden tabs — accessible via More grid or deep links ─── */}
+        <Tabs.Screen
+          name="pipeline"
+          options={{ title: 'Pipeline', href: null,
+            tabBarIcon: ({ color, size }) => <Icon name="view-column" size={size} color={color} />,
+          }}
+        />
         <Tabs.Screen
           name="properties"
           options={{ title: 'Properties', href: null,

@@ -1,4 +1,4 @@
-import type { SuburbBoundary } from '@realestate-crm/types';
+import type { SuburbBoundary, OSMBuilding } from '@realestate-crm/types';
 
 // Cache for suburb boundaries to avoid repeated API calls
 const boundaryCache = new Map<string, { data: SuburbBoundary[]; timestamp: number }>();
@@ -10,7 +10,7 @@ let lastRequestTime = 0;
 const OVERPASS_SERVERS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.openstreetmap.ru/api/interpreter',
 ];
 let currentServerIndex = 0;
 
@@ -262,4 +262,133 @@ export async function fetchSuburbByName(
 
   console.error('All Overpass servers failed for suburb:', suburbName);
   return cached?.data || null;
+}
+
+// ── Multi-dwelling building queries ──────────────────────────────────
+
+const buildingCache = new Map<string, { data: OSMBuilding[]; timestamp: number }>();
+const BUILDING_CACHE_TTL = 10 * 60 * 1000; // 10 minutes (buildings don't change often)
+
+/**
+ * Fetch multi-dwelling buildings from OpenStreetMap in the given bounding box.
+ * Returns apartment blocks, unit complexes, and multi-story residential buildings.
+ */
+export async function fetchMultiDwellingBuildings(
+  minLat: number,
+  minLng: number,
+  maxLat: number,
+  maxLng: number,
+): Promise<OSMBuilding[]> {
+  const cacheKey = `bldg-${getCacheKey(minLat, minLng, maxLat, maxLng)}`;
+
+  const cached = buildingCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < BUILDING_CACHE_TTL) {
+    return cached.data;
+  }
+
+  const now = Date.now();
+  if (now - lastRequestTime < MIN_REQUEST_INTERVAL) {
+    return cached?.data || [];
+  }
+  lastRequestTime = now;
+
+  // Query for multi-dwelling building types common in Australian suburbs
+  const query = `
+    [out:json][timeout:30];
+    (
+      way["building"="apartments"](${minLat},${minLng},${maxLat},${maxLng});
+      way["building"="flats"](${minLat},${minLng},${maxLat},${maxLng});
+      way["building"="residential"]["building:levels"~"^[2-9]|[1-9][0-9]"](${minLat},${minLng},${maxLat},${maxLng});
+      relation["building"="apartments"](${minLat},${minLng},${maxLat},${maxLng});
+      relation["building"="flats"](${minLat},${minLng},${maxLat},${maxLng});
+    );
+    out body geom;
+  `;
+
+  // Always start from primary server for building queries
+  for (let attempt = 0; attempt < OVERPASS_SERVERS.length; attempt++) {
+    const serverUrl = OVERPASS_SERVERS[attempt];
+
+    try {
+      const response = await fetch(serverUrl, {
+        method: 'POST',
+        body: `data=${encodeURIComponent(query)}`,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+
+      if (response.status === 429 || response.status === 403 || response.status === 504) {
+        continue; // try next server
+      }
+      if (!response.ok) throw new Error(`Overpass API error: ${response.status}`);
+
+      const data = await response.json();
+      const buildings = parseBuildingResponse(data);
+
+      buildingCache.set(cacheKey, { data: buildings, timestamp: Date.now() });
+      return buildings;
+    } catch (error) {
+      console.warn(`Overpass server ${serverUrl} failed for building query:`, error);
+    }
+  }
+
+  console.error('All Overpass servers failed for building query');
+  return cached?.data || [];
+}
+
+function parseBuildingResponse(data: { elements?: Array<Record<string, unknown>> }): OSMBuilding[] {
+  const buildings: OSMBuilding[] = [];
+  if (!data.elements) return buildings;
+
+  for (const element of data.elements) {
+    const tags = element.tags as Record<string, string> | undefined;
+    if (!tags) continue;
+
+    let coords: Array<{ latitude: number; longitude: number }> = [];
+
+    if (element.type === 'way' && element.geometry) {
+      coords = (element.geometry as Array<{ lat: number; lon: number }>)
+        .map(p => ({ latitude: p.lat, longitude: p.lon }));
+    } else if (element.type === 'relation' && element.members) {
+      const outerWays = (element.members as Array<{ type: string; role: string; geometry?: Array<{ lat: number; lon: number }> }>)
+        .filter(m => m.type === 'way' && m.role === 'outer' && m.geometry);
+      if (outerWays.length > 0) {
+        coords = joinWaysIntoRing(outerWays.map(w => ({ geometry: w.geometry })));
+      }
+    }
+
+    if (coords.length < 3) continue;
+
+    // Compute center
+    const latSum = coords.reduce((s, c) => s + c.latitude, 0);
+    const lngSum = coords.reduce((s, c) => s + c.longitude, 0);
+    const center = { latitude: latSum / coords.length, longitude: lngSum / coords.length };
+
+    // Determine building type
+    const rawType = tags.building || 'other';
+    const buildingType = (['apartments', 'flats', 'residential', 'unit'].includes(rawType)
+      ? rawType
+      : 'other') as OSMBuilding['buildingType'];
+
+    // Estimate units from levels or default
+    const levels = parseInt(tags['building:levels'] || '0', 10);
+    const flats = parseInt(tags['building:flats'] || '0', 10);
+    const estimatedUnits = flats > 0 ? flats : (levels > 0 ? levels * 4 : 8); // rough: 4 units/level default
+
+    // Build address from tags
+    const addrParts = [tags['addr:unit'], tags['addr:housenumber'], tags['addr:street']].filter(Boolean);
+    const address = addrParts.length > 0 ? addrParts.join(' ') : undefined;
+
+    buildings.push({
+      id: String(element.id),
+      coordinates: coords,
+      center,
+      name: tags.name,
+      address,
+      levels: levels || undefined,
+      buildingType,
+      estimatedUnits,
+    });
+  }
+
+  return buildings;
 }

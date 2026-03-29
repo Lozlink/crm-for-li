@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View, ScrollView, Dimensions, RefreshControl } from 'react-native';
+import { StyleSheet, View, ScrollView, Dimensions, RefreshControl, TouchableOpacity } from 'react-native';
 import { useTheme, Text, Chip, ActivityIndicator, Surface } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -207,9 +207,10 @@ export default function PipelineScreen() {
 
     return (
       <Surface key={property.id} style={styles.card} elevation={1}>
-        <View
+        <TouchableOpacity
           style={styles.cardTouchable}
-          onTouchEnd={() => handlePropertyPress(property)}
+          onPress={() => handlePropertyPress(property)}
+          activeOpacity={0.7}
           accessible
           accessibilityRole="button"
           accessibilityLabel={`Property: ${property.address}, ${days} days in stage`}
@@ -229,13 +230,24 @@ export default function PipelineScreen() {
                 {price}
               </Text>
             )}
-            <Chip
-              compact
-              style={[styles.daysBadge, { backgroundColor: bandColors.bg }]}
-              textStyle={{ color: bandColors.text, fontSize: 11 }}
-            >
-              {days}d
-            </Chip>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {property.latitude != null && property.longitude != null && (
+                <TouchableOpacity
+                  onPress={() => router.push(`/(tabs)/map?lat=${property.latitude}&lng=${property.longitude}&zoom=0.005&layer=properties` as never)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  activeOpacity={0.6}
+                >
+                  <Icon name="map-marker-outline" size={16} color={theme.colors.primary} />
+                </TouchableOpacity>
+              )}
+              <Chip
+                compact
+                style={[styles.daysBadge, { backgroundColor: bandColors.bg }]}
+                textStyle={{ color: bandColors.text, fontSize: 11 }}
+              >
+                {days}d
+              </Chip>
+            </View>
           </View>
 
           {/* Beds / Baths / Cars */}
@@ -267,7 +279,7 @@ export default function PipelineScreen() {
               )}
             </View>
           )}
-        </View>
+        </TouchableOpacity>
       </Surface>
     );
   };

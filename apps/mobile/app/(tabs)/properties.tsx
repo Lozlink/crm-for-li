@@ -496,6 +496,15 @@ export default function PropertiesScreen() {
                   {price}
                 </Text>
               )}
+              {item.latitude != null && item.longitude != null && (
+                <Icon
+                  name="map-marker-radius-outline"
+                  size={18}
+                  color={theme.colors.onSurfaceVariant}
+                  onPress={() => router.push(`/(tabs)/map?lat=${item.latitude}&lng=${item.longitude}&zoom=0.005&layer=properties` as never)}
+                  style={{ marginLeft: price ? 8 : 'auto' }}
+                />
+              )}
             </View>
 
             {/* Beds/Baths/Cars row */}

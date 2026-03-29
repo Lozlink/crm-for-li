@@ -1,5 +1,5 @@
 export { supabase, isDemoMode, generateUUID } from './supabase';
-export { fetchSuburbBoundaries, fetchSuburbByName } from './overpass';
+export { fetchSuburbBoundaries, fetchSuburbByName, fetchMultiDwellingBuildings } from './overpass';
 
 // Auth
 export {
