@@ -1,11 +1,12 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { useCRMStore } from './useCRMStore';
+import type { CallOutcome, Contact } from '@realestate-crm/types';
 import type { RecentCall } from '../../../modules/caller-id/src/CallerIdModule';
 
 // Lazy-import CallerIdModule to avoid crash when native module is not available
 // (e.g. running in web or Expo Go where native modules aren't linked)
-let CallerIdModule: any = null;
+let CallerIdModule: ReturnType<typeof require> = null;
 try {
   CallerIdModule = require('../../../modules/caller-id/src').default;
 } catch {}
@@ -41,7 +42,7 @@ function formatDuration(seconds: number): string {
 /**
  * Build a human-readable content string for an auto-logged call activity.
  */
-function buildCallContent(call: RecentCall, contactName: string): string {
+function buildCallContent(call: RecentCall): string {
   const directionLabel =
     call.type === 'incoming'
       ? 'Incoming call'
@@ -58,15 +59,34 @@ function buildCallContent(call: RecentCall, contactName: string): string {
 }
 
 /**
+ * Represents a call that matched a CRM contact and needs user input
+ * on the outcome before being logged as an activity.
+ */
+export interface PendingCallOutcome {
+  /** The matched CRM contact */
+  contact: Contact;
+  /** The raw call data from the native module */
+  call: RecentCall;
+  /** Display-friendly contact name */
+  contactName: string;
+  /** Pre-built content string for the activity */
+  content: string;
+  /** Dedup key to prevent double-logging */
+  callKey: string;
+}
+
+/**
  * Hook that detects when the app returns to the foreground after a phone call
- * and automatically logs matched calls as CRM activities.
+ * and exposes pending calls for user outcome input before logging activities.
  *
  * How it works:
  * 1. Listens for AppState transitions from background/inactive to active.
  * 2. On foreground return, queries the native CallerIdModule for recent calls
  *    that occurred since the last check.
  * 3. Matches call phone numbers against CRM contacts using last-8-digit comparison.
- * 4. Creates a 'call' activity for each matched call.
+ * 4. Instead of immediately creating activities, stores matched calls as "pending"
+ *    so the UI can prompt the user for a call outcome.
+ * 5. Once the user selects an outcome (or skips), the activity is created.
  *
  * Platform notes:
  * - Android: Fully functional, reads from the system CallLog content provider.
@@ -81,12 +101,17 @@ export function useCallLogSync() {
   const contacts = useCRMStore((state) => state.contacts);
   const addActivity = useCRMStore((state) => state.addActivity);
 
+  const [pendingCall, setPendingCall] = useState<PendingCallOutcome | null>(null);
+
   // Track the timestamp of the last check to avoid re-querying old calls
   const lastCheckTimestampRef = useRef<number>(Date.now());
 
   // Track logged call timestamps to avoid duplicate activity creation.
   // Uses a Set of "phone:timestamp" keys for O(1) dedup lookups.
   const loggedCallKeysRef = useRef<Set<string>>(new Set());
+
+  // Queue of pending calls waiting to be shown to the user (one at a time)
+  const pendingQueueRef = useRef<PendingCallOutcome[]>([]);
 
   // Keep a ref to the latest contacts so the AppState listener closure
   // always sees the current list without needing to re-subscribe.
@@ -100,6 +125,57 @@ export function useCallLogSync() {
   useEffect(() => {
     addActivityRef.current = addActivity;
   }, [addActivity]);
+
+  /**
+   * Show the next pending call from the queue, or clear state if empty.
+   */
+  const showNextPending = useCallback(() => {
+    if (pendingQueueRef.current.length > 0) {
+      setPendingCall(pendingQueueRef.current.shift()!);
+    } else {
+      setPendingCall(null);
+    }
+  }, []);
+
+  /**
+   * Called by the UI when the user selects an outcome for the pending call.
+   * Creates the activity with the chosen call_outcome and advances to the next pending call.
+   */
+  const resolveCallOutcome = useCallback(async (outcome: CallOutcome | null) => {
+    const current = pendingCall;
+    if (!current) return;
+
+    // Mark as logged before async to prevent races
+    loggedCallKeysRef.current.add(current.callKey);
+
+    try {
+      await addActivityRef.current({
+        contact_id: current.contact.id,
+        type: 'call',
+        content: current.content,
+        call_outcome: outcome,
+      });
+    } catch (err) {
+      // Remove from logged set so it can be retried next time
+      loggedCallKeysRef.current.delete(current.callKey);
+      console.warn(
+        '[useCallLogSync] Failed to log call activity for',
+        current.contactName,
+        ':',
+        err
+      );
+    }
+
+    showNextPending();
+  }, [pendingCall, showNextPending]);
+
+  /**
+   * Dismiss the current pending call without logging an outcome.
+   * This still creates the activity but with null call_outcome.
+   */
+  const skipCallOutcome = useCallback(async () => {
+    await resolveCallOutcome(null);
+  }, [resolveCallOutcome]);
 
   const processRecentCalls = useCallback(async () => {
     if (!CallerIdModule) return;
@@ -120,8 +196,10 @@ export function useCallLogSync() {
     const currentContacts = contactsRef.current;
     if (currentContacts.length === 0) return;
 
+    const newPending: PendingCallOutcome[] = [];
+
     for (const call of recentCalls) {
-      // Dedup: skip calls we have already logged
+      // Dedup: skip calls we have already logged or queued
       const callKey = `${toDigitsOnly(call.phone)}:${call.timestamp}`;
       if (loggedCallKeysRef.current.has(callKey)) continue;
 
@@ -136,25 +214,21 @@ export function useCallLogSync() {
         .filter(Boolean)
         .join(' ');
 
-      // Mark as logged before the async call to prevent races
-      loggedCallKeysRef.current.add(callKey);
+      newPending.push({
+        contact: matchedContact,
+        call,
+        contactName,
+        content: buildCallContent(call),
+        callKey,
+      });
+    }
 
-      try {
-        await addActivityRef.current({
-          contact_id: matchedContact.id,
-          type: 'call',
-          content: buildCallContent(call, contactName),
-        });
-      } catch (err) {
-        // Remove from logged set so it can be retried next time
-        loggedCallKeysRef.current.delete(callKey);
-        console.warn(
-          '[useCallLogSync] Failed to log call activity for',
-          contactName,
-          ':',
-          err
-        );
-      }
+    if (newPending.length === 0) return;
+
+    // Add to queue and show the first one if nothing is currently shown
+    pendingQueueRef.current.push(...newPending);
+    if (!pendingCall) {
+      showNextPending();
     }
 
     // Prevent the dedup set from growing unboundedly.
@@ -163,7 +237,7 @@ export function useCallLogSync() {
       const entries = Array.from(loggedCallKeysRef.current);
       loggedCallKeysRef.current = new Set(entries.slice(entries.length - 200));
     }
-  }, []);
+  }, [pendingCall, showNextPending]);
 
   useEffect(() => {
     if (!CallerIdModule) return;
@@ -188,4 +262,13 @@ export function useCallLogSync() {
       subscription.remove();
     };
   }, [processRecentCalls]);
+
+  return {
+    /** The current pending call awaiting user outcome selection, or null */
+    pendingCall,
+    /** Call with the user's selected outcome to log the activity and advance */
+    resolveCallOutcome,
+    /** Skip the current pending call (logs activity with null outcome) */
+    skipCallOutcome,
+  };
 }

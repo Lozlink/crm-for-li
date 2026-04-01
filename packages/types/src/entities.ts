@@ -45,6 +45,7 @@ export interface Contact {
 }
 
 export type ActivitySource = 'office' | 'field' | 'call' | 'tracking' | 'inspection' | 'import';
+export type CallOutcome = 'connected' | 'no_answer' | 'voicemail' | 'wrong_number' | 'busy';
 
 export interface Activity {
   id: string;
@@ -52,6 +53,7 @@ export interface Activity {
   type: 'note' | 'call' | 'meeting' | 'email';
   content?: string;
   source?: ActivitySource;
+  call_outcome?: CallOutcome | null;
   tracking_annotation_id?: string;
   user_id?: string;
   team_id?: string;
@@ -468,6 +470,48 @@ export interface SoldRecord {
   source?: string;
   team_id?: string;
   created_at?: string;
+}
+
+// --- SMS Campaigns ---
+
+export type SmsCampaignStatus = 'draft' | 'sending' | 'sent' | 'failed';
+export type SmsMessageStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'bounced';
+
+export interface SmsCampaign {
+  id: string;
+  name: string;
+  message_template: string;
+  status: SmsCampaignStatus;
+  recipient_count: number;
+  sent_count: number;
+  failed_count: number;
+  scheduled_at?: string;
+  sent_at?: string;
+  user_id?: string;
+  team_id?: string;
+  created_at?: string;
+}
+
+export interface SmsMessage {
+  id: string;
+  campaign_id: string;
+  contact_id?: string;
+  phone_number: string;
+  message_body: string;
+  status: SmsMessageStatus;
+  sent_at?: string;
+  delivered_at?: string;
+  error_message?: string;
+  user_id?: string;
+  team_id?: string;
+  created_at?: string;
+}
+
+export interface SmsOptOut {
+  id: string;
+  phone_number: string;
+  opted_out_at: string;
+  team_id?: string;
 }
 
 // --- Suburb Statistics (abs Census) ---

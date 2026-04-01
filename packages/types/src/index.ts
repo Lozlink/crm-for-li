@@ -2,7 +2,7 @@
 export type {
   Tag, Contact, Activity, ActivityWithContact, ContactFormData,
   ContactSource, ContactType, ContactStatus, PreferredContactMethod,
-  ActivitySource,
+  ActivitySource, CallOutcome,
 } from './entities';
 export type { Route, RouteStop, RouteStatus, RouteMode, StopStatus, StreetStats } from './entities';
 export type { TrackingSession, TrackingBreadcrumb, TrackingAnnotation } from './entities';
@@ -30,6 +30,10 @@ export type {
   CustomFieldDefinition, CustomFieldValue, CustomFieldWithValue,
 } from './entities';
 export type { SoldRecord, SuburbStats } from './entities';
+export type {
+  SmsCampaign, SmsMessage, SmsOptOut,
+  SmsCampaignStatus, SmsMessageStatus,
+} from './entities';
 
 // Map types
 export type { MapRegion, SavedSuburb, SuburbBoundary, OSMBuilding } from './map';

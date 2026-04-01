@@ -1,10 +1,11 @@
-export { useCRMStore } from './useCRMStore';
+export { useCRMStore, syncContactTags } from './useCRMStore';
 export { useAuthStore } from './useAuthStore';
 export { usePermissions } from './usePermissions';
 export { useRouteStore } from './useRouteStore';
 export { useStreetStats } from './useStreetStats';
 export { useCallerIdSync } from './useCallerIdSync';
 export { useCallLogSync } from './useCallLogSync';
+export type { PendingCallOutcome } from './useCallLogSync';
 export { useTrackingStore } from './useTrackingStore';
 export { usePropertyStore } from './usePropertyStore';
 export { useBuyerMatchStore } from './useBuyerMatchStore';
@@ -17,6 +18,9 @@ export { useCustomFieldStore } from './useCustomFieldStore';
 export { useDuplicateCheck } from './useDuplicateCheck';
 export { useProspectingMetrics } from './useProspectingMetrics';
 export { useDataEnrichmentStore } from './useDataEnrichmentStore';
+export { useSmsCampaignStore } from './useSmsCampaignStore';
+export { useProspectingMatcher } from './useProspectingMatcher';
+export type { NearbyContact, ProspectingMatcherResult } from './useProspectingMatcher';
 export type {
   ProspectingMetrics, ProspectingPeriodMetrics, ProspectingTrend, ConversionFunnel,
   StaleStreet, WeeklyTrendPoint, ProspectingStreak, InspectionMetrics,

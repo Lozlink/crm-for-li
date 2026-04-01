@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useAuthStore, useCallerIdSync, useCallLogSync, useTrackingStore } from '@realestate-crm/hooks';
 import { useCRMStore } from '@realestate-crm/hooks';
 import { useAppUpdate } from '../hooks/useAppUpdate';
+import CallOutcomeModal from '../components/CallOutcomeModal';
 
 // Error boundary to isolate useAppUpdate from crashing the root layout
 class UpdateErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -119,7 +120,7 @@ export default function RootLayout() {
   }, []);
 
   useCallerIdSync();
-  useCallLogSync();
+  const { pendingCall, resolveCallOutcome, skipCallOutcome } = useCallLogSync();
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -127,6 +128,11 @@ export default function RootLayout() {
       <PaperProvider theme={theme}>
         <StatusBar style="auto" />
         <UpdateErrorBoundary><AppUpdateCheck /></UpdateErrorBoundary>
+        <CallOutcomeModal
+          pendingCall={pendingCall}
+          onSelect={resolveCallOutcome}
+          onSkip={skipCallOutcome}
+        />
         <AuthGate>
           <Stack
             screenOptions={{

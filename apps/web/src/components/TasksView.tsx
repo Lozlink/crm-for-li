@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useTaskStore } from '@realestate-crm/hooks';
+import { useTaskStore, useSmsCampaignStore } from '@realestate-crm/hooks';
 import type { Task, TaskType, TaskStatus, TaskPriority } from '@realestate-crm/types';
 
 // ---------------------------------------------------------------------------
@@ -177,9 +177,18 @@ export default function TasksView() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // Multi-select + bulk SMS state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkSmsModal, setShowBulkSmsModal] = useState(false);
+
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  // Clear selection when view or filters change
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [viewMode, statusFilter, typeFilter, priorityFilter]);
 
   const filtered = useMemo(() => {
     let result = [...tasks];
@@ -188,6 +197,11 @@ export default function TasksView() {
     if (priorityFilter !== 'all') result = result.filter((t) => t.priority === priorityFilter);
     return result;
   }, [tasks, statusFilter, typeFilter, priorityFilter]);
+
+  const selectedTasks = useMemo(
+    () => filtered.filter((t) => selectedIds.has(t.id)),
+    [filtered, selectedIds],
+  );
 
   const handleComplete = useCallback(
     async (e: React.MouseEvent, id: string) => {
@@ -205,6 +219,27 @@ export default function TasksView() {
     [deleteTask],
   );
 
+  const handleToggleSelect = useCallback((e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedIds(new Set(filtered.map((t) => t.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  }, [filtered]);
+
+  const allSelected = filtered.length > 0 && filtered.every((t) => selectedIds.has(t.id));
+  const someSelected = selectedIds.size > 0 && !allSelected;
+
   return (
     <div className="p-6">
       {/* Header */}
@@ -213,9 +248,27 @@ export default function TasksView() {
           <h1 className="text-2xl font-bold text-gray-900">Tasks</h1>
           <p className="text-sm text-gray-500">
             {filtered.length} of {tasks.length} tasks
+            {selectedIds.size > 0 && (
+              <span className="ml-2 font-medium text-primary-600">
+                &mdash; {selectedIds.size} selected
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Bulk SMS — appears when 2+ tasks selected in list view */}
+          {viewMode === 'list' && selectedIds.size >= 2 && (
+            <button
+              onClick={() => setShowBulkSmsModal(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+              </svg>
+              Bulk SMS ({selectedIds.size})
+            </button>
+          )}
+
           {/* View toggle */}
           <div className="flex rounded-lg border border-gray-300 overflow-hidden">
             <button
@@ -298,12 +351,29 @@ export default function TasksView() {
           allCount={tasks.length}
           isLoading={isLoading}
           expandedId={expandedId}
+          selectedIds={selectedIds}
+          allSelected={allSelected}
+          someSelected={someSelected}
           onToggleExpand={(id) => setExpandedId(expandedId === id ? null : id)}
           onComplete={handleComplete}
           onDelete={handleDelete}
+          onToggleSelect={handleToggleSelect}
+          onSelectAll={handleSelectAll}
         />
       ) : (
         <TaskCalendarView tasks={filtered} />
+      )}
+
+      {/* Bulk SMS modal */}
+      {showBulkSmsModal && (
+        <BulkSmsModal
+          tasks={selectedTasks}
+          onClose={() => setShowBulkSmsModal(false)}
+          onSent={() => {
+            setShowBulkSmsModal(false);
+            setSelectedIds(new Set());
+          }}
+        />
       )}
 
       {/* Create modal */}
@@ -321,6 +391,375 @@ export default function TasksView() {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers shared with BulkSmsModal (mirrors mobile generateTaskMessage)
+// ---------------------------------------------------------------------------
+
+function generateTaskMessage(type: TaskType, name: string, context?: { property?: string; date?: string; title?: string }): string {
+  switch (type) {
+    case 'follow_up':
+      return `Hi ${name}, following up regarding ${context?.property || 'our recent conversation'}. Would love to chat when you have a moment.`;
+    case 'appointment':
+      return `Hi ${name}, confirming our appointment${context?.date ? ` on ${context.date}` : ''}. Looking forward to speaking with you.`;
+    case 'inspection_reminder':
+      return `Hi ${name}, reminder: inspection${context?.property ? ` at ${context.property}` : ''}${context?.date ? ` on ${context.date}` : ''}. See you there!`;
+    default:
+      return `Hi ${name}, touching base regarding ${context?.title || 'your enquiry'}. Let me know if you have any questions.`;
+  }
+}
+
+function getTaskContactName(task: Task): string {
+  const c = Array.isArray(task.contact) ? task.contact[0] : task.contact;
+  if (!c) return 'there';
+  return [c.first_name, c.last_name].filter(Boolean).join(' ') || 'there';
+}
+
+function getTaskProperty(task: Task): string | undefined {
+  const p = Array.isArray(task.property) ? task.property[0] : task.property;
+  return p?.address;
+}
+
+function getTaskContactPhone(task: Task): string | undefined {
+  const c = Array.isArray(task.contact) ? task.contact[0] : task.contact;
+  return c?.phone;
+}
+
+// ---------------------------------------------------------------------------
+// Bulk SMS Modal
+// ---------------------------------------------------------------------------
+
+// Two phases: 'compose' (edit template + review) → 'sending' (step through one at a time)
+type BulkSmsPhase = 'compose' | 'sending';
+
+function BulkSmsModal({
+  tasks,
+  onClose,
+  onSent,
+}: {
+  tasks: Task[];
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const createCampaign = useSmsCampaignStore((s) => s.createCampaign);
+  const addRecipients = useSmsCampaignStore((s) => s.addRecipients);
+
+  const tasksWithPhone = useMemo(
+    () => tasks.filter((t) => getTaskContactPhone(t)),
+    [tasks],
+  );
+
+  const defaultTemplate = useMemo(() => {
+    const first = tasksWithPhone[0] ?? tasks[0];
+    if (!first) return '';
+    return generateTaskMessage(first.type, '{{first_name}}', {
+      property: getTaskProperty(first),
+      date: first.due_at ? formatDateTime(first.due_at) : undefined,
+      title: first.title,
+    });
+  }, [tasks, tasksWithPhone]);
+
+  const [phase, setPhase] = useState<BulkSmsPhase>('compose');
+  const [template, setTemplate] = useState(defaultTemplate);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [sentCount, setSentCount] = useState(0);
+  const [skippedCount, setSkippedCount] = useState(0);
+  const [campaignCreating, setCampaignCreating] = useState(false);
+  const [error, setError] = useState('');
+
+  // Compose phase: preview against first contact
+  const previewName = getTaskContactName(tasksWithPhone[0] ?? tasks[0] ?? ({} as Task));
+  const composePreview = template.replace(/\{\{first_name\}\}/g, previewName);
+
+  // Sending phase: current task
+  const currentTask = tasksWithPhone[currentIndex];
+  const currentName = currentTask ? getTaskContactName(currentTask) : '';
+  const currentPhone = currentTask ? getTaskContactPhone(currentTask) : '';
+  const currentMessage = currentTask
+    ? template.replace(/\{\{first_name\}\}/g, currentName)
+    : '';
+
+  const isDone = phase === 'sending' && currentIndex >= tasksWithPhone.length;
+
+  // Start: create campaign for tracking, then enter sending phase
+  const handleStart = useCallback(async () => {
+    if (!template.trim()) { setError('Message template is required'); return; }
+    if (tasksWithPhone.length === 0) { setError('None of the selected tasks have a contact with a phone number'); return; }
+    setCampaignCreating(true);
+    setError('');
+    try {
+      const campaign = await createCampaign({
+        name: `Bulk SMS — ${new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`,
+        message_template: template.trim(),
+        status: 'draft',
+      });
+      if (campaign) {
+        const contacts = tasksWithPhone.map((t) => {
+          const c = Array.isArray(t.contact) ? t.contact[0] : t.contact;
+          return {
+            id: c?.id ?? t.id,
+            first_name: c?.first_name ?? '',
+            phone: getTaskContactPhone(t),
+          } as Parameters<typeof addRecipients>[1][number];
+        });
+        await addRecipients(campaign.id, contacts);
+      }
+    } catch {
+      // Non-fatal: campaign tracking failed but we can still proceed with sending
+    } finally {
+      setCampaignCreating(false);
+    }
+    setCurrentIndex(0);
+    setSentCount(0);
+    setSkippedCount(0);
+    setPhase('sending');
+  }, [template, tasksWithPhone, createCampaign, addRecipients]);
+
+  // Open the SMS app for the current contact, then advance
+  const handleOpenSms = useCallback(() => {
+    if (!currentPhone) return;
+    const phone = currentPhone.replace(/[^\d+]/g, '');
+    const body = encodeURIComponent(currentMessage);
+    window.open(`sms:${phone}?body=${body}`, '_blank');
+    setSentCount((n) => n + 1);
+    setCurrentIndex((i) => i + 1);
+  }, [currentPhone, currentMessage]);
+
+  const handleSkip = useCallback(() => {
+    setSkippedCount((n) => n + 1);
+    setCurrentIndex((i) => i + 1);
+  }, []);
+
+  const handleFinish = useCallback(() => {
+    onSent();
+  }, [onSent]);
+
+  // Progress bar width
+  const progressPct = tasksWithPhone.length > 0
+    ? Math.round((currentIndex / tasksWithPhone.length) * 100)
+    : 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={isDone ? handleFinish : onClose} />
+      <div className="relative w-full max-w-lg rounded-xl bg-white shadow-xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Bulk SMS</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {phase === 'compose' ? (
+                <>
+                  <span className="font-medium text-gray-700">{tasksWithPhone.length}</span> of {tasks.length} contacts have a phone number
+                  {tasks.length - tasksWithPhone.length > 0 && (
+                    <span className="ml-1 text-amber-600">
+                      ({tasks.length - tasksWithPhone.length} will be skipped — no phone)
+                    </span>
+                  )}
+                </>
+              ) : isDone ? (
+                'All done'
+              ) : (
+                <>Sending {currentIndex + 1} of {tasksWithPhone.length}</>
+              )}
+            </p>
+          </div>
+          <button
+            onClick={isDone ? handleFinish : onClose}
+            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+
+          {/* ── COMPOSE PHASE ── */}
+          {phase === 'compose' && (
+            <>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Message Template
+                  <span className="ml-2 text-xs font-normal text-gray-400">
+                    {'{{first_name}}'} is replaced per contact
+                  </span>
+                </label>
+                <textarea
+                  value={template}
+                  onChange={(e) => setTemplate(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 resize-none"
+                />
+              </div>
+
+              {template && (
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="mb-1 text-xs font-medium text-gray-500">
+                    Preview (as sent to {previewName})
+                  </p>
+                  <p className="text-sm text-gray-700">{composePreview}</p>
+                </div>
+              )}
+
+              {/* Recipient list */}
+              {tasksWithPhone.length > 0 && (
+                <div className="max-h-32 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-2 space-y-1">
+                  {tasksWithPhone.map((t) => (
+                    <div key={t.id} className="flex items-center justify-between text-xs text-gray-600">
+                      <span className="font-medium">{getTaskContactName(t)}</span>
+                      <span className="text-gray-400">{getTaskContactPhone(t)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {error && (
+                <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStart}
+                  disabled={campaignCreating || tasksWithPhone.length === 0 || !template.trim()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                >
+                  {campaignCreating ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      Preparing...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
+                      </svg>
+                      Start Bulk SMS
+                    </>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── SENDING PHASE — in progress ── */}
+          {phase === 'sending' && !isDone && currentTask && (
+            <>
+              {/* Progress bar */}
+              <div>
+                <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
+                  <span>Sending {currentIndex + 1} of {tasksWithPhone.length}</span>
+                  <span>{sentCount} sent &middot; {skippedCount} skipped</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full bg-green-500 transition-all duration-300"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Current contact card */}
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2">Next recipient</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-base font-semibold text-gray-900">{currentName}</p>
+                    <p className="text-sm text-gray-500">{currentPhone}</p>
+                  </div>
+                  <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                    {currentIndex + 1}/{tasksWithPhone.length}
+                  </span>
+                </div>
+                <div className="mt-3 rounded-lg bg-white border border-gray-100 p-3">
+                  <p className="text-xs font-medium text-gray-400 mb-1">Message</p>
+                  <p className="text-sm text-gray-700">{currentMessage}</p>
+                </div>
+              </div>
+
+              {/* Upcoming contacts */}
+              {currentIndex + 1 < tasksWithPhone.length && (
+                <p className="text-xs text-gray-400">
+                  Up next: <span className="font-medium text-gray-600">
+                    {getTaskContactName(tasksWithPhone[currentIndex + 1])}
+                  </span>
+                  {currentIndex + 2 < tasksWithPhone.length && (
+                    <> and {tasksWithPhone.length - currentIndex - 2} more</>
+                  )}
+                </p>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleSkip}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Skip
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors"
+                >
+                  Stop
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenSms}
+                  className="ml-auto inline-flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                  </svg>
+                  Open SMS for {currentName}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── SENDING PHASE — done ── */}
+          {phase === 'sending' && isDone && (
+            <>
+              <div className="rounded-xl bg-green-50 p-5 text-center">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+                  <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                </div>
+                <p className="text-base font-semibold text-green-900">All done!</p>
+                <p className="mt-1 text-sm text-green-700">
+                  {sentCount} SMS opened &middot; {skippedCount} skipped
+                </p>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={handleFinish}
+                  className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            </>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // List View
 // ---------------------------------------------------------------------------
 
@@ -329,17 +768,27 @@ function TaskListView({
   allCount,
   isLoading,
   expandedId,
+  selectedIds,
+  allSelected,
+  someSelected,
   onToggleExpand,
   onComplete,
   onDelete,
+  onToggleSelect,
+  onSelectAll,
 }: {
   tasks: Task[];
   allCount: number;
   isLoading: boolean;
   expandedId: string | null;
+  selectedIds: Set<string>;
+  allSelected: boolean;
+  someSelected: boolean;
   onToggleExpand: (id: string) => void;
   onComplete: (e: React.MouseEvent, id: string) => void;
   onDelete: (e: React.MouseEvent, id: string) => void;
+  onToggleSelect: (e: React.MouseEvent, id: string) => void;
+  onSelectAll: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -357,6 +806,16 @@ function TaskListView({
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
+              <th className="pl-4 pr-2 py-3 w-8">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                  onChange={onSelectAll}
+                  className="rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+                  title="Select all"
+                />
+              </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Title</th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Type</th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Status</th>
@@ -373,9 +832,11 @@ function TaskListView({
                 key={task.id}
                 task={task}
                 isExpanded={expandedId === task.id}
+                isSelected={selectedIds.has(task.id)}
                 onToggle={() => onToggleExpand(task.id)}
                 onComplete={onComplete}
                 onDelete={onDelete}
+                onToggleSelect={onToggleSelect}
               />
             ))}
           </tbody>
@@ -388,15 +849,19 @@ function TaskListView({
 function TaskRow({
   task,
   isExpanded,
+  isSelected,
   onToggle,
   onComplete,
   onDelete,
+  onToggleSelect,
 }: {
   task: Task;
   isExpanded: boolean;
+  isSelected: boolean;
   onToggle: () => void;
   onComplete: (e: React.MouseEvent, id: string) => void;
   onDelete: (e: React.MouseEvent, id: string) => void;
+  onToggleSelect: (e: React.MouseEvent, id: string) => void;
 }) {
   const overdue = isOverdue(task);
 
@@ -404,10 +869,26 @@ function TaskRow({
     <>
       <tr
         className={`cursor-pointer transition-colors ${
-          overdue ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-gray-50'
+          isSelected
+            ? 'bg-primary-50'
+            : overdue
+              ? 'bg-red-50 hover:bg-red-100'
+              : 'hover:bg-gray-50'
         }`}
         onClick={onToggle}
       >
+        <td className="pl-4 pr-2 py-3" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={(e) => {
+              const me = e as unknown as React.MouseEvent;
+              onToggleSelect(me, task.id);
+            }}
+            onClick={(e) => onToggleSelect(e, task.id)}
+            className="rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+          />
+        </td>
         <td className="px-4 py-3">
           <span className="text-sm font-medium text-gray-900">{task.title}</span>
         </td>
@@ -467,7 +948,7 @@ function TaskRow({
       {/* Expanded detail row */}
       {isExpanded && (
         <tr className={overdue ? 'bg-red-50/50' : 'bg-gray-50/50'}>
-          <td colSpan={8} className="px-6 py-4">
+          <td colSpan={9} className="px-6 py-4">
             <div className="space-y-2 text-sm">
               {task.description && (
                 <div>

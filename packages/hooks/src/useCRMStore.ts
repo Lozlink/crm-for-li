@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { storage } from '@realestate-crm/utils';
+import { storage, normalizeAddress } from '@realestate-crm/utils';
 import type { Contact, Tag, Activity, ActivityWithContact, MapRegion, SavedSuburb, ActivitySource } from '@realestate-crm/types';
 import { supabase, isDemoMode, generateUUID } from '@realestate-crm/api';
 import { useAuthStore } from './useAuthStore';
@@ -67,6 +67,7 @@ interface CRMState {
   updateActivity: (id: string, updates: Partial<Activity>) => Promise<void>;
   bulkAddContacts: (contacts: Omit<Contact, 'id' | 'created_at' | 'updated_at'>[]) => Promise<Contact[]>;
   bulkDeleteContacts: (ids: string[]) => Promise<void>;
+  findContactByAddress: (address: string) => Contact | undefined;
 
   // Saved Suburbs
   addSavedSuburb: (suburb: Omit<SavedSuburb, 'id'>) => void;
@@ -99,7 +100,7 @@ function getTeamContext() {
 }
 
 // Helper to sync contact_tags junction table for a contact
-async function syncContactTags(contactId: string, tagIds: string[], teamId: string | null) {
+export async function syncContactTags(contactId: string, tagIds: string[], teamId: string | null) {
   // Remove all existing tags for this contact
   const { error: deleteError } = await supabase.from('contact_tags').delete().eq('contact_id', contactId);
   if (deleteError) throw deleteError;
@@ -829,6 +830,14 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       set({ error: error.message });
       return [];
     }
+  },
+
+  findContactByAddress: (address) => {
+    if (!address.trim()) return undefined;
+    const normalized = normalizeAddress(address);
+    return get().contacts.find(
+      (c) => c.address && normalizeAddress(c.address) === normalized
+    );
   },
 
   bulkDeleteContacts: async (ids) => {

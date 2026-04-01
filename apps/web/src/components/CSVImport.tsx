@@ -60,6 +60,12 @@ export default function CSVImport({ onClose }: CSVImportProps) {
   const [errorIndices, setErrorIndices] = useState<Set<number>>(new Set());
   const [smartParsedIndices, setSmartParsedIndices] = useState<Set<number>>(new Set());
 
+  // Preview filters
+  const [filterSkipNoPhone, setFilterSkipNoPhone] = useState(false);
+  const [filterSkipNoEmail, setFilterSkipNoEmail] = useState(false);
+  const [filterSkipDupes, setFilterSkipDupes] = useState(true);
+  const [filterSearch, setFilterSearch] = useState('');
+
   // Results
   const [importedCount, setImportedCount] = useState(0);
   const [skippedCount, setSkippedCount] = useState(0);
@@ -220,15 +226,42 @@ export default function CSVImport({ onClose }: CSVImportProps) {
     });
   }, [errorIndices]);
 
+  // Effective skip set: union of manual skips + active filter-driven skips
+  const effectiveSkipIndices = useMemo(() => {
+    const combined = new Set(skipIndices);
+    mappedContacts.forEach((c, i) => {
+      if (errorIndices.has(i)) return; // already covered
+      if (filterSkipNoPhone && !c.phone) combined.add(i);
+      if (filterSkipNoEmail && !c.email) combined.add(i);
+      if (filterSkipDupes && dupeMap.has(i)) combined.add(i);
+    });
+    return combined;
+  }, [skipIndices, mappedContacts, errorIndices, filterSkipNoPhone, filterSkipNoEmail, filterSkipDupes, dupeMap]);
+
+  // Rows visible in the preview after search filter
+  const visibleIndices = useMemo(() => {
+    const q = filterSearch.trim().toLowerCase();
+    return mappedContacts
+      .map((c, i) => ({ c, i }))
+      .filter(({ c }) => {
+        if (!q) return true;
+        const name = `${c.first_name} ${c.last_name || ''}`.toLowerCase();
+        const phone = (c.phone || '').toLowerCase();
+        const email = (c.email || '').toLowerCase();
+        const address = (c.address || '').toLowerCase();
+        return name.includes(q) || phone.includes(q) || email.includes(q) || address.includes(q);
+      });
+  }, [mappedContacts, filterSearch]);
+
   const handleImport = useCallback(async () => {
     setStep('importing');
-    const toImport = mappedContacts.filter((_, i) => !skipIndices.has(i));
+    const toImport = mappedContacts.filter((_, i) => !effectiveSkipIndices.has(i));
     const created = await bulkAddContacts(toImport);
     setImportedCount(created.length);
-    setSkippedCount(skipIndices.size - errorIndices.size);
+    setSkippedCount(effectiveSkipIndices.size - errorIndices.size);
     setErrorCount(errorIndices.size);
     setStep('done');
-  }, [mappedContacts, skipIndices, errorIndices, bulkAddContacts]);
+  }, [mappedContacts, effectiveSkipIndices, errorIndices, bulkAddContacts]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -371,13 +404,55 @@ export default function CSVImport({ onClose }: CSVImportProps) {
           {/* Step 3: Dedup Preview */}
           {step === 'preview' && (
             <div>
-              <p className="mb-4 text-sm text-gray-500">
-                {mappedContacts.length - skipIndices.size} will be imported,{' '}
-                {skipIndices.size - errorIndices.size} duplicates skipped,{' '}
-                {errorIndices.size} errors
+              {/* Filter toggles */}
+              <div className="mb-4 space-y-2">
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={filterSkipNoPhone}
+                      onChange={(e) => setFilterSkipNoPhone(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    Skip contacts without phone
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={filterSkipNoEmail}
+                      onChange={(e) => setFilterSkipNoEmail(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    Skip contacts without email
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={filterSkipDupes}
+                      onChange={(e) => setFilterSkipDupes(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    Skip duplicate contacts
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search preview rows..."
+                  value={filterSearch}
+                  onChange={(e) => setFilterSearch(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </div>
+
+              <p className="mb-3 text-sm text-gray-500">
+                <span className="font-medium text-gray-900">
+                  {mappedContacts.length - effectiveSkipIndices.size} of {mappedContacts.length}
+                </span>{' '}
+                contacts will be imported
+                {errorIndices.size > 0 && `, ${errorIndices.size} errors`}
               </p>
 
-              <div className="max-h-96 overflow-y-auto rounded-lg border">
+              <div className="max-h-80 overflow-y-auto rounded-lg border">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0">
                     <tr className="bg-gray-50">
@@ -389,14 +464,15 @@ export default function CSVImport({ onClose }: CSVImportProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {mappedContacts.map((c, i) => {
+                    {visibleIndices.map(({ c, i }) => {
                       const isDupe = dupeMap.has(i);
                       const isError = errorIndices.has(i);
-                      const isSkipped = skipIndices.has(i);
+                      const isSkipped = effectiveSkipIndices.has(i);
+                      const isManuallySkipped = skipIndices.has(i);
                       const isSmartParsed = smartParsedIndices.has(i);
                       const dupeOf = dupeMap.get(i);
                       return (
-                        <tr key={i} className={`border-t ${isError ? 'bg-red-50' : isSkipped ? 'bg-gray-50' : ''}`}>
+                        <tr key={i} className={`border-t ${isError ? 'bg-red-50' : isSkipped ? 'bg-gray-50 opacity-60' : ''}`}>
                           <td className="px-3 py-2">
                             <input
                               type="checkbox"
@@ -427,6 +503,10 @@ export default function CSVImport({ onClose }: CSVImportProps) {
                               <span className="inline-block rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
                                 Duplicate of {dupeOf?.first_name}
                               </span>
+                            ) : isManuallySkipped ? (
+                              <span className="inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                                Skipped
+                              </span>
                             ) : (
                               <span className="inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
                                 New
@@ -449,10 +529,10 @@ export default function CSVImport({ onClose }: CSVImportProps) {
                 </button>
                 <button
                   onClick={handleImport}
-                  disabled={mappedContacts.length - skipIndices.size === 0}
+                  disabled={mappedContacts.length - effectiveSkipIndices.size === 0}
                   className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50"
                 >
-                  Import {mappedContacts.length - skipIndices.size} Contacts
+                  Import {mappedContacts.length - effectiveSkipIndices.size} Contacts
                 </button>
               </div>
             </div>

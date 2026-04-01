@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   useProspectingMetrics,
   usePropertyStore,
@@ -8,6 +8,7 @@ import {
   useInspectionStore,
   useDataEnrichmentStore,
   useCRMStore,
+  useProspectingMatcher,
 } from '@realestate-crm/hooks';
 import type {
   ProspectingTrend,
@@ -19,6 +20,7 @@ import type {
   MultiDwellingBuilding,
 } from '@realestate-crm/hooks';
 import type { SuburbStats, SoldRecord } from '@realestate-crm/types';
+import AddressAutocomplete from './AddressAutocomplete';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1128,6 +1130,209 @@ function SuburbIntelligenceCard({
 }
 
 // ---------------------------------------------------------------------------
+// Multi-Dwelling Quick Add
+// ---------------------------------------------------------------------------
+
+interface QuickAddSummary {
+  created: number;
+  skipped: number;
+  address: string;
+}
+
+function MultiDwellingQuickAdd() {
+  const bulkAddContacts = useCRMStore((s) => s.bulkAddContacts);
+
+  const [open, setOpen] = useState(false);
+  const [address, setAddress] = useState('');
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | undefined>();
+  const [unitFrom, setUnitFrom] = useState('1');
+  const [unitCount, setUnitCount] = useState('6');
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
+  const [summary, setSummary] = useState<QuickAddSummary | null>(null);
+
+  // Use address-based matcher (no GPS needed on web)
+  const { matchContactByAddress } = useProspectingMatcher(null, null);
+
+  const existingAtAddress = useMemo(() => {
+    if (!address || address.trim().length < 3) return [];
+    return matchContactByAddress(address);
+  }, [address, matchContactByAddress]);
+
+  const existingUnits = useMemo(
+    () => new Set(existingAtAddress.map((c) => c.unit_number).filter(Boolean)),
+    [existingAtAddress],
+  );
+
+  const startUnit = parseInt(unitFrom, 10) || 1;
+  const count = Math.min(Math.max(parseInt(unitCount, 10) || 1, 1), 100);
+  const unitRange = Array.from({ length: count }, (_, i) => String(startUnit + i));
+  const toCreate = unitRange.filter((u) => !existingUnits.has(u));
+
+  const handleCreate = useCallback(async () => {
+    if (!address.trim()) {
+      setError('Address is required');
+      return;
+    }
+    if (toCreate.length === 0) {
+      setError('All units in this range already have contacts');
+      return;
+    }
+    setCreating(true);
+    setError('');
+    setSummary(null);
+    try {
+      const newContacts = toCreate.map((unit) => ({
+        first_name: 'Resident',
+        address: address.trim(),
+        unit_number: unit,
+        latitude: coords?.lat,
+        longitude: coords?.lng,
+      }));
+      await bulkAddContacts(newContacts);
+      setSummary({ created: toCreate.length, skipped: unitRange.length - toCreate.length, address: address.trim() });
+      setAddress('');
+      setCoords(undefined);
+      setUnitFrom('1');
+      setUnitCount('6');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create contacts');
+    } finally {
+      setCreating(false);
+    }
+  }, [address, coords, toCreate, unitRange.length, bulkAddContacts]);
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-5">
+      <button
+        type="button"
+        onClick={() => { setOpen((o) => !o); setSummary(null); setError(''); }}
+        className="flex w-full items-center justify-between"
+      >
+        <div>
+          <h2 className="text-sm font-semibold text-gray-900">Quick Add Multi-Dwelling</h2>
+          <p className="mt-0.5 text-xs text-gray-400">Batch-create contacts at apartment buildings</p>
+        </div>
+        <svg
+          className={`h-5 w-5 shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={1.5}
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="mt-5 space-y-4">
+          {/* Address */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Building Address</label>
+            <AddressAutocomplete
+              value={address}
+              onChange={setAddress}
+              onSelect={(addr, lat, lng) => {
+                setAddress(addr);
+                if (lat !== 0 || lng !== 0) setCoords({ lat, lng });
+              }}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              placeholder="Street address of the building"
+            />
+          </div>
+
+          {/* Existing contacts at address */}
+          {existingAtAddress.length > 0 && (
+            <div className="rounded-lg bg-indigo-50 p-3">
+              <p className="text-xs font-medium text-indigo-700 mb-1.5">
+                {existingAtAddress.length} existing contact{existingAtAddress.length !== 1 ? 's' : ''} at this address
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {existingAtAddress.map((c) => (
+                  <span
+                    key={c.id}
+                    className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700"
+                  >
+                    Unit {c.unit_number || '?'}: {c.first_name} {c.last_name ?? ''}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Unit range inputs */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Starting unit number</label>
+              <input
+                type="number"
+                min="1"
+                value={unitFrom}
+                onChange={(e) => setUnitFrom(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="1"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Number of units</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={unitCount}
+                onChange={(e) => setUnitCount(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="6"
+              />
+            </div>
+          </div>
+
+          {/* Preview */}
+          {address.trim().length >= 3 && toCreate.length > 0 && (
+            <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+              Will create <span className="font-semibold text-gray-900">{toCreate.length}</span> contact{toCreate.length !== 1 ? 's' : ''}
+              {existingUnits.size > 0 && (
+                <> (skipping {unitRange.length - toCreate.length} unit{unitRange.length - toCreate.length !== 1 ? 's' : ''} already in CRM)</>
+              )}
+              {' '}at units {toCreate[0]}–{toCreate[toCreate.length - 1]}.
+            </div>
+          )}
+
+          {error && (
+            <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>
+          )}
+
+          {summary && (
+            <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700">
+              Created <span className="font-semibold">{summary.created}</span> contact{summary.created !== 1 ? 's' : ''} at {summary.address}.
+              {summary.skipped > 0 && <> Skipped {summary.skipped} already-existing unit{summary.skipped !== 1 ? 's' : ''}.</>}
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={creating || !address.trim() || toCreate.length === 0}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 transition-colors"
+            >
+              {creating ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Creating...
+                </>
+              ) : (
+                `Create ${toCreate.length > 0 ? toCreate.length : ''} Contact${toCreate.length !== 1 ? 's' : ''}`
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Data Import Section
 // ---------------------------------------------------------------------------
 
@@ -1481,7 +1686,10 @@ export default function ProspectingReports() {
         suburbContactCounts={metrics.suburbContactCounts}
       />
 
-      {/* Row 7: Data Import (collapsible, full width) */}
+      {/* Row 7: Multi-Dwelling Quick Add (collapsible, full width) */}
+      <MultiDwellingQuickAdd />
+
+      {/* Row 8: Data Import (collapsible, full width) */}
       <DataImportSection
         importSoldHistoryCSV={importSoldHistoryCSV}
         importSuburbStatsCSV={importSuburbStatsCSV}

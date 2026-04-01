@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCRMStore } from '@realestate-crm/hooks';
 import type { Contact, ActivityWithContact } from '@realestate-crm/types';
@@ -17,9 +17,59 @@ export default function NotesView() {
   const contacts = useCRMStore((s) => s.contacts);
   const recentActivities = useCRMStore((s) => s.recentActivities);
   const fetchRecentActivities = useCRMStore((s) => s.fetchRecentActivities);
+  const findContactByAddress = useCRMStore((s) => s.findContactByAddress);
+  const addActivity = useCRMStore((s) => s.addActivity);
   const router = useRouter();
 
   const [search, setSearch] = useState('');
+
+  // Quick-add note state
+  const [showAddNote, setShowAddNote] = useState(false);
+  const [noteAddress, setNoteAddress] = useState('');
+  const [noteContent, setNoteContent] = useState('');
+  const [noteContactId, setNoteContactId] = useState<string | null>(null);
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState('');
+
+  // Auto-suggest contact when address typed
+  const suggestedContact = useMemo(() => {
+    if (!noteAddress.trim()) return undefined;
+    return findContactByAddress(noteAddress);
+  }, [noteAddress, findContactByAddress]);
+
+  // When a suggestion appears and no explicit contact selected, use it
+  useEffect(() => {
+    if (suggestedContact && noteContactId === null) {
+      setNoteContactId(suggestedContact.id);
+    } else if (!suggestedContact && noteContactId !== null) {
+      setNoteContactId(null);
+    }
+  }, [suggestedContact, noteContactId]);
+
+  const handleAddNote = useCallback(async () => {
+    if (!noteContent.trim()) {
+      setNoteError('Note content is required');
+      return;
+    }
+    if (!noteContactId) {
+      setNoteError('No matching contact found for that address');
+      return;
+    }
+    setNoteSaving(true);
+    setNoteError('');
+    try {
+      await addActivity({ contact_id: noteContactId, type: 'note', content: noteContent.trim() });
+      await fetchRecentActivities(500);
+      setShowAddNote(false);
+      setNoteAddress('');
+      setNoteContent('');
+      setNoteContactId(null);
+    } catch {
+      setNoteError('Failed to save note');
+    } finally {
+      setNoteSaving(false);
+    }
+  }, [noteContent, noteContactId, addActivity, fetchRecentActivities]);
 
   useEffect(() => {
     fetchRecentActivities(500);
@@ -97,7 +147,73 @@ export default function NotesView() {
             {totalNotes} notes across {noteGroups.length} contacts
           </p>
         </div>
+        <button
+          onClick={() => setShowAddNote((v) => !v)}
+          className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600"
+        >
+          {showAddNote ? 'Cancel' : 'Add Note'}
+        </button>
       </div>
+
+      {/* Quick-add note panel */}
+      {showAddNote && (
+        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-sm font-semibold text-gray-700">New Note</h3>
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">
+                Address (auto-matches contact)
+              </label>
+              <input
+                type="text"
+                value={noteAddress}
+                onChange={(e) => setNoteAddress(e.target.value)}
+                placeholder="e.g. 45 Smith St, Parramatta"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              {noteAddress.trim() && (
+                <p className="mt-1 text-xs">
+                  {suggestedContact ? (
+                    <span className="text-green-600">
+                      Matched: {suggestedContact.first_name} {suggestedContact.last_name || ''}
+                    </span>
+                  ) : (
+                    <span className="text-amber-600">No contact found at this address</span>
+                  )}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">Note</label>
+              <textarea
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
+                rows={3}
+                placeholder="Enter note..."
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+            </div>
+            {noteError && (
+              <p className="text-xs text-red-600">{noteError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setShowAddNote(false); setNoteAddress(''); setNoteContent(''); setNoteError(''); }}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddNote}
+                disabled={noteSaving || !noteContactId || !noteContent.trim()}
+                className="rounded-lg bg-primary-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50"
+              >
+                {noteSaving ? 'Saving...' : 'Save Note'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="mb-4">
         <input
           type="text"

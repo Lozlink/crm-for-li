@@ -84,7 +84,7 @@ export default function MapScreen() {
   const streetStats = useStreetStats();
 
   const [visibleLayers, setVisibleLayers] = useState<VisibleLayers>({
-    contacts: true,
+    contacts: false,
     properties: false,
     fieldActivity: false,
     buildings: false,
@@ -159,16 +159,30 @@ export default function MapScreen() {
     }, [fetchContacts, fetchProperties, fetchSessions, fetchAllAnnotations, fetchRecentActivities])
   );
 
-  // Get user location on mount
+  // Get user location on first mount and center map there
+  const initialLocationSet = useRef(false);
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
       const location = await Location.getCurrentPositionAsync({});
-      setUserLocation({
+      const coords = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
-      });
+      };
+      setUserLocation(coords);
+
+      // Center map on user's location only on first load
+      if (!initialLocationSet.current) {
+        initialLocationSet.current = true;
+        const region = {
+          ...coords,
+          latitudeDelta: 0.008,
+          longitudeDelta: 0.008,
+        };
+        setMapRegion(region);
+        mapRef.current?.animateToRegion(region, 600);
+      }
     })();
   }, []);
 
@@ -488,7 +502,9 @@ export default function MapScreen() {
         showsMyLocationButton={false}
       >
         {/* Contact markers */}
-        {visibleLayers.contacts && mappedContacts.map((contact) => (
+        {visibleLayers.contacts && mappedContacts
+          .filter((c) => c.latitude != null && c.longitude != null)
+          .map((contact) => (
           <Marker
             key={`c-${contact.id}`}
             coordinate={{ latitude: contact.latitude!, longitude: contact.longitude! }}
@@ -500,7 +516,9 @@ export default function MapScreen() {
         ))}
 
         {/* Property markers */}
-        {visibleLayers.properties && mappedProperties.map((property) => (
+        {visibleLayers.properties && mappedProperties
+          .filter((p) => p.latitude != null && p.longitude != null)
+          .map((property) => (
           <Marker
             key={`p-${property.id}`}
             coordinate={{ latitude: property.latitude!, longitude: property.longitude! }}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { StyleSheet, View, FlatList } from 'react-native';
+import { StyleSheet, View, FlatList, Pressable } from 'react-native';
 import {
   Text,
   Button,
@@ -10,11 +10,14 @@ import {
   Surface,
   Chip,
   Divider,
+  TextInput,
+  IconButton,
 } from 'react-native-paper';
 import { Stack, useRouter } from 'expo-router';
 import * as Contacts from 'expo-contacts';
 import * as Linking from 'expo-linking';
-import { useCRMStore } from '@realestate-crm/hooks';
+import { useCRMStore, syncContactTags } from '@realestate-crm/hooks';
+import { useAuthStore } from '@realestate-crm/hooks';
 import { findDuplicates, parseContactNameField, batchGeocodeAddresses } from '@realestate-crm/utils';
 import type { Contact as CRMContact } from '@realestate-crm/types';
 
@@ -40,8 +43,14 @@ export default function ImportContactsScreen() {
 
   const existingContacts = useCRMStore((s) => s.contacts);
   const bulkAddContacts = useCRMStore((s) => s.bulkAddContacts);
+  const tags = useCRMStore((s) => s.tags);
+  const addTag = useCRMStore((s) => s.addTag);
 
   const [step, setStep] = useState<Step>('select');
+  const [selectedImportTagIds, setSelectedImportTagIds] = useState<Set<string>>(new Set());
+  const [showNewTag, setShowNewTag] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#6366f1');
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [deviceContacts, setDeviceContacts] = useState<Contacts.ExistingContact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,6 +176,28 @@ export default function ImportContactsScreen() {
     setStep('preview');
   }, [deviceContacts, selectedIds, existingContacts]);
 
+  const toggleImportTag = useCallback((tagId: string) => {
+    setSelectedImportTagIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tagId)) next.delete(tagId);
+      else next.add(tagId);
+      return next;
+    });
+  }, []);
+
+  const TAG_PRESET_COLORS = ['#6366f1', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#0d9488'];
+
+  const handleCreateTag = useCallback(async () => {
+    const trimmed = newTagName.trim();
+    if (!trimmed) return;
+    const created = await addTag({ name: trimmed, color: newTagColor });
+    if (created) {
+      setSelectedImportTagIds((prev) => new Set(prev).add(created.id));
+      setNewTagName('');
+      setShowNewTag(false);
+    }
+  }, [newTagName, newTagColor, addTag]);
+
   const toggleSkip = useCallback((idx: number) => {
     setSkipIndices((prev) => {
       const next = new Set(prev);
@@ -188,10 +219,26 @@ export default function ImportContactsScreen() {
       const storeError = useCRMStore.getState().error;
       setImportError(storeError || 'Import failed. Please try again.');
     }
+
+    // Apply selected tags to all newly created contacts
+    if (created.length > 0 && selectedImportTagIds.size > 0) {
+      const tagIds = Array.from(selectedImportTagIds);
+      const teamId = useAuthStore.getState().activeTeam?.id || null;
+      for (const contact of created) {
+        try {
+          await syncContactTags(contact.id, tagIds, teamId);
+        } catch (err) {
+          console.error('Failed to sync tags for contact', contact.id, err);
+        }
+      }
+      // Refresh contacts to pick up the new tag associations
+      await useCRMStore.getState().fetchContacts();
+    }
+
     setImportedCount(created.length);
     setSkippedCount(mapped.length - toImport.length);
     setStep('done');
-  }, [mapped, skipIndices, bulkAddContacts]);
+  }, [mapped, skipIndices, bulkAddContacts, selectedImportTagIds]);
 
   // Permission denied
   if (permissionDenied) {
@@ -308,6 +355,72 @@ export default function ImportContactsScreen() {
                 {mapped.length - skipIndices.size} will be imported, {skipIndices.size} skipped
               </Text>
             </View>
+
+            <Surface style={styles.tagSection} elevation={0}>
+              <Text variant="labelLarge" style={{ marginBottom: 8 }}>Tags</Text>
+              <View style={styles.tagChipRow}>
+                {tags.map((tag) => (
+                  <Chip
+                    key={tag.id}
+                    selected={selectedImportTagIds.has(tag.id)}
+                    onPress={() => toggleImportTag(tag.id)}
+                    style={[
+                      styles.tagChip,
+                      selectedImportTagIds.has(tag.id) && { backgroundColor: tag.color + '30' },
+                    ]}
+                    textStyle={selectedImportTagIds.has(tag.id) ? { color: tag.color } : undefined}
+                    showSelectedOverlay={false}
+                    compact
+                  >
+                    {tag.name}
+                  </Chip>
+                ))}
+                <Chip
+                  icon="plus"
+                  onPress={() => setShowNewTag(true)}
+                  style={styles.tagChip}
+                  compact
+                >
+                  New Tag
+                </Chip>
+              </View>
+
+              {showNewTag && (
+                <View style={styles.newTagRow}>
+                  <TextInput
+                    mode="outlined"
+                    placeholder="Tag name"
+                    value={newTagName}
+                    onChangeText={setNewTagName}
+                    dense
+                    style={{ flex: 1 }}
+                  />
+                  <View style={styles.colorDots}>
+                    {TAG_PRESET_COLORS.map((c) => (
+                      <Pressable
+                        key={c}
+                        onPress={() => setNewTagColor(c)}
+                        style={[
+                          styles.colorDot,
+                          { backgroundColor: c },
+                          newTagColor === c && styles.colorDotSelected,
+                        ]}
+                      />
+                    ))}
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 4 }}>
+                    <IconButton icon="check" size={20} onPress={handleCreateTag} disabled={!newTagName.trim()} />
+                    <IconButton icon="close" size={20} onPress={() => { setShowNewTag(false); setNewTagName(''); }} />
+                  </View>
+                </View>
+              )}
+
+              {selectedImportTagIds.size > 0 && (
+                <Text variant="bodySmall" style={{ color: theme.colors.primary, marginTop: 6 }}>
+                  {selectedImportTagIds.size} {selectedImportTagIds.size === 1 ? 'tag' : 'tags'} will be applied to all imported contacts
+                </Text>
+              )}
+            </Surface>
 
             <FlatList
               data={mapped}
@@ -450,6 +563,39 @@ const styles = StyleSheet.create({
   previewHeader: {
     padding: 16,
     paddingBottom: 8,
+  },
+  tagSection: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 8,
+  },
+  tagChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  tagChip: {
+    marginBottom: 2,
+  },
+  newTagRow: {
+    marginTop: 10,
+    gap: 8,
+  },
+  colorDots: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  colorDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  colorDotSelected: {
+    borderWidth: 2,
+    borderColor: '#000',
   },
   previewRow: {
     flexDirection: 'row',

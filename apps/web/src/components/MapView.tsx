@@ -78,7 +78,8 @@ export default function MapView() {
     }
   }, [searchParams]);
 
-  // Request geolocation on mount
+  // Request geolocation on mount and center map on user's location (first load only)
+  const initialLocationSet = useRef(false);
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -87,11 +88,21 @@ export default function MapView() {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         });
+
+        if (!initialLocationSet.current) {
+          initialLocationSet.current = true;
+          setMapRegion({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            latitudeDelta: 0.008,
+            longitudeDelta: 0.008,
+          });
+        }
       },
-      () => {}, // silently fail
+      () => {}, // silently fail — falls back to DEFAULT_REGION
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, []);
+  }, [setMapRegion]);
 
   // Filter contacts with coordinates, then by selected tags
   const mappableContacts = useMemo(() => {

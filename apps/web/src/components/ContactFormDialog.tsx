@@ -74,6 +74,11 @@ export default function ContactFormDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Multi-dwelling state (new contact only)
+  const [isMultiDwelling, setIsMultiDwelling] = useState(false);
+  const [unitFrom, setUnitFrom] = useState('1');
+  const [unitCount, setUnitCount] = useState('2');
+
   // New enrichment fields
   const [source, setSource] = useState<ContactSource | ''>(contact?.source || '');
   const [contactType, setContactType] = useState<ContactType | ''>(contact?.contact_type || '');
@@ -125,6 +130,31 @@ export default function ContactFormDialog({
             tags: tags.filter((t) => selectedTags.includes(t.id)),
             ...enrichmentFields,
           });
+        } else if (isMultiDwelling) {
+          const startUnit = parseInt(unitFrom, 10) || 1;
+          const count = Math.min(Math.max(parseInt(unitCount, 10) || 1, 1), 100);
+          for (let u = startUnit; u < startUnit + count; u++) {
+            const newContact = await addContact({
+              first_name: firstName.trim(),
+              last_name: lastName.trim() || undefined,
+              email: email.trim() || undefined,
+              phone: phone.trim() || undefined,
+              address: address.trim() || undefined,
+              unit_number: String(u),
+              tag_id: selectedTags[0] || undefined,
+              tags: tags.filter((t) => selectedTags.includes(t.id)),
+              latitude: coords?.lat,
+              longitude: coords?.lng,
+              ...enrichmentFields,
+            });
+            if (newContact && note.trim() && u === startUnit) {
+              await addActivity({
+                contact_id: newContact.id,
+                type: 'note',
+                content: note.trim(),
+              });
+            }
+          }
         } else {
           const newContact = await addContact({
             first_name: firstName.trim(),
@@ -181,6 +211,9 @@ export default function ContactFormDialog({
       notes,
       status,
       nextFollowUpAt,
+      isMultiDwelling,
+      unitFrom,
+      unitCount,
     ]
   );
 
@@ -276,18 +309,71 @@ export default function ContactFormDialog({
             </div>
 
             {/* Unit / Apt # */}
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Unit / Apt #
-              </label>
-              <input
-                type="text"
-                value={unitNumber}
-                onChange={(e) => setUnitNumber(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                placeholder="e.g., Unit 3, Apt 2B"
-              />
-            </div>
+            {!isMultiDwelling && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Unit / Apt #
+                </label>
+                <input
+                  type="text"
+                  value={unitNumber}
+                  onChange={(e) => setUnitNumber(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  placeholder="e.g., Unit 3, Apt 2B"
+                />
+              </div>
+            )}
+
+            {/* Multi-dwelling toggle (new contacts only) */}
+            {!isEditing && (
+              <div>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={isMultiDwelling}
+                    onChange={(e) => setIsMultiDwelling(e.target.checked)}
+                    className="rounded border-gray-300"
+                  />
+                  Multi-dwelling (batch create by unit number)
+                </label>
+
+                {isMultiDwelling && (
+                  <div className="mt-2 grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-600">
+                        Starting unit number
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={unitFrom}
+                        onChange={(e) => setUnitFrom(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        placeholder="1"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-600">
+                        Number of units
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={unitCount}
+                        onChange={(e) => setUnitCount(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        placeholder="12"
+                      />
+                    </div>
+                    <p className="col-span-2 text-xs text-gray-500">
+                      Will create {Math.min(Math.max(parseInt(unitCount, 10) || 1, 1), 100)} contacts
+                      at units {parseInt(unitFrom, 10) || 1}–{(parseInt(unitFrom, 10) || 1) + Math.min(Math.max(parseInt(unitCount, 10) || 1, 1), 100) - 1}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Company & Title */}
             <div className="grid grid-cols-2 gap-3">
@@ -528,7 +614,13 @@ export default function ContactFormDialog({
               disabled={saving}
               className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50"
             >
-              {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Contact'}
+              {saving
+                ? 'Saving...'
+                : isEditing
+                ? 'Save Changes'
+                : isMultiDwelling
+                ? `Create ${Math.min(Math.max(parseInt(unitCount, 10) || 1, 1), 100)} Contacts`
+                : 'Add Contact'}
             </button>
           </div>
         </form>

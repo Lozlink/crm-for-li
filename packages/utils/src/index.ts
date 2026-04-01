@@ -21,8 +21,9 @@ export {
   findDuplicates,
   findSingleDuplicate,
   parseContactNameField,
+  normalizeAddress,
 } from './validation';
 
 export type { DedupContact, ParsedContactName } from './validation';
 
-export { geocodeAddress, batchGeocodeAddresses } from './geocode';
+export { geocodeAddress, batchGeocodeAddresses, haversineDistance } from './geocode';

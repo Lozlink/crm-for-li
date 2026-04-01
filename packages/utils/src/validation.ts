@@ -113,6 +113,69 @@ export function findSingleDuplicate<T extends DedupContact>(
   return null;
 }
 
+// --- Address Normalization ---
+
+const STREET_TYPE_MAP: Record<string, string> = {
+  st: 'st',
+  street: 'st',
+  rd: 'rd',
+  road: 'rd',
+  dr: 'dr',
+  drive: 'dr',
+  ave: 'ave',
+  avenue: 'ave',
+  ln: 'ln',
+  lane: 'ln',
+  way: 'way',
+  ct: 'ct',
+  court: 'ct',
+  cres: 'cres',
+  crescent: 'cres',
+  pl: 'pl',
+  place: 'pl',
+  blvd: 'blvd',
+  boulevard: 'blvd',
+  pde: 'pde',
+  parade: 'pde',
+  cct: 'cct',
+  circuit: 'cct',
+  cl: 'cl',
+  close: 'cl',
+  tce: 'tce',
+  terrace: 'tce',
+  hwy: 'hwy',
+  highway: 'hwy',
+  gr: 'gr',
+  grove: 'gr',
+  sq: 'sq',
+  square: 'sq',
+  pkwy: 'pkwy',
+  parkway: 'pkwy',
+  esp: 'esp',
+  esplanade: 'esp',
+};
+
+/**
+ * Normalize an address string for fuzzy matching.
+ * Lowercases, removes unit prefixes (Unit/Apt/Suite/#), normalizes street type abbreviations.
+ */
+export function normalizeAddress(address: string): string {
+  let s = address.toLowerCase().trim();
+
+  // Strip unit prefixes: "unit 3 ", "apt 2b ", "suite 4 ", "#5 "
+  s = s.replace(/^(unit|apt|apartment|suite|#)\s*[\w/]+[,\s]+/i, '');
+  // Strip inline unit prefixes like "3/45" -> "45"
+  s = s.replace(/^\d+\s*\/\s*/, '');
+
+  // Normalize extra whitespace and commas
+  s = s.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Normalize street type tokens
+  s = s.replace(/\b(\w+)\b/g, (token) => STREET_TYPE_MAP[token] ?? token);
+
+  return s;
+}
+
 // --- Smart Contact Name Parsing ---
 
 export interface ParsedContactName {
