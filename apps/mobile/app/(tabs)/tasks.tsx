@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View, FlatList, ScrollView, Linking, Platform } from 'react-native';
+import { StyleSheet, View, FlatList, ScrollView, Linking, Platform, Pressable } from 'react-native';
 import {
   FAB,
   useTheme,
@@ -13,6 +13,8 @@ import {
   Button,
   TextInput,
   SegmentedButtons,
+  Checkbox,
+  Modal,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
@@ -150,6 +152,18 @@ export default function TasksScreen() {
   const [myTasksOnly, setMyTasksOnly] = useState(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('outstanding');
 
+  // Multi-select state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+
+  // Bulk SMS state
+  const [bulkSmsModalVisible, setBulkSmsModalVisible] = useState(false);
+  const [bulkSmsMessage, setBulkSmsMessage] = useState('');
+  const [bulkSmsCurrentIndex, setBulkSmsCurrentIndex] = useState(0);
+  const [bulkSmsSentCount, setBulkSmsSentCount] = useState(0);
+  const [bulkSmsSkippedCount, setBulkSmsSkippedCount] = useState(0);
+  const [bulkSmsPhase, setBulkSmsPhase] = useState<'compose' | 'sending' | 'done'>('compose');
+
   // Create dialog state
   const [createDialogVisible, setCreateDialogVisible] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -241,6 +255,109 @@ export default function TasksScreen() {
     fetchTasks();
   };
 
+  // ── Multi-select handlers ──────────────────────────────────────────
+  const handleLongPress = useCallback((id: string) => {
+    setSelectMode(true);
+    setSelectedTaskIds(prev => new Set([...prev, id]));
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedTaskIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedTaskIds(new Set(filteredAndSortedTasks.map(t => t.id)));
+  }, [filteredAndSortedTasks]);
+
+  const exitSelectMode = useCallback(() => {
+    setSelectedTaskIds(new Set());
+    setSelectMode(false);
+  }, []);
+
+  // ── Bulk SMS helpers ─────────────────────────────────────────────
+  const bulkSmsEligibleTasks = useMemo(() => {
+    return filteredAndSortedTasks.filter(
+      t => selectedTaskIds.has(t.id) && t.contact?.phone,
+    );
+  }, [filteredAndSortedTasks, selectedTaskIds]);
+
+  const bulkSmsSkippedTasks = useMemo(() => {
+    return filteredAndSortedTasks.filter(
+      t => selectedTaskIds.has(t.id) && !t.contact?.phone,
+    );
+  }, [filteredAndSortedTasks, selectedTaskIds]);
+
+  const handleOpenBulkSms = useCallback(() => {
+    if (bulkSmsEligibleTasks.length === 0) return;
+    // Generate a default message from the first eligible task's type
+    const firstTask = bulkSmsEligibleTasks[0];
+    const defaultMessage = generateTaskMessage(
+      firstTask.type,
+      '{name}',
+      {
+        property: firstTask.property?.address,
+        date: firstTask.due_at ? formatDueDate(firstTask.due_at) : undefined,
+        title: firstTask.title,
+      },
+    );
+    setBulkSmsMessage(defaultMessage);
+    setBulkSmsPhase('compose');
+    setBulkSmsCurrentIndex(0);
+    setBulkSmsSentCount(0);
+    setBulkSmsSkippedCount(0);
+    setBulkSmsModalVisible(true);
+  }, [bulkSmsEligibleTasks]);
+
+  const handleStartBulkSend = useCallback(() => {
+    setBulkSmsPhase('sending');
+    setBulkSmsCurrentIndex(0);
+    setBulkSmsSentCount(0);
+    setBulkSmsSkippedCount(0);
+  }, []);
+
+  const currentBulkTask = bulkSmsEligibleTasks[bulkSmsCurrentIndex] as Task | undefined;
+
+  const handleSendCurrentSms = useCallback(() => {
+    if (!currentBulkTask?.contact?.phone) return;
+    const phone = sanitizePhone(currentBulkTask.contact.phone);
+    const contactName = getContactDisplayName(currentBulkTask.contact) || 'there';
+    const personalizedMessage = bulkSmsMessage.replace(/\{name\}/g, contactName);
+    const body = encodeURIComponent(personalizedMessage);
+    const separator = Platform.OS === 'ios' ? '&' : '?';
+    Linking.openURL(`sms:${phone}${separator}body=${body}`).catch(() => {});
+    setBulkSmsSentCount(prev => prev + 1);
+    const nextIdx = bulkSmsCurrentIndex + 1;
+    if (nextIdx >= bulkSmsEligibleTasks.length) {
+      setBulkSmsPhase('done');
+    } else {
+      setBulkSmsCurrentIndex(nextIdx);
+    }
+  }, [currentBulkTask, bulkSmsMessage, bulkSmsCurrentIndex, bulkSmsEligibleTasks.length]);
+
+  const handleSkipCurrentSms = useCallback(() => {
+    setBulkSmsSkippedCount(prev => prev + 1);
+    const nextIdx = bulkSmsCurrentIndex + 1;
+    if (nextIdx >= bulkSmsEligibleTasks.length) {
+      setBulkSmsPhase('done');
+    } else {
+      setBulkSmsCurrentIndex(nextIdx);
+    }
+  }, [bulkSmsCurrentIndex, bulkSmsEligibleTasks.length]);
+
+  const handleStopBulkSend = useCallback(() => {
+    setBulkSmsPhase('done');
+  }, []);
+
+  const handleCloseBulkSms = useCallback(() => {
+    setBulkSmsModalVisible(false);
+    exitSelectMode();
+  }, [exitSelectMode]);
+
   const renderFilters = () => (
     <View style={styles.filtersContainer}>
       {/* My Tasks / All Tasks toggle */}
@@ -282,155 +399,184 @@ export default function TasksScreen() {
     const propertyAddress = item.property?.address || null;
     const priorityColor = PRIORITY_COLORS[item.priority];
     const isPending = item.status !== 'completed';
+    const isSelected = selectedTaskIds.has(item.id);
 
-    return (
-      <Surface style={styles.card} elevation={1}>
-        <View style={styles.cardTouchable}>
-          <View style={styles.cardContent}>
-            {/* Top row: type icon + title + complete button */}
-            <View style={styles.cardTopRow}>
-              <Surface
-                style={[
-                  styles.typeIconContainer,
-                  { backgroundColor: theme.colors.primaryContainer },
-                ]}
-                elevation={0}
-              >
-                <Icon
-                  name={TYPE_ICONS[item.type]}
-                  size={22}
-                  color={theme.colors.onPrimaryContainer}
-                />
-              </Surface>
-              <View style={styles.titleContainer}>
-                <Text
-                  variant="titleMedium"
-                  numberOfLines={2}
-                  style={[
-                    styles.titleText,
-                    item.status === 'completed' && styles.completedText,
-                  ]}
-                >
-                  {item.title}
-                </Text>
-              </View>
-              {isPending && (
-                <IconButton
-                  icon="check-circle-outline"
-                  iconColor="#16a34a"
-                  size={24}
-                  onPress={() => handleComplete(item.id)}
-                  accessibilityLabel="Complete task"
-                />
-              )}
-            </View>
+    const handlePress = () => {
+      if (selectMode) {
+        toggleSelect(item.id);
+      }
+    };
 
-            {/* Badges row: type label + priority + due date */}
-            <View style={styles.badgeRow}>
-              <Chip
-                compact
-                style={{ backgroundColor: theme.colors.secondaryContainer }}
-                textStyle={{
-                  color: theme.colors.onSecondaryContainer,
-                  fontSize: 11,
-                }}
-              >
-                {TYPE_LABELS[item.type]}
-              </Chip>
-              {priorityColor && (
-                <Chip
-                  compact
-                  style={{ backgroundColor: priorityColor }}
-                  textStyle={{ color: '#fff', fontSize: 11 }}
-                >
-                  {item.priority === 'high' ? 'High' : 'Low'}
-                </Chip>
-              )}
-              {item.due_at && (
+    const cardContent = (
+      <View style={styles.cardContent}>
+        {/* Top row: type icon + title + complete button */}
+        <View style={styles.cardTopRow}>
+          {selectMode && (
+            <Checkbox
+              status={isSelected ? 'checked' : 'unchecked'}
+              onPress={() => toggleSelect(item.id)}
+            />
+          )}
+          <Surface
+            style={[
+              styles.typeIconContainer,
+              { backgroundColor: theme.colors.primaryContainer },
+            ]}
+            elevation={0}
+          >
+            <Icon
+              name={TYPE_ICONS[item.type]}
+              size={22}
+              color={theme.colors.onPrimaryContainer}
+            />
+          </Surface>
+          <View style={styles.titleContainer}>
+            <Text
+              variant="titleMedium"
+              numberOfLines={2}
+              style={[
+                styles.titleText,
+                item.status === 'completed' && styles.completedText,
+              ]}
+            >
+              {item.title}
+            </Text>
+          </View>
+          {isPending && !selectMode && (
+            <IconButton
+              icon="check-circle-outline"
+              iconColor="#16a34a"
+              size={24}
+              onPress={() => handleComplete(item.id)}
+              accessibilityLabel="Complete task"
+            />
+          )}
+        </View>
+
+        {/* Badges row: type label + priority + due date */}
+        <View style={styles.badgeRow}>
+          <Chip
+            compact
+            style={{ backgroundColor: theme.colors.secondaryContainer }}
+            textStyle={{
+              color: theme.colors.onSecondaryContainer,
+              fontSize: 11,
+            }}
+          >
+            {TYPE_LABELS[item.type]}
+          </Chip>
+          {priorityColor && (
+            <Chip
+              compact
+              style={{ backgroundColor: priorityColor }}
+              textStyle={{ color: '#fff', fontSize: 11 }}
+            >
+              {item.priority === 'high' ? 'High' : 'Low'}
+            </Chip>
+          )}
+          {item.due_at && (
+            <Text
+              variant="bodySmall"
+              style={[
+                { marginLeft: 'auto' },
+                overdue
+                  ? { color: '#dc2626', fontWeight: '600' }
+                  : { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
+              {overdue ? 'Overdue: ' : ''}{formatDueDate(item.due_at)}
+            </Text>
+          )}
+        </View>
+
+        {/* Contact / Property row */}
+        {(contactName || propertyAddress) && (
+          <View style={styles.metaRow}>
+            {contactName && (
+              <View style={styles.metaItem}>
+                <Icon name="account" size={14} color={theme.colors.onSurfaceVariant} />
                 <Text
                   variant="bodySmall"
-                  style={[
-                    { marginLeft: 'auto' },
-                    overdue
-                      ? { color: '#dc2626', fontWeight: '600' }
-                      : { color: theme.colors.onSurfaceVariant },
-                  ]}
+                  numberOfLines={1}
+                  style={{ color: theme.colors.onSurfaceVariant, marginLeft: 4 }}
                 >
-                  {overdue ? 'Overdue: ' : ''}{formatDueDate(item.due_at)}
+                  {contactName}
                 </Text>
-              )}
-            </View>
-
-            {/* Contact / Property row */}
-            {(contactName || propertyAddress) && (
-              <View style={styles.metaRow}>
-                {contactName && (
-                  <View style={styles.metaItem}>
-                    <Icon name="account" size={14} color={theme.colors.onSurfaceVariant} />
-                    <Text
-                      variant="bodySmall"
-                      numberOfLines={1}
-                      style={{ color: theme.colors.onSurfaceVariant, marginLeft: 4 }}
-                    >
-                      {contactName}
-                    </Text>
-                  </View>
-                )}
-                {propertyAddress && (
-                  <View style={styles.metaItem}>
-                    <Icon name="home" size={14} color={theme.colors.onSurfaceVariant} />
-                    <Text
-                      variant="bodySmall"
-                      numberOfLines={1}
-                      style={{ color: theme.colors.onSurfaceVariant, marginLeft: 4 }}
-                    >
-                      {propertyAddress}
-                    </Text>
-                  </View>
-                )}
               </View>
             )}
-
-            {/* Action buttons for tasks with linked contacts */}
-            {isPending && item.contact && (item.contact.email || item.contact.phone) && (
-              <View style={styles.actionRow}>
-                {item.contact.email && (
-                  <IconButton
-                    icon="email-outline"
-                    size={20}
-                    iconColor={theme.colors.primary}
-                    style={styles.actionButton}
-                    onPress={() => handleTaskEmail(item)}
-                    accessibilityLabel="Send email"
-                  />
-                )}
-                {item.contact.phone && (
-                  <IconButton
-                    icon="message-text-outline"
-                    size={20}
-                    iconColor={theme.colors.primary}
-                    style={styles.actionButton}
-                    onPress={() => handleTaskSMS(item)}
-                    accessibilityLabel="Send SMS"
-                  />
-                )}
-                {item.contact.phone && (
-                  <IconButton
-                    icon="phone-outline"
-                    size={20}
-                    iconColor={theme.colors.primary}
-                    style={styles.actionButton}
-                    onPress={() => handleTaskCall(item)}
-                    accessibilityLabel="Call contact"
-                  />
-                )}
+            {propertyAddress && (
+              <View style={styles.metaItem}>
+                <Icon name="home" size={14} color={theme.colors.onSurfaceVariant} />
+                <Text
+                  variant="bodySmall"
+                  numberOfLines={1}
+                  style={{ color: theme.colors.onSurfaceVariant, marginLeft: 4 }}
+                >
+                  {propertyAddress}
+                </Text>
               </View>
             )}
           </View>
-        </View>
-      </Surface>
+        )}
+
+        {/* Action buttons for tasks with linked contacts */}
+        {isPending && !selectMode && item.contact && (item.contact.email || item.contact.phone) && (
+          <View style={styles.actionRow}>
+            {item.contact.email && (
+              <IconButton
+                icon="email-outline"
+                size={20}
+                iconColor={theme.colors.primary}
+                style={styles.actionButton}
+                onPress={() => handleTaskEmail(item)}
+                accessibilityLabel="Send email"
+              />
+            )}
+            {item.contact.phone && (
+              <IconButton
+                icon="message-text-outline"
+                size={20}
+                iconColor={theme.colors.primary}
+                style={styles.actionButton}
+                onPress={() => handleTaskSMS(item)}
+                accessibilityLabel="Send SMS"
+              />
+            )}
+            {item.contact.phone && (
+              <IconButton
+                icon="phone-outline"
+                size={20}
+                iconColor={theme.colors.primary}
+                style={styles.actionButton}
+                onPress={() => handleTaskCall(item)}
+                accessibilityLabel="Call contact"
+              />
+            )}
+          </View>
+        )}
+      </View>
     );
-  }, [theme.colors, handleComplete]);
+
+    return (
+      <Pressable
+        onPress={handlePress}
+        onLongPress={() => handleLongPress(item.id)}
+        delayLongPress={400}
+      >
+        <Surface
+          style={[
+            styles.card,
+            isSelected && { backgroundColor: theme.colors.primaryContainer },
+          ]}
+          elevation={1}
+        >
+          <View style={styles.cardTouchable}>
+            {cardContent}
+          </View>
+        </Surface>
+      </Pressable>
+    );
+  }, [theme.colors, handleComplete, selectMode, selectedTaskIds, toggleSelect, handleLongPress]);
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -451,6 +597,31 @@ export default function TasksScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* Select mode bar */}
+      {selectMode && (
+        <View style={[styles.selectBar, { backgroundColor: theme.colors.primaryContainer }]}>
+          <Text variant="labelLarge" style={{ color: theme.colors.onPrimaryContainer, flex: 1 }}>
+            {selectedTaskIds.size} selected
+          </Text>
+          <Button compact onPress={handleSelectAll} textColor={theme.colors.onPrimaryContainer}>
+            Select All
+          </Button>
+          {selectedTaskIds.size >= 2 && (
+            <Button
+              compact
+              icon="message-text-outline"
+              onPress={handleOpenBulkSms}
+              textColor={theme.colors.primary}
+            >
+              Bulk SMS
+            </Button>
+          )}
+          <Button compact onPress={exitSelectMode} textColor={theme.colors.onPrimaryContainer}>
+            Clear
+          </Button>
+        </View>
+      )}
+
       {isLoading && !refreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" />
@@ -550,6 +721,119 @@ export default function TasksScreen() {
             </Button>
           </Dialog.Actions>
         </Dialog>
+
+        {/* Bulk SMS Modal */}
+        <Modal
+          visible={bulkSmsModalVisible}
+          onDismiss={handleCloseBulkSms}
+          contentContainerStyle={[
+            styles.bulkSmsModal,
+            { backgroundColor: theme.colors.surface },
+          ]}
+        >
+          {bulkSmsPhase === 'compose' && (
+            <View style={styles.bulkSmsContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <Icon name="message-text-outline" size={24} color={theme.colors.primary} />
+                <Text variant="titleMedium" style={{ fontWeight: '700' }}>Bulk SMS</Text>
+              </View>
+
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
+                Will send to {bulkSmsEligibleTasks.length} contact{bulkSmsEligibleTasks.length !== 1 ? 's' : ''}
+                {bulkSmsSkippedTasks.length > 0
+                  ? ` (${bulkSmsSkippedTasks.length} skipped -- no phone)`
+                  : ''}
+              </Text>
+
+              <Text variant="labelMedium" style={{ marginBottom: 4, color: theme.colors.onSurfaceVariant }}>
+                Message template (use {'{name}'} for contact name)
+              </Text>
+              <TextInput
+                value={bulkSmsMessage}
+                onChangeText={setBulkSmsMessage}
+                mode="outlined"
+                multiline
+                numberOfLines={4}
+                style={{ marginBottom: 16 }}
+              />
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+                <Button onPress={handleCloseBulkSms}>Cancel</Button>
+                <Button
+                  mode="contained"
+                  icon="send"
+                  onPress={handleStartBulkSend}
+                  disabled={bulkSmsEligibleTasks.length === 0 || !bulkSmsMessage.trim()}
+                >
+                  Start Sending
+                </Button>
+              </View>
+            </View>
+          )}
+
+          {bulkSmsPhase === 'sending' && currentBulkTask && (
+            <View style={styles.bulkSmsContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <Icon name="message-text-outline" size={24} color={theme.colors.primary} />
+                <Text variant="titleMedium" style={{ fontWeight: '700' }}>
+                  Sending {bulkSmsCurrentIndex + 1} of {bulkSmsEligibleTasks.length}
+                </Text>
+              </View>
+
+              <Surface style={[styles.bulkSmsRecipient, { backgroundColor: theme.colors.surfaceVariant }]} elevation={0}>
+                <Icon name="account" size={18} color={theme.colors.onSurfaceVariant} />
+                <Text variant="bodyMedium" style={{ fontWeight: '600', marginLeft: 8, flex: 1 }}>
+                  {getContactDisplayName(currentBulkTask.contact) || 'Unknown'}
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  {currentBulkTask.contact?.phone}
+                </Text>
+              </Surface>
+
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8, marginBottom: 16 }}>
+                Tapping "Send" will open the native SMS app for this contact.
+              </Text>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+                <Button onPress={handleStopBulkSend} textColor={theme.colors.error}>
+                  Stop
+                </Button>
+                <Button onPress={handleSkipCurrentSms}>
+                  Skip
+                </Button>
+                <Button mode="contained" icon="message-text" onPress={handleSendCurrentSms}>
+                  Send
+                </Button>
+              </View>
+            </View>
+          )}
+
+          {bulkSmsPhase === 'done' && (
+            <View style={styles.bulkSmsContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <Icon name="check-circle" size={24} color="#16a34a" />
+                <Text variant="titleMedium" style={{ fontWeight: '700' }}>Bulk SMS Complete</Text>
+              </View>
+
+              <View style={{ gap: 4, marginBottom: 16 }}>
+                <Text variant="bodyMedium">
+                  {bulkSmsSentCount} sent, {bulkSmsSkippedCount} skipped
+                </Text>
+                {bulkSmsSkippedTasks.length > 0 && (
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {bulkSmsSkippedTasks.length} had no phone number
+                  </Text>
+                )}
+              </View>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                <Button mode="contained" onPress={handleCloseBulkSms}>
+                  Done
+                </Button>
+              </View>
+            </View>
+          )}
+        </Modal>
       </Portal>
     </View>
   );
@@ -661,5 +945,25 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     marginTop: 4,
+  },
+  selectBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  bulkSmsModal: {
+    margin: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  bulkSmsContent: {
+    padding: 20,
+  },
+  bulkSmsRecipient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
   },
 });

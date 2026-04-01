@@ -704,7 +704,7 @@ export default function MapScreen() {
         <Surface
           style={[
             styles.nearbyTray,
-            { bottom: insets.bottom + 90, backgroundColor: theme.colors.surface },
+            { backgroundColor: theme.colors.surface },
           ]}
           elevation={3}
         >
@@ -1325,10 +1325,12 @@ const styles = StyleSheet.create({
   // Nearby contacts tray
   nearbyTray: {
     position: 'absolute',
-    left: 12,
+    right: 12,
+    top: 12,
     borderRadius: 16,
     maxWidth: 260,
     overflow: 'hidden',
+    zIndex: 10,
   },
   nearbyTrayHeader: {
     flexDirection: 'row',

@@ -259,8 +259,8 @@ export default function ContactDetailScreen() {
   // Matching properties per requirement
   const [matchResults, setMatchResults] = useState<Record<string, Property[]>>({});
 
-  // Call tracking state
-  const [callNotesVisible, setCallNotesVisible] = useState(false);
+  // Call tracking state — two-step flow
+  const [callStep, setCallStep] = useState<'hidden' | 'connect' | 'not_connected' | 'connected_notes'>('hidden');
   const [callNotes, setCallNotes] = useState('');
   const pendingCallActivityId = useRef<string | null>(null);
 
@@ -284,7 +284,7 @@ export default function ContactDetailScreen() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active' && pendingCallActivityId.current) {
-        setCallNotesVisible(true);
+        setCallStep('connect');
       }
     });
     return () => sub.remove();
@@ -321,20 +321,46 @@ export default function ContactDetailScreen() {
     Linking.openURL(`tel:${contact.phone}`);
   }, [contact, id, addActivity]);
 
-  const handleSaveCallNotes = useCallback(async () => {
-    if (pendingCallActivityId.current && callNotes.trim()) {
-      await updateActivity(pendingCallActivityId.current, { content: callNotes.trim() });
+  const handleCallConnected = useCallback(() => {
+    setCallStep('connected_notes');
+  }, []);
+
+  const handleCallNotConnected = useCallback(() => {
+    setCallStep('not_connected');
+  }, []);
+
+  const handleNotConnectedReason = useCallback(async (reason: string) => {
+    if (pendingCallActivityId.current) {
+      await updateActivity(pendingCallActivityId.current, {
+        content: `Outgoing call — ${reason}`,
+        call_outcome: reason,
+      });
+      if (id) await fetchActivities(id);
+    }
+    pendingCallActivityId.current = null;
+    setCallStep('hidden');
+  }, [id, updateActivity, fetchActivities]);
+
+  const handleSaveConnectedCall = useCallback(async () => {
+    if (pendingCallActivityId.current) {
+      const content = callNotes.trim()
+        ? `Outgoing call — connected\n\nNotes: ${callNotes.trim()}`
+        : 'Outgoing call — connected';
+      await updateActivity(pendingCallActivityId.current, {
+        content,
+        call_outcome: 'connected',
+      });
       if (id) await fetchActivities(id);
     }
     pendingCallActivityId.current = null;
     setCallNotes('');
-    setCallNotesVisible(false);
+    setCallStep('hidden');
   }, [callNotes, id, updateActivity, fetchActivities]);
 
-  const handleSkipCallNotes = useCallback(() => {
+  const handleSkipCall = useCallback(() => {
     pendingCallActivityId.current = null;
     setCallNotes('');
-    setCallNotesVisible(false);
+    setCallStep('hidden');
   }, []);
 
   const handleUpdate = async (data: ContactFormData) => {
@@ -1022,13 +1048,57 @@ export default function ContactDetailScreen() {
           contactId={id!}
         />
 
-        {/* Call notes dialog */}
-        <Dialog visible={callNotesVisible} onDismiss={handleSkipCallNotes}>
-          <Dialog.Title>How did the call go?</Dialog.Title>
+        {/* Call outcome — Step 1: Did it connect? */}
+        <Dialog visible={callStep === 'connect'} onDismiss={handleSkipCall}>
+          <Dialog.Title>Did the call connect?</Dialog.Title>
+          <Dialog.Content>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Button
+                mode="contained"
+                icon="phone-check"
+                onPress={handleCallConnected}
+                style={{ flex: 1, backgroundColor: '#10b981' }}
+                labelStyle={{ color: '#fff' }}
+              >
+                Connected
+              </Button>
+              <Button
+                mode="contained"
+                icon="phone-missed"
+                onPress={handleCallNotConnected}
+                style={{ flex: 1, backgroundColor: '#ef4444' }}
+                labelStyle={{ color: '#fff' }}
+              >
+                No
+              </Button>
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={handleSkipCall}>Skip</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Call outcome — Step 2a: Not connected reason */}
+        <Dialog visible={callStep === 'not_connected'} onDismiss={handleSkipCall}>
+          <Dialog.Title>What happened?</Dialog.Title>
+          <Dialog.Content style={{ gap: 8 }}>
+            <Button mode="outlined" icon="phone-missed" onPress={() => handleNotConnectedReason('no_answer')}>No Answer</Button>
+            <Button mode="outlined" icon="voicemail" onPress={() => handleNotConnectedReason('voicemail')}>Voicemail</Button>
+            <Button mode="outlined" icon="phone-remove" onPress={() => handleNotConnectedReason('wrong_number')}>Wrong Number</Button>
+            <Button mode="outlined" icon="phone-off" onPress={() => handleNotConnectedReason('busy')}>Busy</Button>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setCallStep('connect')}>Back</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Call outcome — Step 2b: Connected — capture notes */}
+        <Dialog visible={callStep === 'connected_notes'} onDismiss={handleSkipCall}>
+          <Dialog.Title>Call connected</Dialog.Title>
           <Dialog.Content>
             <TextInput
               mode="outlined"
-              placeholder="Add call notes..."
+              placeholder="What was discussed?"
               value={callNotes}
               onChangeText={setCallNotes}
               multiline
@@ -1037,8 +1107,8 @@ export default function ContactDetailScreen() {
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={handleSkipCallNotes}>Skip</Button>
-            <Button onPress={handleSaveCallNotes} mode="contained">Save</Button>
+            <Button onPress={() => setCallStep('connect')}>Back</Button>
+            <Button onPress={handleSaveConnectedCall} mode="contained">Save</Button>
           </Dialog.Actions>
         </Dialog>
 
