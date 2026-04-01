@@ -4,7 +4,7 @@ import { useCRMStore } from './useCRMStore';
 import { usePropertyStore } from './usePropertyStore';
 import { useInspectionStore } from './useInspectionStore';
 import { useAuthStore } from './useAuthStore';
-import type { Contact, Property, TrackingSession, TrackingAnnotation, Inspection } from '@realestate-crm/types';
+import type { Contact, Property, TrackingSession, TrackingAnnotation, Inspection, ActivityWithContact } from '@realestate-crm/types';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -92,6 +92,22 @@ export interface MultiDwellingBuilding {
   longitude: number;
 }
 
+export interface CallConnectMetrics {
+  totalCalls: number;
+  connected: number;
+  notConnected: number;
+  connectRate: number;
+  /** Breakdown of non-connected reasons */
+  reasons: {
+    no_answer: number;
+    voicemail: number;
+    wrong_number: number;
+    busy: number;
+  };
+  /** Week-over-week connect rate trend */
+  trend: ProspectingTrend;
+}
+
 export interface TeamMemberMetrics {
   userId: string;
   displayName: string;
@@ -125,6 +141,8 @@ export interface ProspectingMetrics {
   monthlyDoorsTrend: WeeklyTrendPoint[];
   /** Contact counts per suburb (lowercase key), computed from full contacts array */
   suburbContactCounts: Map<string, number>;
+  /** Call connect rate: connected vs total calls with outcomes */
+  callMetrics: CallConnectMetrics;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -577,12 +595,54 @@ function computeMultiDwellingBuildings(annotations: TrackingAnnotation[]): Multi
     .slice(0, 20);
 }
 
+function computeCallMetrics(activities: ActivityWithContact[]): CallConnectMetrics {
+  const calls = activities.filter(a => a.type === 'call' && a.call_outcome != null);
+
+  const connected = calls.filter(a => a.call_outcome === 'connected').length;
+  const totalCalls = calls.length;
+  const notConnected = totalCalls - connected;
+  const connectRate = totalCalls > 0 ? Math.round((connected / totalCalls) * 100) : 0;
+
+  const reasons = { no_answer: 0, voicemail: 0, wrong_number: 0, busy: 0 };
+  for (const a of calls) {
+    if (a.call_outcome && a.call_outcome !== 'connected' && a.call_outcome in reasons) {
+      reasons[a.call_outcome as keyof typeof reasons]++;
+    }
+  }
+
+  // WoW trend for connect rate
+  const now = new Date();
+  const thisWeekStart = startOfWeek(now);
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+  const thisWeekCalls = calls.filter(a => isInRange(a.created_at, thisWeekStart, now));
+  const lastWeekCalls = calls.filter(a => isInRange(a.created_at, lastWeekStart, thisWeekStart));
+
+  const thisWeekRate = thisWeekCalls.length > 0
+    ? Math.round((thisWeekCalls.filter(a => a.call_outcome === 'connected').length / thisWeekCalls.length) * 100)
+    : 0;
+  const lastWeekRate = lastWeekCalls.length > 0
+    ? Math.round((lastWeekCalls.filter(a => a.call_outcome === 'connected').length / lastWeekCalls.length) * 100)
+    : 0;
+
+  return {
+    totalCalls,
+    connected,
+    notConnected,
+    connectRate,
+    reasons,
+    trend: computeTrend(thisWeekRate, lastWeekRate),
+  };
+}
+
 // ── Hook ─────────────────────────────────────────────────────────────
 
 export function useProspectingMetrics(): ProspectingMetrics {
   const sessions = useTrackingStore(s => s.sessions);
   const allAnnotations = useTrackingStore(s => s.allAnnotations);
   const contacts = useCRMStore(s => s.contacts);
+  const recentActivities = useCRMStore(s => s.recentActivities);
   const properties = usePropertyStore(s => s.properties);
   const inspections = useInspectionStore(s => s.inspections);
 
@@ -646,6 +706,9 @@ export function useProspectingMetrics(): ProspectingMetrics {
       12,
     );
 
+    // Call connect rate
+    const callMetrics = computeCallMetrics(recentActivities);
+
     return {
       today,
       thisWeek,
@@ -661,6 +724,7 @@ export function useProspectingMetrics(): ProspectingMetrics {
       multiDwellingBuildings,
       monthlyDoorsTrend,
       suburbContactCounts: computeSuburbContactCounts(contacts),
+      callMetrics,
     };
-  }, [sessions, allAnnotations, contacts, properties, inspections]);
+  }, [sessions, allAnnotations, contacts, recentActivities, properties, inspections]);
 }

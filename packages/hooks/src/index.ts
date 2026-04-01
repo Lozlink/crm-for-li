@@ -24,5 +24,5 @@ export type { NearbyContact, ProspectingMatcherResult } from './useProspectingMa
 export type {
   ProspectingMetrics, ProspectingPeriodMetrics, ProspectingTrend, ConversionFunnel,
   StaleStreet, WeeklyTrendPoint, ProspectingStreak, InspectionMetrics,
-  RecommendedArea, MultiDwellingBuilding, TeamMemberMetrics,
+  RecommendedArea, MultiDwellingBuilding, TeamMemberMetrics, CallConnectMetrics,
 } from './useProspectingMetrics';

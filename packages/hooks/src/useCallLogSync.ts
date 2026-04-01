@@ -141,18 +141,22 @@ export function useCallLogSync() {
    * Called by the UI when the user selects an outcome for the pending call.
    * Creates the activity with the chosen call_outcome and advances to the next pending call.
    */
-  const resolveCallOutcome = useCallback(async (outcome: CallOutcome | null) => {
+  const resolveCallOutcome = useCallback(async (outcome: CallOutcome | null, notes?: string) => {
     const current = pendingCall;
     if (!current) return;
 
     // Mark as logged before async to prevent races
     loggedCallKeysRef.current.add(current.callKey);
 
+    const content = notes
+      ? `${current.content}\n\nNotes: ${notes}`
+      : current.content;
+
     try {
       await addActivityRef.current({
         contact_id: current.contact.id,
         type: 'call',
-        content: current.content,
+        content,
         call_outcome: outcome,
       });
     } catch (err) {

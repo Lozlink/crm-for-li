@@ -130,7 +130,7 @@ export default function RootLayout() {
         <UpdateErrorBoundary><AppUpdateCheck /></UpdateErrorBoundary>
         <CallOutcomeModal
           pendingCall={pendingCall}
-          onSelect={resolveCallOutcome}
+          onResolve={resolveCallOutcome}
           onSkip={skipCallOutcome}
         />
         <AuthGate>
