@@ -1,14 +1,14 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { StyleSheet, View, Dimensions, Linking, TouchableOpacity, ScrollView, LayoutAnimation } from 'react-native';
-import { FAB, Portal, useTheme, Chip, Surface, Text, Dialog, Button, Switch } from 'react-native-paper';
+import { FAB, Portal, useTheme, Chip, Surface, Text, Dialog, Button, Switch, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import MapView, { Marker, Polygon, Circle, Polyline, PROVIDER_GOOGLE, LongPressEvent, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useCRMStore, useStreetStats, usePropertyStore, useTrackingStore, useBuyerMatchStore, useProspectingMetrics } from '@realestate-crm/hooks';
-import type { MultiDwellingBuilding } from '@realestate-crm/hooks';
+import { useCRMStore, useStreetStats, usePropertyStore, useTrackingStore, useBuyerMatchStore, useProspectingMetrics, useProspectingMatcher } from '@realestate-crm/hooks';
+import type { MultiDwellingBuilding, NearbyContact } from '@realestate-crm/hooks';
 import type { Contact, Property, ActivityWithContact, ContactRequirement, OSMBuilding } from '@realestate-crm/types';
 import { fetchSuburbByName, decodePolyline, fetchMultiDwellingBuildings } from '@realestate-crm/api';
 import type { SuburbBoundary } from '@realestate-crm/types';
@@ -110,6 +110,20 @@ export default function MapScreen() {
 
   const [fieldActivityWindow, setFieldActivityWindow] = useState<FieldActivityWindow>('30d');
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+
+  // Nearby contacts (prospecting)
+  const { nearbyContacts } = useProspectingMatcher(
+    userLocation?.latitude ?? null,
+    userLocation?.longitude ?? null,
+    200, // 200m radius for field prospecting
+  );
+  const [nearbyTrayExpanded, setNearbyTrayExpanded] = useState(false);
+
+  // Multi-dwelling state for long-press dialog
+  const bulkAddContacts = useCRMStore(state => state.bulkAddContacts);
+  const [multiDwellingEnabled, setMultiDwellingEnabled] = useState(false);
+  const [multiDwellingStartUnit, setMultiDwellingStartUnit] = useState('1');
+  const [multiDwellingCount, setMultiDwellingCount] = useState('4');
 
   // Buildings layer state
   const metrics = useProspectingMetrics();
@@ -374,7 +388,32 @@ export default function MapScreen() {
   const dismissLongPressDialog = useCallback(() => {
     setLongPressDialog(prev => ({ ...prev, visible: false }));
     setPendingMarker(null);
+    setMultiDwellingEnabled(false);
+    setMultiDwellingStartUnit('1');
+    setMultiDwellingCount('4');
   }, []);
+
+  const handleMultiDwellingCreate = useCallback(async () => {
+    const { latitude, longitude, address } = longPressDialog;
+    const startUnit = parseInt(multiDwellingStartUnit, 10) || 1;
+    const count = Math.min(parseInt(multiDwellingCount, 10) || 1, 100); // cap at 100
+
+    const contactsToCreate: Omit<Contact, 'id' | 'created_at' | 'updated_at'>[] = [];
+    for (let i = 0; i < count; i++) {
+      const unitNum = String(startUnit + i);
+      contactsToCreate.push({
+        first_name: `Unit ${unitNum}`,
+        address,
+        unit_number: unitNum,
+        latitude,
+        longitude,
+        source: 'walk_in',
+      });
+    }
+
+    await bulkAddContacts(contactsToCreate);
+    dismissLongPressDialog();
+  }, [longPressDialog, multiDwellingStartUnit, multiDwellingCount, bulkAddContacts, dismissLongPressDialog]);
 
   const handleViewContact = useCallback(() => {
     if (selectedContact) {
@@ -659,6 +698,68 @@ export default function MapScreen() {
           </View>
         )}
       </TouchableOpacity>
+
+      {/* ── Nearby Contacts tray ── */}
+      {userLocation && nearbyContacts.length > 0 && !fabOpen && (
+        <Surface
+          style={[
+            styles.nearbyTray,
+            { bottom: insets.bottom + 90, backgroundColor: theme.colors.surface },
+          ]}
+          elevation={3}
+        >
+          <TouchableOpacity
+            style={styles.nearbyTrayHeader}
+            onPress={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setNearbyTrayExpanded(prev => !prev);
+            }}
+            activeOpacity={0.7}
+          >
+            <Icon name="account-multiple-outline" size={16} color={theme.colors.primary} />
+            <Text variant="labelMedium" style={{ color: theme.colors.primary, marginLeft: 6, flex: 1 }}>
+              {nearbyContacts.length} nearby
+            </Text>
+            <Icon
+              name={nearbyTrayExpanded ? 'chevron-down' : 'chevron-up'}
+              size={18}
+              color={theme.colors.onSurfaceVariant}
+            />
+          </TouchableOpacity>
+
+          {nearbyTrayExpanded && (
+            <ScrollView style={styles.nearbyTrayList} nestedScrollEnabled>
+              {nearbyContacts.map(({ contact, distanceMeters }: NearbyContact) => (
+                <TouchableOpacity
+                  key={contact.id}
+                  style={styles.nearbyRow}
+                  onPress={() => router.push(`/contact/${contact.id}`)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.nearbyRowInfo}>
+                    <Text variant="bodyMedium" numberOfLines={1} style={{ color: theme.colors.onSurface }}>
+                      {contact.first_name} {contact.last_name || ''}
+                    </Text>
+                    <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
+                      {contact.unit_number ? `Unit ${contact.unit_number}, ` : ''}{contact.address || 'No address'}
+                    </Text>
+                  </View>
+                  <View style={styles.nearbyRowMeta}>
+                    <Text variant="labelSmall" style={{ color: theme.colors.primary }}>
+                      {Math.round(distanceMeters)}m
+                    </Text>
+                    {contact.last_contacted_at && (
+                      <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {new Date(contact.last_contacted_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </Surface>
+      )}
 
       {/* ── Main FAB (bottom-right) ── */}
       <FAB.Group
@@ -952,11 +1053,55 @@ export default function MapScreen() {
             <Text variant="bodyMedium" style={{ marginBottom: 8 }}>
               {longPressDialog.address || 'Loading address...'}
             </Text>
+
+            {/* Multi-dwelling toggle */}
+            <View style={styles.multiDwellingToggleRow}>
+              <Icon name="office-building" size={18} color={theme.colors.onSurfaceVariant} />
+              <Text variant="bodyMedium" style={{ flex: 1, marginLeft: 8, color: theme.colors.onSurface }}>
+                Multi-dwelling
+              </Text>
+              <Switch
+                value={multiDwellingEnabled}
+                onValueChange={setMultiDwellingEnabled}
+                color={theme.colors.primary}
+              />
+            </View>
+
+            {multiDwellingEnabled && (
+              <View style={styles.multiDwellingInputs}>
+                <TextInput
+                  label="Starting unit"
+                  value={multiDwellingStartUnit}
+                  onChangeText={setMultiDwellingStartUnit}
+                  keyboardType="number-pad"
+                  mode="outlined"
+                  dense
+                  style={styles.multiDwellingInput}
+                />
+                <TextInput
+                  label="Number of units"
+                  value={multiDwellingCount}
+                  onChangeText={setMultiDwellingCount}
+                  keyboardType="number-pad"
+                  mode="outlined"
+                  dense
+                  style={styles.multiDwellingInput}
+                />
+              </View>
+            )}
           </Dialog.Content>
           <Dialog.Actions style={styles.dialogActions}>
             <Button onPress={dismissLongPressDialog}>Cancel</Button>
-            <Button icon="note-plus" onPress={() => handleLongPressAction(true)}>Quick Note</Button>
-            <Button icon="account-plus" mode="contained" onPress={() => handleLongPressAction(false)}>Contact</Button>
+            {multiDwellingEnabled ? (
+              <Button icon="office-building" mode="contained" onPress={handleMultiDwellingCreate}>
+                Create {Math.min(parseInt(multiDwellingCount, 10) || 0, 100)} Units
+              </Button>
+            ) : (
+              <>
+                <Button icon="note-plus" onPress={() => handleLongPressAction(true)}>Quick Note</Button>
+                <Button icon="account-plus" mode="contained" onPress={() => handleLongPressAction(false)}>Contact</Button>
+              </>
+            )}
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -1175,6 +1320,58 @@ const styles = StyleSheet.create({
   buildingLastVisited: {
     marginTop: 8,
     fontStyle: 'italic',
+  },
+
+  // Nearby contacts tray
+  nearbyTray: {
+    position: 'absolute',
+    left: 12,
+    borderRadius: 16,
+    maxWidth: 260,
+    overflow: 'hidden',
+  },
+  nearbyTrayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  nearbyTrayList: {
+    maxHeight: 200,
+    paddingHorizontal: 10,
+    paddingBottom: 8,
+  },
+  nearbyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+  },
+  nearbyRowInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  nearbyRowMeta: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+
+  // Multi-dwelling
+  multiDwellingToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingVertical: 4,
+  },
+  multiDwellingInputs: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  multiDwellingInput: {
+    flex: 1,
   },
 
   // FAB

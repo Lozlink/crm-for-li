@@ -1,5 +1,65 @@
 # Changelog
 
+## [Unreleased] - 2026-04-01
+
+### Added
+
+#### Contact Import Enhancements
+- **Import filters** (web CSV import) — toggles to skip contacts without phone, without email, or duplicates; search box to filter preview rows; live "X of Y will be imported" counter
+- **Bulk tag assignment on phone import** (mobile) — tag multi-select chips at preview step, applied to all imported contacts via `syncContactTags`
+- **Inline tag creation during import** (mobile) — "+ New Tag" chip opens inline name input + 8-colour preset picker, auto-selects the new tag
+
+#### Call Connect Tracking
+- **Two-step CallOutcomeModal** (mobile) — Step 1: "Did the call connect?" (Connected / Not Connected). Step 2a (connected): notes capture ("What was discussed?"). Step 2b (not connected): pick reason (No Answer / Voicemail / Wrong Number / Busy)
+- **`call_outcome` column** on `activities` table (migration `022_call_outcome.sql`) — tracks `connected | no_answer | voicemail | wrong_number | busy`
+- **`CallOutcome` type** added to shared types, `useCallLogSync` refactored to queue pending calls for user outcome input before logging
+- **Call Connect Rate KPI** in ProspectingReports — `callMetrics` in `useProspectingMetrics` computes total calls, connected count, connect rate %, breakdown by not-connected reason, WoW trend
+
+#### Bulk SMS from Tasks
+- **Multi-select on task list** (web) — checkbox column on task rows, select-all with indeterminate state
+- **"Bulk SMS" button** — appears when 2+ tasks selected, opens compose modal
+- **BulkSmsModal** — auto-generates template from `generateTaskMessage()`, editable textarea, live preview with contact name, recipient list with phone numbers, "X skipped — no phone" warning
+- **Sequential SMS sending** (iOS-safe) — opens `sms:` links one at a time with progress indicator, Next/Skip/Stop controls, sent/skipped summary
+
+#### SMS Campaign Infrastructure
+- **Database migration** (`023_sms_campaigns.sql`) — `sms_campaigns`, `sms_messages`, `sms_opt_outs` tables with team-scoped RLS
+- **`SmsCampaign`, `SmsMessage`, `SmsOptOut` types** added to shared types
+- **`useSmsCampaignStore`** — Zustand store with campaign CRUD, `addRecipients` (filters opted-out/do_not_contact), `addRecipientsByTag`
+
+#### Notes & Address Matching
+- **`normalizeAddress()`** utility (`packages/utils/src/validation.ts`) — strips unit prefixes, normalises street type abbreviations (St/Street, Rd/Road, etc.)
+- **`findContactByAddress()`** in `useCRMStore` — fuzzy address matching using `normalizeAddress`
+- **"Add Note" panel** in web NotesView — address field auto-suggests matching contacts
+
+#### Multi-Dwelling Input
+- **Multi-dwelling toggle** in ContactFormDialog (web) — batch-create contacts at same address with sequential unit numbers (starting unit + count, capped at 100)
+- **Multi-Dwelling Quick Add** in ProspectingReports (web) — collapsible card with address input, shows existing contacts/units at address, batch create with skip for existing units
+
+#### Tag Management
+- **TagManager component** (web, new) — full CRUD modal with preset + custom colour picker, inline edit name/colour, delete with confirmation
+- **Tag filter dropdown** in ContactsTable (web) — checkbox list, count badge, "Manage Tags" button
+
+#### Prospecting & Map
+- **`useProspectingMatcher` hook** — GPS proximity matching (configurable radius, default 50m) using `haversineDistance()`, fuzzy address matching via token comparison
+- **`haversineDistance()`** utility in `packages/utils/src/geocode.ts`
+- **Map geolocation at startup** — both mobile (`expo-location`) and web (`navigator.geolocation`) now centre on user's actual position on first load, falling back to Greenfield Park
+- **Nearby Contacts tray** (mobile map) — collapsible bottom panel showing contacts within 200m of current position, sorted by distance, with name/address/unit/last contacted; tap to navigate to contact detail
+- **Multi-dwelling quick add from map** (mobile) — long-press dialog enhanced with multi-dwelling toggle, starting unit + number of units inputs, batch creates contacts via `bulkAddContacts`
+- **Import filters** (mobile phone import) — skip without phone, skip without email, skip duplicates toggles + preview search bar; `effectiveSkipIndices` merges manual + filter skips; skipped rows dimmed
+- **Call Connect Rate card** (mobile prospecting tab) — connect rate %, connected/total count, WoW trend arrow, breakdown chips (No Answer/Voicemail/Wrong Number/Busy); shows in DailyView when calls exist
+
+### Changed
+
+- **Contacts layer off by default** on mobile map (was `true`, now `false`)
+- **Map markers guard against nil coordinates** — `.filter(c => c.latitude != null && c.longitude != null)` on contact and property markers to prevent iOS `NSInvalidArgumentException` crash
+
+### Fixed
+
+- **iOS map crash** — `[AIRGoogleMap insertReactSubview:atIndex:]` crash caused by Marker receiving nil lat/lng; fixed with null guards on all marker arrays
+- **Migration numbering conflict** — both `call_outcome` and `sms_campaigns` used `022`; renamed SMS to `023_sms_campaigns.sql`
+
+---
+
 ## [Unreleased] - 2026-03-30
 
 ### Added

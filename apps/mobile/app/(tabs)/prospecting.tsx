@@ -82,6 +82,7 @@ export default function ProspectingScreen() {
   const activeSession = useTrackingStore(s => s.activeSession);
   const startSession = useTrackingStore(s => s.startSession);
   const fetchContacts = useCRMStore(s => s.fetchContacts);
+  const fetchRecentActivities = useCRMStore(s => s.fetchRecentActivities);
   const contacts = useCRMStore(s => s.contacts);
   const fetchProperties = usePropertyStore(s => s.fetchProperties);
   const sessions = useTrackingStore(s => s.sessions);
@@ -96,9 +97,9 @@ export default function ProspectingScreen() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([fetchSessions(), fetchAllAnnotations(), fetchContacts(), fetchProperties(), fetchSuburbStats()]);
+    await Promise.all([fetchSessions(), fetchAllAnnotations(), fetchContacts(), fetchProperties(), fetchSuburbStats(), fetchRecentActivities()]);
     setRefreshing(false);
-  }, [fetchSessions, fetchAllAnnotations, fetchContacts, fetchProperties, fetchSuburbStats]);
+  }, [fetchSessions, fetchAllAnnotations, fetchContacts, fetchProperties, fetchSuburbStats, fetchRecentActivities]);
 
   useFocusEffect(
     useCallback(() => {
@@ -107,7 +108,8 @@ export default function ProspectingScreen() {
       fetchContacts();
       fetchProperties();
       fetchSuburbStats();
-    }, [fetchSessions, fetchAllAnnotations, fetchContacts, fetchProperties, fetchSuburbStats])
+      fetchRecentActivities();
+    }, [fetchSessions, fetchAllAnnotations, fetchContacts, fetchProperties, fetchSuburbStats, fetchRecentActivities])
   );
 
   // Use pre-computed suburb contact counts from the hook (covers ALL contacts, not just stale streets)
@@ -356,6 +358,85 @@ function DailyView({
           </Text>
         </View>
       </Surface>
+
+      {/* Call Connect Rate */}
+      {metrics.callMetrics.totalCalls > 0 && (
+        <Surface style={[styles.card, { backgroundColor: theme.colors.surface }]} elevation={1}>
+          <View style={styles.cardInner}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Icon name="phone-in-talk" size={18} color="#2563eb" />
+                <Text variant="titleSmall" style={{ fontWeight: '600' }}>Call Connect Rate</Text>
+              </View>
+              <Text variant="titleMedium" style={{ fontWeight: '700', color: '#2563eb' }}>
+                {metrics.callMetrics.connectRate}%
+              </Text>
+            </View>
+            <ProgressBar
+              progress={metrics.callMetrics.connectRate / 100}
+              color="#2563eb"
+              style={styles.progressBar}
+            />
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
+              {metrics.callMetrics.connected} connected / {metrics.callMetrics.totalCalls} total calls
+            </Text>
+
+            {/* WoW Trend */}
+            {metrics.callMetrics.trend.changePercent !== null && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 }}>
+                <Icon
+                  name={metrics.callMetrics.trend.changePercent >= 0 ? 'trending-up' : 'trending-down'}
+                  size={16}
+                  color={metrics.callMetrics.trend.changePercent >= 0 ? '#16a34a' : '#dc2626'}
+                />
+                <Text
+                  variant="labelSmall"
+                  style={{
+                    fontWeight: '700',
+                    color: metrics.callMetrics.trend.changePercent >= 0 ? '#16a34a' : '#dc2626',
+                  }}
+                >
+                  {metrics.callMetrics.trend.changePercent >= 0 ? '+' : ''}{metrics.callMetrics.trend.changePercent}% WoW
+                </Text>
+              </View>
+            )}
+
+            {/* Breakdown */}
+            {metrics.callMetrics.notConnected > 0 && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {metrics.callMetrics.reasons.no_answer > 0 && (
+                  <View style={[styles.callReasonChip, { backgroundColor: '#f59e0b14' }]}>
+                    <Text variant="labelSmall" style={{ color: '#f59e0b', fontWeight: '600', fontSize: 10 }}>
+                      No Answer: {metrics.callMetrics.reasons.no_answer}
+                    </Text>
+                  </View>
+                )}
+                {metrics.callMetrics.reasons.voicemail > 0 && (
+                  <View style={[styles.callReasonChip, { backgroundColor: '#6366f114' }]}>
+                    <Text variant="labelSmall" style={{ color: '#6366f1', fontWeight: '600', fontSize: 10 }}>
+                      Voicemail: {metrics.callMetrics.reasons.voicemail}
+                    </Text>
+                  </View>
+                )}
+                {metrics.callMetrics.reasons.wrong_number > 0 && (
+                  <View style={[styles.callReasonChip, { backgroundColor: '#dc262614' }]}>
+                    <Text variant="labelSmall" style={{ color: '#dc2626', fontWeight: '600', fontSize: 10 }}>
+                      Wrong Number: {metrics.callMetrics.reasons.wrong_number}
+                    </Text>
+                  </View>
+                )}
+                {metrics.callMetrics.reasons.busy > 0 && (
+                  <View style={[styles.callReasonChip, { backgroundColor: '#9ca3af14' }]}>
+                    <Text variant="labelSmall" style={{ color: '#9ca3af', fontWeight: '600', fontSize: 10 }}>
+                      Busy: {metrics.callMetrics.reasons.busy}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        </Surface>
+      )}
 
       {/* Today's Sessions */}
       {todaySessions.length > 0 && (
@@ -1150,6 +1231,13 @@ const styles = StyleSheet.create({
   funnelRateCol: {
     width: 36,
     alignItems: 'flex-end',
+  },
+
+  // Call reason chips
+  callReasonChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
 
   // Interest chips (inspection performance)

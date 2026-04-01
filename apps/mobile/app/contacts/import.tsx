@@ -12,6 +12,7 @@ import {
   Divider,
   TextInput,
   IconButton,
+  Switch,
 } from 'react-native-paper';
 import { Stack, useRouter } from 'expo-router';
 import * as Contacts from 'expo-contacts';
@@ -61,6 +62,12 @@ export default function ImportContactsScreen() {
   const [mapped, setMapped] = useState<MappedContact[]>([]);
   const [dupeMap, setDupeMap] = useState<Map<number, CRMContact>>(new Map());
   const [skipIndices, setSkipIndices] = useState<Set<number>>(new Set());
+
+  // Preview filters
+  const [filterSkipNoPhone, setFilterSkipNoPhone] = useState(false);
+  const [filterSkipNoEmail, setFilterSkipNoEmail] = useState(false);
+  const [filterSkipDuplicates, setFilterSkipDuplicates] = useState(true);
+  const [previewSearch, setPreviewSearch] = useState('');
 
   // Results
   const [importedCount, setImportedCount] = useState(0);
@@ -171,10 +178,35 @@ export default function ImportContactsScreen() {
     const dupes = findDuplicates(mappedList, existingContacts);
     setDupeMap(dupes);
 
-    // Default skip duplicates
-    setSkipIndices(new Set(dupes.keys()));
+    // Reset manual skip indices (filter-driven skips are computed via effectiveSkipIndices)
+    setSkipIndices(new Set());
+    setFilterSkipDuplicates(true);
+    setPreviewSearch('');
     setStep('preview');
   }, [deviceContacts, selectedIds, existingContacts]);
+
+  // Compute effective skip indices: merge manual skips + filter-driven skips
+  const effectiveSkipIndices = useMemo(() => {
+    const effective = new Set(skipIndices);
+    mapped.forEach((c, i) => {
+      if (filterSkipNoPhone && !c.phone) effective.add(i);
+      if (filterSkipNoEmail && !c.email) effective.add(i);
+      if (filterSkipDuplicates && dupeMap.has(i)) effective.add(i);
+    });
+    return effective;
+  }, [skipIndices, mapped, filterSkipNoPhone, filterSkipNoEmail, filterSkipDuplicates, dupeMap]);
+
+  // Filter preview list by search
+  const filteredPreview = useMemo(() => {
+    if (!previewSearch) return mapped.map((item, index) => ({ item, index }));
+    const q = previewSearch.toLowerCase();
+    return mapped
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => {
+        const name = `${item.first_name} ${item.last_name || ''}`.toLowerCase();
+        return name.includes(q);
+      });
+  }, [mapped, previewSearch]);
 
   const toggleImportTag = useCallback((tagId: string) => {
     setSelectedImportTagIds((prev) => {
@@ -211,7 +243,7 @@ export default function ImportContactsScreen() {
     setStep('importing');
     setImportError(null);
     const toImport = mapped
-      .filter((_, i) => !skipIndices.has(i))
+      .filter((_, i) => !effectiveSkipIndices.has(i))
       .map(({ addressExtracted: _ae, ...c }) => ({ ...c, source: 'import' as const }));
     const created = await bulkAddContacts(toImport);
     if (created.length === 0 && toImport.length > 0) {
@@ -238,7 +270,7 @@ export default function ImportContactsScreen() {
     setImportedCount(created.length);
     setSkippedCount(mapped.length - toImport.length);
     setStep('done');
-  }, [mapped, skipIndices, bulkAddContacts, selectedImportTagIds]);
+  }, [mapped, effectiveSkipIndices, bulkAddContacts, selectedImportTagIds]);
 
   // Permission denied
   if (permissionDenied) {
@@ -352,7 +384,7 @@ export default function ImportContactsScreen() {
             <View style={styles.previewHeader}>
               <Text variant="titleMedium">Preview Import</Text>
               <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                {mapped.length - skipIndices.size} will be imported, {skipIndices.size} skipped
+                {mapped.length - effectiveSkipIndices.size} will be imported, {effectiveSkipIndices.size} skipped
               </Text>
             </View>
 
@@ -422,15 +454,39 @@ export default function ImportContactsScreen() {
               )}
             </Surface>
 
+            {/* Filters */}
+            <Surface style={styles.filterSection} elevation={0}>
+              <Text variant="labelLarge" style={{ marginBottom: 8 }}>Filters</Text>
+              <View style={styles.filterRow}>
+                <Text variant="bodySmall" style={{ flex: 1 }}>Skip without phone</Text>
+                <Switch value={filterSkipNoPhone} onValueChange={setFilterSkipNoPhone} />
+              </View>
+              <View style={styles.filterRow}>
+                <Text variant="bodySmall" style={{ flex: 1 }}>Skip without email</Text>
+                <Switch value={filterSkipNoEmail} onValueChange={setFilterSkipNoEmail} />
+              </View>
+              <View style={styles.filterRow}>
+                <Text variant="bodySmall" style={{ flex: 1 }}>Skip duplicates</Text>
+                <Switch value={filterSkipDuplicates} onValueChange={setFilterSkipDuplicates} />
+              </View>
+              <Searchbar
+                placeholder="Search preview by name..."
+                value={previewSearch}
+                onChangeText={setPreviewSearch}
+                style={styles.previewSearchbar}
+                inputStyle={{ fontSize: 13 }}
+              />
+            </Surface>
+
             <FlatList
-              data={mapped}
-              keyExtractor={(_, i) => String(i)}
-              renderItem={({ item, index }) => {
+              data={filteredPreview}
+              keyExtractor={({ index }) => String(index)}
+              renderItem={({ item: { item, index } }) => {
                 const isDupe = dupeMap.has(index);
-                const isSkipped = skipIndices.has(index);
+                const isSkipped = effectiveSkipIndices.has(index);
                 const dupeOf = dupeMap.get(index);
                 return (
-                  <Surface style={styles.previewRow} elevation={0}>
+                  <Surface style={[styles.previewRow, isSkipped && { opacity: 0.45 }]} elevation={0}>
                     <Checkbox
                       status={isSkipped ? 'unchecked' : 'checked'}
                       onPress={() => toggleSkip(index)}
@@ -477,7 +533,7 @@ export default function ImportContactsScreen() {
                 Back
               </Button>
               <Button mode="contained" onPress={handleImport}>
-                Import {mapped.length - skipIndices.size} Contacts
+                Import {mapped.length - effectiveSkipIndices.size} Contacts
               </Button>
             </View>
           </>
@@ -569,6 +625,23 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     padding: 12,
     borderRadius: 8,
+  },
+  filterSection: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 8,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  previewSearchbar: {
+    elevation: 0,
+    marginTop: 8,
+    height: 40,
   },
   tagChipRow: {
     flexDirection: 'row',
