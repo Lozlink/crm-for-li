@@ -38,7 +38,7 @@ function extractSuburb(address: string): string {
 
 export function useStreetStats(): StreetStats[] {
   const contacts = useCRMStore(state => state.contacts);
-  const recentActivities = useCRMStore(state => state.recentActivities);
+  const recentActivities = useCRMStore(state => state.activities);
 
   return useMemo(() => {
     // Group contacts by street

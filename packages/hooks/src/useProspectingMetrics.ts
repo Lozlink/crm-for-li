@@ -642,7 +642,7 @@ export function useProspectingMetrics(): ProspectingMetrics {
   const sessions = useTrackingStore(s => s.sessions);
   const allAnnotations = useTrackingStore(s => s.allAnnotations);
   const contacts = useCRMStore(s => s.contacts);
-  const recentActivities = useCRMStore(s => s.recentActivities);
+  const recentActivities = useCRMStore(s => s.activities);
   const properties = usePropertyStore(s => s.properties);
   const inspections = useInspectionStore(s => s.inspections);
 

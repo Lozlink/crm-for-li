@@ -3,7 +3,7 @@ import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { Dialog, Text, TextInput, Button, useTheme, Surface } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCRMStore } from '../lib/store';
-import { ACTIVITY_TYPES, Activity } from '../lib/types';
+import { ACTIVITY_TYPES, Activity } from '@realestate-crm/types';
 
 interface AddActivityDialogProps {
   visible: boolean;

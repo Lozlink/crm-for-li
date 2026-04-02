@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { SmsCampaign, SmsMessage, SmsOptOut, Contact, Tag } from '@realestate-crm/types';
 import { supabase, isDemoMode, generateUUID } from '@realestate-crm/api';
 import { useAuthStore } from './useAuthStore';
+import { useCRMStore } from './useCRMStore';
 
 interface SmsCampaignState {
   campaigns: SmsCampaign[];
@@ -15,8 +16,8 @@ interface SmsCampaignState {
   createCampaign: (campaign: Omit<SmsCampaign, 'id' | 'created_at' | 'recipient_count' | 'sent_count' | 'failed_count'>) => Promise<SmsCampaign | null>;
   updateCampaign: (id: string, updates: Partial<SmsCampaign>) => Promise<void>;
   deleteCampaign: (id: string) => Promise<void>;
-  /** Add recipients from a pre-filtered contact list. Skips opted-out numbers. */
-  addRecipients: (campaignId: string, contacts: Contact[]) => Promise<void>;
+  /** Add recipients from a pre-filtered contact list. Skips opted-out numbers. Returns count of skipped contacts. */
+  addRecipients: (campaignId: string, contacts: Contact[]) => Promise<{ added: number; skippedOptOut: number }>;
   /** Add recipients by resolving a tag filter server-side. Skips opted-out numbers. */
   addRecipientsByTag: (campaignId: string, tagIds: string[]) => Promise<void>;
 }
@@ -218,27 +219,44 @@ export const useSmsCampaignStore = create<SmsCampaignState>()((set, get) => ({
   },
 
   addRecipients: async (campaignId, contacts) => {
+    const result = { added: 0, skippedOptOut: 0 };
     try {
       const { isDemo, teamId } = getTeamContext();
-      if (isDemo) return;
+      if (isDemo) return result;
 
       const optedOut = await fetchOptOutNumbers(teamId);
+      const crmStore = useCRMStore.getState();
 
-      const messageRows = contacts
-        .filter((c) => c.phone && !optedOut.has(c.phone) && !c.do_not_contact)
-        .map((c) => ({
-          campaign_id: campaignId,
-          contact_id: c.id,
-          phone_number: c.phone!,
-          // Template rendering deferred to Edge Function at send time
-          message_body: '',
-          team_id: teamId,
-        }));
+      const eligible: Contact[] = [];
+      for (const c of contacts) {
+        if (!c.phone) continue;
+        if (c.do_not_contact || optedOut.has(c.phone)) {
+          result.skippedOptOut++;
+          continue;
+        }
+        // Check CRM subscription status
+        const subStatus = crmStore.getSubscriptionStatus(c.id);
+        if (!subStatus.sms) {
+          result.skippedOptOut++;
+          continue;
+        }
+        eligible.push(c);
+      }
 
-      if (messageRows.length === 0) return;
+      if (eligible.length === 0) return result;
+
+      const messageRows = eligible.map((c) => ({
+        campaign_id: campaignId,
+        contact_id: c.id,
+        phone_number: c.phone!,
+        message_body: '',
+        team_id: teamId,
+      }));
 
       const { error } = await supabase.from('sms_messages').insert(messageRows);
       if (error) throw error;
+
+      result.added = messageRows.length;
 
       // Update recipient_count on the campaign
       await supabase
@@ -247,9 +265,11 @@ export const useSmsCampaignStore = create<SmsCampaignState>()((set, get) => ({
         .eq('id', campaignId);
 
       await get().fetchCampaign(campaignId);
+      return result;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to add SMS recipients';
       set({ error: message });
+      return result;
     }
   },
 

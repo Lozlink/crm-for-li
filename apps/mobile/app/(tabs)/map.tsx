@@ -68,8 +68,8 @@ export default function MapScreen() {
   const setMapRegion = useCRMStore(state => state.setMapRegion);
   const selectedTagIds = useCRMStore(state => state.selectedTagIds);
   const tags = useCRMStore(state => state.tags);
-  const recentActivities = useCRMStore(state => state.recentActivities);
-  const fetchRecentActivities = useCRMStore(state => state.fetchRecentActivities);
+  const recentActivities = useCRMStore(state => state.activities);
+  const fetchRecentActivities = useCRMStore(state => state.fetchActivities);
 
   const properties = usePropertyStore(state => state.properties);
   const fetchProperties = usePropertyStore(state => state.fetchProperties);

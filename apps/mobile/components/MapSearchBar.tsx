@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { StyleSheet, View, FlatList, TouchableOpacity, ScrollView, Keyboard } from 'react-native';
 import { Searchbar, Text, Surface, useTheme, Chip, IconButton } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { PlacePrediction } from '../lib/types';
+import { PlacePrediction } from '@realestate-crm/types';
 import { useCRMStore } from '../lib/store';
 
 const GOOGLE_PLACES_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '';

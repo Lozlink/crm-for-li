@@ -96,9 +96,9 @@ export default function StatsView() {
   const tasks = useTaskStore(state => state.tasks);
   const fetchTasks = useTaskStore(state => state.fetchTasks);
   const contacts = useCRMStore(state => state.contacts);
-  const recentActivities = useCRMStore(state => state.recentActivities);
+  const recentActivities = useCRMStore(state => state.activities);
   const fetchContacts = useCRMStore(state => state.fetchContacts);
-  const fetchRecentActivities = useCRMStore(state => state.fetchRecentActivities);
+  const fetchRecentActivities = useCRMStore(state => state.fetchActivities);
   const teamMembers = useAuthStore(state => state.teamMembers);
   const activeTeam = useAuthStore(state => state.activeTeam);
   const fetchTeamMembers = useAuthStore(state => state.fetchTeamMembers);

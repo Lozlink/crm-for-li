@@ -39,7 +39,7 @@ export type {
 export type { MapRegion, SavedSuburb, SuburbBoundary, OSMBuilding } from './map';
 
 // Google Places types
-export type { PlacePrediction, PlaceDetails } from './google-places';
+export type { PlacePrediction, PlaceDetails, PlaceAddressComponent } from './google-places';
 
 // Auth & Teams
 export type {

@@ -215,6 +215,10 @@ export default function ContactDetailScreen() {
   const updateSubscription = useEmailCampaignStore(state => state.updateSubscription);
   const [emailSubscribed, setEmailSubscribed] = useState(true);
 
+  // Subscription status
+  const getSubscriptionStatus = useCRMStore(state => state.getSubscriptionStatus);
+  const subscriptionStatuses = useCRMStore(state => state.subscriptionStatuses);
+
   // Buyer match store
   const requirements = useBuyerMatchStore(state => state.requirements);
   const fetchRequirements = useBuyerMatchStore(state => state.fetchRequirements);
@@ -225,6 +229,8 @@ export default function ContactDetailScreen() {
   // Property store
   const properties = usePropertyStore(state => state.properties);
   const fetchProperties = usePropertyStore(state => state.fetchProperties);
+  const getPropertiesForContact = usePropertyStore(state => state.getPropertiesForContact);
+  const propertyLinksVersion = useCRMStore(state => state.propertyLinksVersion);
 
   // Inspection store
   const inspections = useInspectionStore(state => state.inspections);
@@ -293,10 +299,9 @@ export default function ContactDetailScreen() {
   // --- Linked properties for this contact ---
   const linkedProperties = useMemo(() => {
     if (!id) return [];
-    return properties.filter(p =>
-      p.property_contacts?.some(pc => pc.contact_id === id)
-    );
-  }, [properties, id]);
+    return getPropertiesForContact(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [properties, id, propertyLinksVersion]);
 
   // --- Inspections where this contact is an attendee ---
   const contactInspections = useMemo(() => {
@@ -333,7 +338,7 @@ export default function ContactDetailScreen() {
     if (pendingCallActivityId.current) {
       await updateActivity(pendingCallActivityId.current, {
         content: `Outgoing call — ${reason}`,
-        call_outcome: reason,
+        call_outcome: reason as import('@realestate-crm/types').CallOutcome,
       });
       if (id) await fetchActivities(id);
     }
@@ -367,6 +372,15 @@ export default function ContactDetailScreen() {
     if (!id) return;
     // Strip form-only fields that aren't DB columns
     const { tag_ids, initial_note, ...contactData } = data as any;
+    // Convert tag_ids back to tags array for the store's multi-tag sync
+    const allTags = useCRMStore.getState().tags;
+    if (tag_ids && tag_ids.length > 0) {
+      contactData.tags = tag_ids.map((tid: string) => allTags.find((t: { id: string }) => t.id === tid)).filter(Boolean);
+      contactData.tag_id = tag_ids[0];
+    } else {
+      contactData.tags = [];
+      contactData.tag_id = null;
+    }
     await updateContact(id, contactData);
     // Check if store reported an error
     const storeError = useCRMStore.getState().error;
@@ -808,27 +822,46 @@ export default function ContactDetailScreen() {
                 <CustomFieldRenderer entityType="contact" entityId={id!} inline />
               </CollapsibleCard>
 
-              {/* ===== EMAIL SUBSCRIPTION ===== */}
-              {contact.email && (
-                <Surface style={styles.subscriptionRow} elevation={1}>
-                  <View style={styles.subscriptionContent}>
-                    <Icon name="email-newsletter" size={20} color={theme.colors.onSurfaceVariant} />
-                    <View style={{ flex: 1 }}>
-                      <Text variant="bodyMedium">Email Campaigns</Text>
-                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                        {emailSubscribed ? 'Subscribed to campaigns' : 'Unsubscribed from campaigns'}
-                      </Text>
-                    </View>
-                    <Switch
-                      value={emailSubscribed}
-                      onValueChange={async (val) => {
-                        setEmailSubscribed(val);
-                        if (id) await updateSubscription(id, val);
-                      }}
-                    />
-                  </View>
-                </Surface>
-              )}
+              {/* ===== SUBSCRIPTION STATUS ===== */}
+              {(contact.email || contact.phone) && (() => {
+                const subStatus = id ? getSubscriptionStatus(id) : { email: true, sms: true };
+                return (
+                  <Surface style={styles.subscriptionRow} elevation={1}>
+                    {contact.email && (
+                      <View style={styles.subscriptionContent}>
+                        <Icon name="email-newsletter" size={20} color={theme.colors.onSurfaceVariant} />
+                        <View style={{ flex: 1 }}>
+                          <Text variant="bodyMedium">Email Campaigns</Text>
+                          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                            {emailSubscribed ? 'Subscribed to campaigns' : 'Unsubscribed from campaigns'}
+                          </Text>
+                        </View>
+                        <Switch
+                          value={emailSubscribed}
+                          onValueChange={async (val) => {
+                            setEmailSubscribed(val);
+                            if (id) await updateSubscription(id, val);
+                          }}
+                        />
+                      </View>
+                    )}
+                    {contact.phone && (
+                      <View style={[styles.subscriptionContent, contact.email ? { borderTopWidth: 1, borderTopColor: theme.colors.outlineVariant, paddingTop: 12, marginTop: 4 } : undefined]}>
+                        <Icon name="message-text" size={20} color={theme.colors.onSurfaceVariant} />
+                        <View style={{ flex: 1 }}>
+                          <Text variant="bodyMedium">SMS Campaigns</Text>
+                          <Text variant="bodySmall" style={{ color: subStatus.sms ? theme.colors.onSurfaceVariant : theme.colors.error }}>
+                            {subStatus.sms ? 'Opted in to SMS' : 'Opted out of SMS'}
+                          </Text>
+                        </View>
+                        <Chip compact style={subStatus.sms ? undefined : { backgroundColor: theme.colors.errorContainer }}>
+                          {subStatus.sms ? 'Active' : 'Opted Out'}
+                        </Chip>
+                      </View>
+                    )}
+                  </Surface>
+                );
+              })()}
 
               {/* ===== REQUIREMENTS CARD ===== */}
               <CollapsibleCard

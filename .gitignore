@@ -61,3 +61,4 @@ yarn-error.*
 
 # Data imports (raw CSVs)
 /data/
+/schemadump.sql

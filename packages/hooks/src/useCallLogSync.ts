@@ -3,6 +3,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { useCRMStore } from './useCRMStore';
 import type { CallOutcome, Contact } from '@realestate-crm/types';
 import type { RecentCall } from '../../../modules/caller-id/src/CallerIdModule';
+import { generateCallDedupKey, hasRecentCallActivity } from '@realestate-crm/utils';
 
 // Lazy-import CallerIdModule to avoid crash when native module is not available
 // (e.g. running in web or Expo Go where native modules aren't linked)
@@ -99,6 +100,7 @@ export interface PendingCallOutcome {
  */
 export function useCallLogSync() {
   const contacts = useCRMStore((state) => state.contacts);
+  const activities = useCRMStore((state) => state.activities);
   const addActivity = useCRMStore((state) => state.addActivity);
 
   const [pendingCall, setPendingCall] = useState<PendingCallOutcome | null>(null);
@@ -113,12 +115,17 @@ export function useCallLogSync() {
   // Queue of pending calls waiting to be shown to the user (one at a time)
   const pendingQueueRef = useRef<PendingCallOutcome[]>([]);
 
-  // Keep a ref to the latest contacts so the AppState listener closure
-  // always sees the current list without needing to re-subscribe.
+  // Keep refs to latest store data so AppState listener closures always
+  // see the current values without needing to re-subscribe.
   const contactsRef = useRef(contacts);
   useEffect(() => {
     contactsRef.current = contacts;
   }, [contacts]);
+
+  const activitiesRef = useRef(activities);
+  useEffect(() => {
+    activitiesRef.current = activities;
+  }, [activities]);
 
   // Same for addActivity
   const addActivityRef = useRef(addActivity);
@@ -202,10 +209,18 @@ export function useCallLogSync() {
 
     const newPending: PendingCallOutcome[] = [];
 
+    const currentActivities = activitiesRef.current;
+
     for (const call of recentCalls) {
-      // Dedup: skip calls we have already logged or queued
-      const callKey = `${toDigitsOnly(call.phone)}:${call.timestamp}`;
+      // Dedup key derived from last-8-digits + 2-minute time bucket
+      const callKey = generateCallDedupKey(call.phone, new Date(call.timestamp));
+
+      // Skip if already logged in this session or queued
       if (loggedCallKeysRef.current.has(callKey)) continue;
+
+      // Skip if a matching call activity already exists in the store (prevents
+      // double-logging when auto-detection fires after a manual entry)
+      if (hasRecentCallActivity(currentActivities, call.phone)) continue;
 
       // Find a matching CRM contact by phone number
       const matchedContact = currentContacts.find(

@@ -15,8 +15,8 @@ interface ContactNoteGroup {
 
 export default function NotesView() {
   const contacts = useCRMStore((s) => s.contacts);
-  const recentActivities = useCRMStore((s) => s.recentActivities);
-  const fetchRecentActivities = useCRMStore((s) => s.fetchRecentActivities);
+  const recentActivities = useCRMStore((s) => s.activities);
+  const fetchRecentActivities = useCRMStore((s) => s.fetchActivities);
   const findContactByAddress = useCRMStore((s) => s.findContactByAddress);
   const addActivity = useCRMStore((s) => s.addActivity);
   const router = useRouter();

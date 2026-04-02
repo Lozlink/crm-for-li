@@ -3,7 +3,7 @@ import { StyleSheet, View, Alert } from 'react-native';
 import { TextInput, Button, HelperText, useTheme } from 'react-native-paper';
 import * as Contacts from 'expo-contacts';
 import * as Linking from 'expo-linking';
-import { ContactFormData } from '../lib/types';
+import { ContactFormData } from '@realestate-crm/types';
 import TagPicker from './TagPicker';
 import AddressAutocomplete from './AddressAutocomplete';
 
@@ -37,6 +37,7 @@ export default function ContactForm({
     latitude: undefined,
     longitude: undefined,
     tag_id: undefined,
+    tag_ids: [],
     initial_note: '',
   });
 
@@ -193,8 +194,11 @@ export default function ContactForm({
           />
 
           <TagPicker
-            selectedTagId={formData.tag_id}
-            onTagSelect={(tagId) => updateField('tag_id', tagId)}
+            multiSelect
+            selectedTagIds={formData.tag_ids || []}
+            onTagsChange={(tagIds) => {
+              setFormData(prev => ({ ...prev, tag_ids: tagIds, tag_id: tagIds[0] }));
+            }}
             style={styles.tagPicker}
           />
         </>
@@ -259,8 +263,11 @@ export default function ContactForm({
           )}
 
           <TagPicker
-            selectedTagId={formData.tag_id}
-            onTagSelect={(tagId) => updateField('tag_id', tagId)}
+            multiSelect
+            selectedTagIds={formData.tag_ids || []}
+            onTagsChange={(tagIds) => {
+              setFormData(prev => ({ ...prev, tag_ids: tagIds, tag_id: tagIds[0] }));
+            }}
             style={styles.tagPicker}
           />
 

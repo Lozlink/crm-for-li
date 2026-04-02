@@ -7,6 +7,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@realestate-crm/types": "workspace:*",
     "react-native": "*",
     "@react-native-async-storage/async-storage": "*"
   },

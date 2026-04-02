@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { EmailCampaign, EmailRecipient, ContactSubscription, Contact } from '@realestate-crm/types';
 import { supabase, isDemoMode } from '@realestate-crm/api';
 import { useAuthStore } from './useAuthStore';
+import { useCRMStore } from './useCRMStore';
 
 interface EmailCampaignState {
   campaigns: EmailCampaign[];
@@ -15,7 +16,7 @@ interface EmailCampaignState {
   createCampaign: (campaign: Omit<EmailCampaign, 'id' | 'created_at' | 'updated_at' | 'recipient_count' | 'sent_count' | 'opened_count'>) => Promise<EmailCampaign | null>;
   updateCampaign: (id: string, updates: Partial<EmailCampaign>) => Promise<void>;
   deleteCampaign: (id: string) => Promise<void>;
-  addRecipients: (campaignId: string, contacts: Contact[]) => Promise<void>;
+  addRecipients: (campaignId: string, contacts: Contact[]) => Promise<{ added: number; skippedOptOut: number }>;
   removeRecipient: (recipientId: string) => Promise<void>;
   sendCampaign: (campaignId: string) => Promise<void>;
   scheduleCampaign: (campaignId: string, scheduledAt: string) => Promise<void>;
@@ -185,11 +186,12 @@ export const useEmailCampaignStore = create<EmailCampaignState>()((set, get) => 
   },
 
   addRecipients: async (campaignId, contacts) => {
+    const result = { added: 0, skippedOptOut: 0 };
     try {
       const { isDemo, teamId } = getTeamContext();
-      if (isDemo) return;
+      if (isDemo) return result;
 
-      // Filter out unsubscribed contacts
+      // Filter out unsubscribed contacts from DB
       const contactIds = contacts.map((c) => c.id);
       const { data: subs } = await supabase
         .from('contact_subscriptions')
@@ -198,25 +200,44 @@ export const useEmailCampaignStore = create<EmailCampaignState>()((set, get) => 
         .eq('subscribed', false);
 
       const unsubscribedIds = new Set((subs || []).map((s: { contact_id: string }) => s.contact_id));
+      const crmStore = useCRMStore.getState();
 
-      const recipientRows = contacts
-        .filter((c) => c.email && !unsubscribedIds.has(c.id))
-        .map((c) => ({
-          campaign_id: campaignId,
-          contact_id: c.id,
-          email: c.email!,
-        }));
+      const eligible: Contact[] = [];
+      for (const c of contacts) {
+        if (!c.email) continue;
+        if (c.do_not_contact || unsubscribedIds.has(c.id)) {
+          result.skippedOptOut++;
+          continue;
+        }
+        // Also check CRM store subscription status
+        const subStatus = crmStore.getSubscriptionStatus(c.id);
+        if (!subStatus.email) {
+          result.skippedOptOut++;
+          continue;
+        }
+        eligible.push(c);
+      }
 
-      if (recipientRows.length === 0) return;
+      if (eligible.length === 0) return result;
+
+      const recipientRows = eligible.map((c) => ({
+        campaign_id: campaignId,
+        contact_id: c.id,
+        email: c.email!,
+      }));
 
       const { error } = await supabase.from('email_recipients').insert(recipientRows);
       if (error) throw error;
 
+      result.added = recipientRows.length;
+
       // Refresh campaign to get updated counts
       await get().fetchCampaign(campaignId);
+      return result;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to add recipients';
       set({ error: message });
+      return result;
     }
   },
 

@@ -1,8 +1,42 @@
 import { create } from 'zustand';
-import type { Inspection, InspectionAttendee, InspectionStatus, AttendeeSource, InterestLevel } from '@realestate-crm/types';
+import type { Inspection, InspectionAttendee, InspectionStatus, AttendeeSource, InterestLevel, Contact } from '@realestate-crm/types';
 import { supabase, isDemoMode, generateUUID } from '@realestate-crm/api';
 import { useAuthStore } from './useAuthStore';
 import { useCRMStore } from './useCRMStore';
+
+/**
+ * Compare two phone numbers by their last 8 digits.
+ * Consistent with useCallLogSync's phonesMatch logic.
+ */
+function phonesMatch(a: string, b: string): boolean {
+  const digitsA = a.replace(/\D/g, '');
+  const digitsB = b.replace(/\D/g, '');
+  if (digitsA.length < 8 || digitsB.length < 8) return false;
+  return digitsA.slice(-8) === digitsB.slice(-8);
+}
+
+/**
+ * Find a matching contact by phone (last 8 digits) or exact email.
+ */
+function findMatchingContact(
+  contacts: Contact[],
+  phone?: string,
+  email?: string,
+): Contact | undefined {
+  if (!phone && !email) return undefined;
+
+  for (const c of contacts) {
+    // Match on email (exact, case-insensitive)
+    if (email && c.email && email.toLowerCase() === c.email.toLowerCase()) {
+      return c;
+    }
+    // Match on phone (last 8 digits)
+    if (phone && c.phone && phonesMatch(phone, c.phone)) {
+      return c;
+    }
+  }
+  return undefined;
+}
 
 interface InspectionState {
   inspections: Inspection[];
@@ -315,35 +349,64 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
       if (isDemo) return null;
 
       let contactId: string | null = resolvedContactId || null;
+      let suggestedContactMatch = false;
 
-      // If no resolved contact, create a new one
+      // If no resolved contact, try to find an existing one by phone/email
       if (!contactId) {
-        const newContact = await useCRMStore.getState().addContact({
-          first_name: attendee.first_name,
-          last_name: attendee.last_name || '',
-          phone: attendee.phone || '',
-          email: attendee.email || '',
-          address: '',
-        });
-        if (newContact) contactId = newContact.id;
+        const contacts = useCRMStore.getState().contacts;
+        const matchedContact = findMatchingContact(contacts, attendee.phone, attendee.email);
+
+        if (matchedContact) {
+          contactId = matchedContact.id;
+        } else {
+          // Check if there's a potential fuzzy match worth suggesting
+          // (e.g., partial name match when phone/email don't match)
+          const hasContactData = attendee.phone || attendee.email;
+          if (hasContactData && contacts.length > 0) {
+            // No exact match found but attendee has contact info — flag for UI prompt
+            suggestedContactMatch = true;
+          }
+
+          // Create a new contact
+          const newContact = await useCRMStore.getState().addContact({
+            first_name: attendee.first_name,
+            last_name: attendee.last_name || '',
+            phone: attendee.phone || '',
+            email: attendee.email || '',
+            address: '',
+          });
+          if (newContact) contactId = newContact.id;
+        }
       }
+
+      const insertData: Record<string, unknown> = {
+        inspection_id: inspectionId,
+        contact_id: contactId,
+        first_name: attendee.first_name,
+        last_name: attendee.last_name,
+        phone: attendee.phone,
+        email: attendee.email,
+        source: attendee.source,
+      };
 
       const { data, error } = await supabase
         .from('inspection_attendees')
-        .insert({
-          inspection_id: inspectionId,
-          contact_id: contactId,
-          first_name: attendee.first_name,
-          last_name: attendee.last_name,
-          phone: attendee.phone,
-          email: attendee.email,
-          source: attendee.source,
-        })
+        .insert(insertData)
         .select()
         .single();
 
       if (error) throw error;
       const newAttendee = data as InspectionAttendee;
+
+      // If we auto-matched, link the attendee to the found contact
+      if (contactId && !resolvedContactId) {
+        await get().linkAttendeeToContact(newAttendee.id, contactId);
+        newAttendee.contact_id = contactId;
+      }
+
+      // Attach suggestedContactMatch flag for UI consumption
+      newAttendee.suggestedContactMatch = suggestedContactMatch;
+
       set((state) => ({ attendees: [...state.attendees, newAttendee] }));
       return newAttendee;
     } catch (err: unknown) {

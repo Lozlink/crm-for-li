@@ -3,15 +3,32 @@ import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
 import { Text, useTheme, Surface, Portal, Dialog, TextInput, Button } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCRMStore } from '../lib/store';
-import { TAG_COLORS } from '../lib/types';
+import { TAG_COLORS } from '@realestate-crm/types';
 
-interface TagPickerProps {
+interface TagPickerSingleProps {
   selectedTagId?: string;
   onTagSelect: (tagId?: string) => void;
+  multiSelect?: false;
+  selectedTagIds?: never;
+  onTagsChange?: never;
   style?: object;
 }
 
-export default function TagPicker({ selectedTagId, onTagSelect, style }: TagPickerProps) {
+interface TagPickerMultiProps {
+  multiSelect: true;
+  selectedTagIds: string[];
+  onTagsChange: (tagIds: string[]) => void;
+  selectedTagId?: never;
+  onTagSelect?: never;
+  style?: object;
+}
+
+type TagPickerProps = TagPickerSingleProps | TagPickerMultiProps;
+
+export default function TagPicker(props: TagPickerProps) {
+  const { style } = props;
+  const isMulti = props.multiSelect === true;
+
   const theme = useTheme();
   const tags = useCRMStore(state => state.tags);
   const addTag = useCRMStore(state => state.addTag);
@@ -24,26 +41,62 @@ export default function TagPicker({ selectedTagId, onTagSelect, style }: TagPick
     if (!newTagName.trim()) return;
     const tag = await addTag({ name: newTagName.trim(), color: newTagColor });
     if (tag) {
-      onTagSelect(tag.id); // Auto-select the new tag
+      if (isMulti) {
+        props.onTagsChange([...props.selectedTagIds, tag.id]);
+      } else {
+        props.onTagSelect(tag.id);
+      }
     }
     setDialogVisible(false);
     setNewTagName('');
     setNewTagColor(TAG_COLORS[0]);
   };
 
+  const handleTagPress = (tagId: string) => {
+    if (isMulti) {
+      const current = props.selectedTagIds;
+      if (current.includes(tagId)) {
+        props.onTagsChange(current.filter(id => id !== tagId));
+      } else {
+        props.onTagsChange([...current, tagId]);
+      }
+    } else {
+      props.onTagSelect(tagId);
+    }
+  };
+
+  const handleClear = () => {
+    if (isMulti) {
+      props.onTagsChange([]);
+    } else {
+      props.onTagSelect(undefined);
+    }
+  };
+
+  const isTagSelected = (tagId: string): boolean => {
+    if (isMulti) return props.selectedTagIds.includes(tagId);
+    return props.selectedTagId === tagId;
+  };
+
+  const hasNoSelection = isMulti
+    ? props.selectedTagIds.length === 0
+    : !props.selectedTagId;
+
   return (
     <View style={[styles.container, style]}>
-      <Text variant="labelLarge" style={styles.label}>Tag</Text>
+      <Text variant="labelLarge" style={styles.label}>
+        {isMulti ? 'Tags' : 'Tag'}
+      </Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <TouchableOpacity
-          onPress={() => onTagSelect(undefined)}
+          onPress={handleClear}
           activeOpacity={0.7}
         >
           <Surface
             style={[
               styles.tagItem,
-              !selectedTagId && styles.tagSelected,
+              hasNoSelection && styles.tagSelected,
               { borderColor: theme.colors.outline },
             ]}
             elevation={0}
@@ -58,11 +111,11 @@ export default function TagPicker({ selectedTagId, onTagSelect, style }: TagPick
         </TouchableOpacity>
 
         {tags.map(tag => {
-          const isSelected = selectedTagId === tag.id;
+          const isSelected = isTagSelected(tag.id);
           return (
             <TouchableOpacity
               key={tag.id}
-              onPress={() => onTagSelect(tag.id)}
+              onPress={() => handleTagPress(tag.id)}
               activeOpacity={0.7}
             >
               <Surface

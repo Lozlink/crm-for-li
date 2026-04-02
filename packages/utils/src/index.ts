@@ -27,3 +27,6 @@ export {
 export type { DedupContact, ParsedContactName } from './validation';
 
 export { geocodeAddress, batchGeocodeAddresses, haversineDistance } from './geocode';
+
+export { generateCallDedupKey, hasRecentCallActivity } from './callActivity';
+export type { PendingCallOutcome } from './callActivity';

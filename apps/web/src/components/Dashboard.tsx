@@ -116,8 +116,8 @@ const TASK_TYPE_COLORS: Record<string, string> = {
 export default function Dashboard() {
   // --- Store subscriptions ---
   const contacts = useCRMStore((s) => s.contacts);
-  const recentActivities = useCRMStore((s) => s.recentActivities);
-  const fetchRecentActivities = useCRMStore((s) => s.fetchRecentActivities);
+  const recentActivities = useCRMStore((s) => s.activities);
+  const fetchRecentActivities = useCRMStore((s) => s.fetchActivities);
   const fetchContacts = useCRMStore((s) => s.fetchContacts);
 
   const user = useAuthStore((s) => s.user);

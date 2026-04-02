@@ -96,7 +96,7 @@ export default function StatsScreen() {
   const fetchTasks = useTaskStore(state => state.fetchTasks);
   const contacts = useCRMStore(state => state.contacts);
   const fetchContacts = useCRMStore(state => state.fetchContacts);
-  const fetchRecentActivities = useCRMStore(state => state.fetchRecentActivities);
+  const fetchRecentActivities = useCRMStore(state => state.fetchActivities);
 
   useFocusEffect(
     useCallback(() => {

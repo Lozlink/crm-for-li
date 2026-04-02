@@ -11,7 +11,7 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { useCRMStore } from '../lib/store';
-import { TAG_COLORS, Tag } from '../lib/types';
+import { TAG_COLORS, Tag } from '@realestate-crm/types';
 
 export default function TagManager() {
   const theme = useTheme();

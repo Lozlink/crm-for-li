@@ -21,7 +21,7 @@ import Constants from 'expo-constants';
 import { useCRMStore, useRouteStore } from '@realestate-crm/hooks';
 import { fetchOptimizedRoute, decodePolyline } from '@realestate-crm/api';
 import type { Contact, RouteMode } from '@realestate-crm/types';
-import type { PlacePrediction } from '../../lib/types';
+import type { PlacePrediction } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const GOOGLE_PLACES_API_KEY =

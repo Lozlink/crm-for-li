@@ -83,7 +83,7 @@ export default function ProspectingScreen() {
   const activeSession = useTrackingStore(s => s.activeSession);
   const startSession = useTrackingStore(s => s.startSession);
   const fetchContacts = useCRMStore(s => s.fetchContacts);
-  const fetchRecentActivities = useCRMStore(s => s.fetchRecentActivities);
+  const fetchRecentActivities = useCRMStore(s => s.fetchActivities);
   const contacts = useCRMStore(s => s.contacts);
   const fetchProperties = usePropertyStore(s => s.fetchProperties);
   const sessions = useTrackingStore(s => s.sessions);

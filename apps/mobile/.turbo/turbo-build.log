@@ -4,10 +4,27 @@
 
 [38;5;142m[dotenvx@1.52.0] injecting env (4) from .env[39m
 Starting Metro Bundler
-Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 86.7% (1297/1394)
-iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1744/1744)
-Android Bundled 3346ms apps/mobile/index.ts (1394 modules)
-iOS Bundled 5194ms apps/mobile/index.ts (1744 modules)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓░░░░░░░░ 51.0% (12/19)
+iOS apps/mobile/index.ts ▓░░░░░░░░░░░░░░░ 12.4% (25/71)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓░░░░░░░░ 51.0% ( 60/274)
+iOS apps/mobile/index.ts ▓▓▓░░░░░░░░░░░░░ 20.5% (310/685)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓░░░░░░░░ 51.0% (428/799)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓░░░░░░░░░ 47.4% (674/979)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓░░░░░░░░ 51.0% ( 616/1005)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 72.7% (1011/1200)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓░░░░░░░ 57.1% ( 843/1116)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 85.1% (1187/1287)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 86.6% (1171/1258)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 88.9% (1309/1388)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.0% (1313/1437)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 90.1% (1496/1587)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.0% (1557/1616)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.2% (1666/1692)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1741/1741)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1745/1745)
+iOS Bundled 32210ms apps/mobile/index.ts (1745 modules)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1741/1741)
+Android Bundled 35062ms apps/mobile/index.ts (1741 modules)
 
 › Assets (33):
 ../../node_modules/.pnpm/@expo+vector-icons@15.0.3_expo-font@14.0.11_expo@54.0.33_react-native@0.81.5_@babel+cor_dffeba5e71c136362da807d9acd294ec/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf (1.31 MB)
@@ -25,11 +42,11 @@ iOS Bundled 5194ms apps/mobile/index.ts (1744 modules)
 ../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/unmatched.png (4.75 kB)
 ../../node_modules/.pnpm/react-native-paper@5.15.0_react-native-safe-area-context@5.6.2_react-native@0.81.5_@bab_41d9b5c0467b7e446469252509ed76ee/node_modules/react-native-paper/src/assets/back-chevron.png (489 B)
 
-› android bundles (1):
-_expo/static/js/android/index-2c2b3ed17c7d8edaba1209384621356d.hbc (5.9 MB)
-
 › ios bundles (1):
-_expo/static/js/ios/index-75e40e62b3ac382d79c7b31995b93796.hbc (5.91 MB)
+_expo/static/js/ios/index-1d07545811beb8807d5786bf50bcdbd5.hbc (5.93 MB)
+
+› android bundles (1):
+_expo/static/js/android/index-483d9d805ca82d645f32728bc4561509.hbc (5.93 MB)
 
 › Files (1):
 metadata.json (3.71 kB)

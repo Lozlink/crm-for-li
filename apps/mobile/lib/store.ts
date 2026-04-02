@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Contact, Tag, Activity, MapRegion, SavedSuburb } from './types';
+import { Contact, Tag, Activity, MapRegion, SavedSuburb } from '@realestate-crm/types';
 import { supabase, isDemoMode, generateUUID } from './supabase';
 
 interface CRMState {

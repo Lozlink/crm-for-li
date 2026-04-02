@@ -1,7 +1,7 @@
 import { StyleSheet, View, Dimensions } from 'react-native';
 import { Modal, Text, Button, useTheme, Surface, Chip } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Contact } from '../lib/types';
+import { Contact } from '@realestate-crm/types';
 
 const { height } = Dimensions.get('window');
 

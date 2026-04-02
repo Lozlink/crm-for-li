@@ -325,6 +325,8 @@ export interface InspectionAttendee {
   created_at?: string;
   // Joined
   contact?: Contact;
+  // Set by auto-match logic when attendee data suggests a possible contact match
+  suggestedContactMatch?: boolean;
 }
 
 // --- Tasks ---

@@ -28,8 +28,8 @@ export default function NotesScreen() {
   const insets = useSafeAreaInsets();
 
   const contacts = useCRMStore(state => state.contacts);
-  const recentActivities = useCRMStore(state => state.recentActivities);
-  const fetchRecentActivities = useCRMStore(state => state.fetchRecentActivities);
+  const recentActivities = useCRMStore(state => state.activities);
+  const fetchRecentActivities = useCRMStore(state => state.fetchActivities);
   const tags = useCRMStore(state => state.tags);
 
   const allAnnotations = useTrackingStore(state => state.allAnnotations);

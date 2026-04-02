@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { storage, normalizeAddress } from '@realestate-crm/utils';
+import { storage, normalizeAddress, generateCallDedupKey } from '@realestate-crm/utils';
 import type { Contact, Tag, Activity, ActivityWithContact, MapRegion, SavedSuburb, ActivitySource } from '@realestate-crm/types';
+// Note: Activity type is still used in addActivity parameter type (Omit<Activity, ...>)
 import { supabase, isDemoMode, generateUUID } from '@realestate-crm/api';
 import { useAuthStore } from './useAuthStore';
 
@@ -27,9 +28,17 @@ interface CRMState {
   // Data
   contacts: Contact[];
   tags: Tag[];
-  activities: Activity[];
-  recentActivities: ActivityWithContact[];
+  activities: ActivityWithContact[];
   savedSuburbs: SavedSuburb[];
+
+  // Cross-store sync counters
+  propertyLinksVersion: number;
+  bumpPropertyLinksVersion: () => void;
+
+  // Subscription statuses
+  subscriptionStatuses: Map<string, { email: boolean; sms: boolean }>;
+  fetchSubscriptionStatuses: () => Promise<void>;
+  getSubscriptionStatus: (contactId: string) => { email: boolean; sms: boolean };
 
   // UI State
   selectedTagIds: string[];
@@ -42,7 +51,7 @@ interface CRMState {
   // Actions
   setContacts: (contacts: Contact[]) => void;
   setTags: (tags: Tag[]) => void;
-  setActivities: (activities: Activity[]) => void;
+  setActivities: (activities: ActivityWithContact[]) => void;
   setSelectedTagIds: (ids: string[]) => void;
   setSearchQuery: (query: string) => void;
   setMapRegion: (region: MapRegion) => void;
@@ -52,8 +61,7 @@ interface CRMState {
   // CRUD Operations
   fetchContacts: (ctx?: { teamId: string | null; userId: string | null; isDemo: boolean }) => Promise<void>;
   fetchTags: (ctx?: { teamId: string | null; userId: string | null; isDemo: boolean }) => Promise<void>;
-  fetchActivities: (contactId: string) => Promise<void>;
-  fetchRecentActivities: (limit?: number) => Promise<void>;
+  fetchActivities: (contactIdOrLimit?: string | number) => Promise<void>;
 
   addContact: (contact: Omit<Contact, 'id' | 'created_at' | 'updated_at'>) => Promise<Contact | null>;
   updateContact: (id: string, contact: Partial<Contact>) => Promise<void>;
@@ -62,6 +70,9 @@ interface CRMState {
   addTag: (tag: Omit<Tag, 'id' | 'created_at'>) => Promise<Tag | null>;
   updateTag: (id: string, tag: Partial<Tag>) => Promise<void>;
   deleteTag: (id: string) => Promise<void>;
+
+  addTagToContact: (contactId: string, tagId: string) => Promise<void>;
+  removeTagFromContact: (contactId: string, tagId: string) => Promise<void>;
 
   addActivity: (activity: Omit<Activity, 'id' | 'created_at'>) => Promise<Activity | null>;
   updateActivity: (id: string, updates: Partial<Activity>) => Promise<void>;
@@ -122,8 +133,60 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
   contacts: [],
   tags: [],
   activities: [],
-  recentActivities: [],
   savedSuburbs: [],
+  propertyLinksVersion: 0,
+  bumpPropertyLinksVersion: () => set(state => ({ propertyLinksVersion: state.propertyLinksVersion + 1 })),
+  subscriptionStatuses: new Map(),
+  fetchSubscriptionStatuses: async () => {
+    try {
+      const { isDemo, teamId } = getTeamContext();
+      if (isDemo) return;
+
+      // Fetch email unsubscribes from contact_subscriptions
+      const { data: emailSubs } = await supabase
+        .from('contact_subscriptions')
+        .select('contact_id, subscribed')
+        .eq('team_id', teamId);
+
+      // Fetch SMS opt-outs
+      const { data: smsOptOuts } = await supabase
+        .from('sms_opt_outs')
+        .select('phone_number')
+        .eq('team_id', teamId);
+
+      const smsOptOutPhones = new Set((smsOptOuts || []).map((r: { phone_number: string }) => r.phone_number));
+
+      // Build the lookup map
+      const statusMap = new Map<string, { email: boolean; sms: boolean }>();
+
+      // First, set all contacts as subscribed by default
+      const contacts = get().contacts;
+      for (const c of contacts) {
+        statusMap.set(c.id, {
+          email: true,
+          sms: c.phone ? !smsOptOutPhones.has(c.phone) : true,
+        });
+      }
+
+      // Override email status from contact_subscriptions
+      for (const sub of emailSubs || []) {
+        const existing = statusMap.get(sub.contact_id);
+        if (existing) {
+          existing.email = sub.subscribed;
+        } else {
+          statusMap.set(sub.contact_id, { email: sub.subscribed, sms: true });
+        }
+      }
+
+      set({ subscriptionStatuses: statusMap });
+    } catch (error: any) {
+      console.error('Failed to fetch subscription statuses:', error.message);
+    }
+  },
+  getSubscriptionStatus: (contactId) => {
+    const status = get().subscriptionStatuses.get(contactId);
+    return status || { email: true, sms: true };
+  },
   selectedTagIds: [],
   searchQuery: '',
   mapRegion: DEFAULT_REGION,
@@ -212,7 +275,6 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       contacts: [],
       tags: [],
       activities: [],
-      recentActivities: [],
       selectedTagIds: [],
       searchQuery: '',
       isLoading: false,
@@ -228,7 +290,6 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       contacts: [],
       tags: [],
       activities: [],
-      recentActivities: [],
       savedSuburbs: [],
       selectedTagIds: [],
       searchQuery: '',
@@ -273,6 +334,9 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
       set({ contacts, isLoading: false });
       get().persist();
+
+      // Lazily refresh subscription statuses after contacts load
+      get().fetchSubscriptionStatuses();
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
     }
@@ -304,31 +368,32 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
     }
   },
 
-  fetchActivities: async (contactId: string) => {
-    try {
-      const { isDemo } = getTeamContext();
-      if (isDemo) {
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('activities')
-        .select('*')
-        .eq('contact_id', contactId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      set({ activities: data || [] });
-    } catch (error: any) {
-      set({ error: error.message });
-    }
-  },
-
-  fetchRecentActivities: async (limit = 10) => {
+  fetchActivities: async (contactIdOrLimit?: string | number) => {
     try {
       const { isDemo, teamId } = getTeamContext();
       if (isDemo) return;
 
+      const isContactFetch = typeof contactIdOrLimit === 'string';
+      const limit = typeof contactIdOrLimit === 'number' ? contactIdOrLimit : 10;
+
+      if (isContactFetch) {
+        // Per-contact fetch: load with contact join for the specific contact
+        const { data, error } = await supabase
+          .from('activities')
+          .select('*, contact:contacts(first_name, last_name)')
+          .eq('contact_id', contactIdOrLimit)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        // Merge fetched activities into the existing list, replacing any for this contact
+        set(state => {
+          const others = state.activities.filter(a => a.contact_id !== contactIdOrLimit);
+          return { activities: [...(data as ActivityWithContact[] || []), ...others] };
+        });
+        return;
+      }
+
+      // Team-wide fetch: load recent activities with contact join + orphaned field notes
       let query = supabase
         .from('activities')
         .select('*, contact:contacts(first_name, last_name)')
@@ -342,8 +407,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       const { data, error } = await query;
       if (error) throw error;
 
-      // Also fetch orphaned tracking annotations (no activity link, no contact_id)
-      // These are field notes not yet linked to any contact
+      // Also fetch orphaned tracking annotations (no contact_id) — field notes not yet linked
       let orphanQuery = supabase
         .from('tracking_annotations')
         .select('id, note, created_at, latitude, longitude, session_id, team_id')
@@ -375,7 +439,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
         .slice(0, limit);
 
-      set({ recentActivities: merged });
+      set({ activities: merged });
     } catch (error: any) {
       set({ error: error.message });
     }
@@ -660,6 +724,94 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
     }
   },
 
+  addTagToContact: async (contactId, tagId) => {
+    try {
+      const { isDemo, teamId } = getTeamContext();
+      const allTags = get().tags;
+      const tag = allTags.find(t => t.id === tagId);
+
+      if (isDemo) {
+        if (!tag) return;
+        set(state => ({
+          contacts: state.contacts.map(c => {
+            if (c.id !== contactId) return c;
+            const existing = (c.tags || []).map(t => t.id);
+            if (existing.includes(tagId)) return c;
+            const newTags = [...(c.tags || []), tag];
+            return { ...c, tags: newTags, tag_id: c.tag_id || tagId, tag: c.tag || tag };
+          }),
+        }));
+        get().persist();
+        return;
+      }
+
+      // Insert into junction table (ignore conflict if already exists)
+      await supabase.from('contact_tags').upsert(
+        { contact_id: contactId, tag_id: tagId, team_id: teamId },
+        { onConflict: 'contact_id,tag_id' }
+      );
+
+      // Update local state
+      set(state => ({
+        contacts: state.contacts.map(c => {
+          if (c.id !== contactId) return c;
+          const existing = (c.tags || []).map(t => t.id);
+          if (existing.includes(tagId)) return c;
+          const newTags = [...(c.tags || []), tag].filter(Boolean) as Tag[];
+          return { ...c, tags: newTags, tag_id: c.tag_id || tagId };
+        }),
+      }));
+    } catch (error: any) {
+      set({ error: error.message });
+    }
+  },
+
+  removeTagFromContact: async (contactId, tagId) => {
+    try {
+      const { isDemo } = getTeamContext();
+
+      if (isDemo) {
+        set(state => ({
+          contacts: state.contacts.map(c => {
+            if (c.id !== contactId) return c;
+            const newTags = (c.tags || []).filter(t => t.id !== tagId);
+            const newTagId = c.tag_id === tagId ? (newTags[0]?.id || undefined) : c.tag_id;
+            const newTag = c.tag_id === tagId ? (newTags[0] || undefined) : c.tag;
+            return { ...c, tags: newTags, tag_id: newTagId, tag: newTag };
+          }),
+        }));
+        get().persist();
+        return;
+      }
+
+      await supabase.from('contact_tags').delete()
+        .eq('contact_id', contactId)
+        .eq('tag_id', tagId);
+
+      // Update tag_id for backward compat if we removed the primary tag
+      const contact = get().contacts.find(c => c.id === contactId);
+      if (contact?.tag_id === tagId) {
+        const remainingTags = (contact.tags || []).filter(t => t.id !== tagId);
+        await supabase.from('contacts').update({
+          tag_id: remainingTags[0]?.id || null,
+        }).eq('id', contactId);
+      }
+
+      // Update local state
+      set(state => ({
+        contacts: state.contacts.map(c => {
+          if (c.id !== contactId) return c;
+          const newTags = (c.tags || []).filter(t => t.id !== tagId);
+          const newTagId = c.tag_id === tagId ? (newTags[0]?.id || undefined) : c.tag_id;
+          const newTag = c.tag_id === tagId ? (newTags[0] || undefined) : c.tag;
+          return { ...c, tags: newTags, tag_id: newTagId, tag: newTag };
+        }),
+      }));
+    } catch (error: any) {
+      set({ error: error.message });
+    }
+  },
+
   // Activity CRUD
   addActivity: async (activity) => {
     try {
@@ -668,14 +820,29 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       // Default source based on activity type if not provided
       const source: ActivitySource | undefined = activity.source
         ?? (activity.type === 'call' ? 'call' : activity.type === 'note' ? 'office' : undefined);
-      const activityWithSource = { ...activity, source };
+
+      // For call activities, attach a dedup key so that auto-detection and manual
+      // entry referencing the same call can be identified and deduplicated.
+      const contact = get().contacts.find(c => c.id === activity.contact_id);
+      const callDedupKey = activity.type === 'call' && contact?.phone
+        ? generateCallDedupKey(contact.phone, new Date())
+        : undefined;
+
+      const activityWithSource = {
+        ...activity,
+        source,
+        ...(callDedupKey ? { call_dedup_key: callDedupKey } : {}),
+      };
 
       if (isDemo) {
-        const newActivity: Activity = {
+        const newActivity: ActivityWithContact = {
           ...activityWithSource,
           id: generateUUID(),
           team_id: teamId || undefined,
           created_at: new Date().toISOString(),
+          contact: contact
+            ? { first_name: contact.first_name, last_name: contact.last_name }
+            : { first_name: 'Unknown' },
         };
         set(state => ({
           activities: [newActivity, ...state.activities],
@@ -702,6 +869,14 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
       if (error) throw error;
 
+      // Attach contact info for the consolidated ActivityWithContact shape
+      const activityWithContact: ActivityWithContact = {
+        ...data,
+        contact: contact
+          ? { first_name: contact.first_name, last_name: contact.last_name }
+          : { first_name: 'Unknown' },
+      };
+
       // Auto-update last_contacted_at for communication activities
       if (['call', 'meeting', 'email'].includes(activityWithSource.type)) {
         const now = new Date().toISOString();
@@ -711,13 +886,13 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
           .eq('id', activityWithSource.contact_id);
 
         set(state => ({
-          activities: [data, ...state.activities],
+          activities: [activityWithContact, ...state.activities],
           contacts: state.contacts.map((c) =>
             c.id === activityWithSource.contact_id ? { ...c, last_contacted_at: now } : c
           ),
         }));
       } else {
-        set(state => ({ activities: [data, ...state.activities] }));
+        set(state => ({ activities: [activityWithContact, ...state.activities] }));
       }
       return data;
     } catch (error: any) {
@@ -730,6 +905,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
     try {
       const { isDemo } = getTeamContext();
 
+      // Spread updates preserving the contact join field
       if (isDemo) {
         set(state => ({
           activities: state.activities.map(a =>

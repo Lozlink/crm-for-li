@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Property, PropertyContact, PropertyStatus, PropertyContactRole } from '@realestate-crm/types';
 import { supabase, isDemoMode, generateUUID } from '@realestate-crm/api';
 import { useAuthStore } from './useAuthStore';
+import { useCRMStore } from './useCRMStore';
 
 interface PropertyState {
   properties: Property[];
@@ -20,6 +21,8 @@ interface PropertyState {
   deleteProperty: (propertyId: string) => Promise<void>;
   addPropertyContact: (propertyId: string, contactId: string, role: PropertyContactRole) => Promise<void>;
   removePropertyContact: (propertyContactId: string) => Promise<void>;
+  removePropertyContactLinks: (propertyId: string) => Promise<void>;
+  getPropertiesForContact: (contactId: string) => Property[];
   clearActiveProperty: () => void;
 }
 
@@ -229,6 +232,7 @@ export const usePropertyStore = create<PropertyState>()((set, get) => ({
           role: c.role,
         }));
         await supabase.from('property_contacts').insert(contactRows);
+        useCRMStore.getState().bumpPropertyLinksVersion();
       }
 
       set((state) => ({ properties: [newProperty, ...state.properties] }));
@@ -306,6 +310,9 @@ export const usePropertyStore = create<PropertyState>()((set, get) => ({
         return;
       }
 
+      // Clean up property contact links before deleting
+      await get().removePropertyContactLinks(propertyId);
+
       const { error } = await supabase
         .from('properties')
         .delete()
@@ -336,6 +343,7 @@ export const usePropertyStore = create<PropertyState>()((set, get) => ({
 
       // Re-fetch the property to get updated contacts
       await get().fetchProperty(propertyId);
+      useCRMStore.getState().bumpPropertyLinksVersion();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to add property contact';
       set({ error: message });
@@ -359,10 +367,35 @@ export const usePropertyStore = create<PropertyState>()((set, get) => ({
       if (activeProperty) {
         await get().fetchProperty(activeProperty.id);
       }
+      useCRMStore.getState().bumpPropertyLinksVersion();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to remove property contact';
       set({ error: message });
     }
+  },
+
+  removePropertyContactLinks: async (propertyId) => {
+    try {
+      const { isDemo } = getTeamContext();
+      if (isDemo) return;
+
+      const { error } = await supabase
+        .from('property_contacts')
+        .delete()
+        .eq('property_id', propertyId);
+
+      if (error) throw error;
+      useCRMStore.getState().bumpPropertyLinksVersion();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to remove property contact links';
+      set({ error: message });
+    }
+  },
+
+  getPropertiesForContact: (contactId) => {
+    return get().properties.filter(p =>
+      p.property_contacts?.some(pc => pc.contact_id === contactId)
+    );
   },
 
   clearActiveProperty: () => set({ activeProperty: null }),

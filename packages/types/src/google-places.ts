@@ -7,6 +7,12 @@ export interface PlacePrediction {
   };
 }
 
+export interface PlaceAddressComponent {
+  longText?: string;
+  shortText?: string;
+  types: string[];
+}
+
 export interface PlaceDetails {
   formatted_address: string;
   geometry: {
@@ -15,4 +21,5 @@ export interface PlaceDetails {
       lng: number;
     };
   };
+  addressComponents?: PlaceAddressComponent[];
 }
