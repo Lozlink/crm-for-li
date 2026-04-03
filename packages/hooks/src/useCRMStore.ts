@@ -857,7 +857,9 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         return newActivity;
       }
 
-      const insertData: Record<string, unknown> = { ...activityWithSource };
+      // Strip call_dedup_key before inserting — it's an in-memory field, not a DB column
+      const { call_dedup_key: _dedupKey, ...insertFields } = activityWithSource as Record<string, unknown>;
+      const insertData: Record<string, unknown> = { ...insertFields };
       if (teamId) insertData.team_id = teamId;
       if (userId) insertData.user_id = userId;
 
@@ -869,9 +871,10 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
 
       if (error) throw error;
 
-      // Attach contact info for the consolidated ActivityWithContact shape
+      // Attach contact info + preserve dedup key for in-memory dedup checks
       const activityWithContact: ActivityWithContact = {
         ...data,
+        ...(callDedupKey ? { call_dedup_key: callDedupKey } : {}),
         contact: contact
           ? { first_name: contact.first_name, last_name: contact.last_name }
           : { first_name: 'Unknown' },
