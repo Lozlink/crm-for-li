@@ -60,8 +60,11 @@ export function generateCallDedupKey(
 }
 
 /**
- * Check whether a call activity for the given phone number already exists
- * within the specified lookback window.
+ * Check whether a COMPLETED call activity for the given phone number already
+ * exists within the specified lookback window. Activities without a call_outcome
+ * are considered "pending" (pre-created by contact detail before the call
+ * finishes) and are NOT treated as duplicates — the post-call modal should
+ * still appear so the user can record the outcome.
  *
  * @param activities - The list of activities to search through
  * @param phone      - Phone number to match (last-8-digit comparison)
@@ -83,8 +86,10 @@ export function hasRecentCallActivity(
     const ts = a.created_at ? new Date(a.created_at).getTime() : 0;
     if (ts < cutoff) return false;
 
-    // Extract phone from activity content if stored in dedup_key metadata,
-    // or fall back to checking the call_dedup_key field if present.
+    // Skip activities that don't have an outcome yet — these are pre-created
+    // by contact/[id].tsx before the call completes and still need the modal.
+    if (!a.call_outcome) return false;
+
     const dedupKey = (a as Activity & { call_dedup_key?: string }).call_dedup_key;
     if (dedupKey) {
       const keyPhone = dedupKey.split(':')[1] ?? '';

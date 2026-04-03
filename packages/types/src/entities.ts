@@ -130,6 +130,53 @@ export interface StreetStats {
   contacts: Contact[];
   averageLatitude: number;
   averageLongitude: number;
+  opportunityScore?: number;
+  salesMomentum?: number;
+  penetrationPct?: number | null;
+  conversionCount?: number;
+}
+
+// --- Smart Prospecting Engine ---
+
+export type LeadTier = 'hot' | 'warm' | 'cold' | 'dormant';
+
+export interface LeadScoreBreakdown {
+  contactId: string;
+  total: number; // 0-100
+  tier: LeadTier;
+  components: {
+    staleness: number;      // 0-25
+    salesMomentum: number;  // 0-25
+    engagement: number;     // 0-25
+    streetConversion: number; // 0-15
+    penetration: number;    // 0-10
+  };
+  lastComputedAt: string;
+}
+
+export interface TerritoryBriefing {
+  suburb: string;
+  medianSalePrice: number;
+  avgDaysOnMarket: number;
+  penetrationPct: number;
+  contactCount: number;
+  recentSales: number;
+  recommendedAction: string;
+}
+
+export type ProspectingOutcome = 'no_answer' | 'voicemail' | 'interested' | 'not_interested' | 'callback_requested';
+
+export interface GuidedStop {
+  contactId: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  scoreBreakdown: LeadScoreBreakdown;
+  routePosition: number;
+  distanceFromPrev: number;
+  status: 'pending' | 'visited' | 'skipped';
+  outcome?: ProspectingOutcome;
+  visitedAt?: string;
 }
 
 // --- Activity Tracking ---

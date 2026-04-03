@@ -3,6 +3,7 @@ export { useAuthStore } from './useAuthStore';
 export { usePermissions } from './usePermissions';
 export { useRouteStore } from './useRouteStore';
 export { useStreetStats } from './useStreetStats';
+export { useLeadScoringEngine } from './useLeadScoringEngine';
 export { useCallerIdSync } from './useCallerIdSync';
 export { useCallLogSync } from './useCallLogSync';
 export type { PendingCallOutcome } from './useCallLogSync';
@@ -20,6 +21,7 @@ export { useProspectingMetrics } from './useProspectingMetrics';
 export { useDataEnrichmentStore } from './useDataEnrichmentStore';
 export { useSmsCampaignStore } from './useSmsCampaignStore';
 export { useProspectingMatcher } from './useProspectingMatcher';
+export { useGuidedProspectingStore } from './useGuidedProspectingStore';
 export type { NearbyContact, ProspectingMatcherResult } from './useProspectingMatcher';
 export type {
   ProspectingMetrics, ProspectingPeriodMetrics, ProspectingTrend, ConversionFunnel,

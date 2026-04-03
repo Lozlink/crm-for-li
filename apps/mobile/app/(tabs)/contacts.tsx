@@ -7,7 +7,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { useCRMStore, useSavedSearchStore } from '@realestate-crm/hooks';
+import { useCRMStore, useSavedSearchStore, useLeadScoringEngine } from '@realestate-crm/hooks';
 import { ContactCard } from '@realestate-crm/ui';
 import type { Contact, ContactSource, ContactType, ContactStatus } from '@realestate-crm/types';
 
@@ -111,6 +111,8 @@ export default function ContactsScreen() {
   const fetchContacts = useCRMStore(state => state.fetchContacts);
   const fetchTags = useCRMStore(state => state.fetchTags);
   const bulkDeleteContacts = useCRMStore((s) => s.bulkDeleteContacts);
+
+  const { scores: leadScores } = useLeadScoringEngine();
 
   const savedSearches = useSavedSearchStore(state => state.savedSearches);
   const fetchSavedSearches = useSavedSearchStore(state => state.fetchSavedSearches);
@@ -374,6 +376,7 @@ export default function ContactsScreen() {
               onPress={() => toggleSelect(item.id)}
               onLongPress={() => handleLongPress(item.id)}
               onMapPress={handleMapPress}
+              scoreBreakdown={leadScores.get(item.id)}
             />
           </View>
         </View>
@@ -385,9 +388,10 @@ export default function ContactsScreen() {
         onPress={handleContactPress}
         onLongPress={() => handleLongPress(item.id)}
         onMapPress={handleMapPress}
+        scoreBreakdown={leadScores.get(item.id)}
       />
     );
-  }, [handleContactPress, handleLongPress, handleMapPress, selectMode, selectedIds, toggleSelect]);
+  }, [handleContactPress, handleLongPress, handleMapPress, selectMode, selectedIds, toggleSelect, leadScores]);
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>

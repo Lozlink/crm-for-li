@@ -2,16 +2,18 @@ import { memo } from 'react';
 import { StyleSheet, View, TouchableOpacity, Linking } from 'react-native';
 import { Text, Surface, useTheme, Avatar } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import type { Contact } from '@realestate-crm/types';
+import type { Contact, LeadScoreBreakdown } from '@realestate-crm/types';
+import LeadScoreBadge from './LeadScoreBadge';
 
 interface ContactCardProps {
   contact: Contact;
   onPress: (contact: Contact) => void;
   onLongPress?: () => void;
   onMapPress?: (contact: Contact) => void;
+  scoreBreakdown?: LeadScoreBreakdown;
 }
 
-function ContactCard({ contact, onPress, onLongPress, onMapPress }: ContactCardProps) {
+function ContactCard({ contact, onPress, onLongPress, onMapPress, scoreBreakdown }: ContactCardProps) {
   const theme = useTheme();
   const fullName = `${contact.first_name} ${contact.last_name || ''}`.trim();
   const initials = `${contact.first_name[0]}${contact.last_name?.[0] || ''}`.toUpperCase();
@@ -42,6 +44,9 @@ function ContactCard({ contact, onPress, onLongPress, onMapPress }: ContactCardP
             ) : contact.tag ? (
               <View style={[styles.tagDot, { backgroundColor: contact.tag.color }]} />
             ) : null}
+            {scoreBreakdown && (
+              <LeadScoreBadge score={scoreBreakdown.total} tier={scoreBreakdown.tier} size="small" />
+            )}
           </View>
 
           {contact.address && (

@@ -10,8 +10,10 @@ import {
   useProspectingMetrics,
   useDataEnrichmentStore,
   useProspectingMatcher,
+  useLeadScoringEngine,
 } from '@realestate-crm/hooks';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { TIER_COLORS } from '../../components/LeadScoreBadge';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -95,6 +97,13 @@ export default function ProspectingScreen() {
   const getSuburbPenetration = useDataEnrichmentStore(s => s.getSuburbPenetration);
 
   const metrics = useProspectingMetrics();
+  const { scores: leadScores } = useLeadScoringEngine();
+
+  const tierCounts = useMemo(() => {
+    const counts = { hot: 0, warm: 0, cold: 0, dormant: 0 };
+    leadScores.forEach(s => { counts[s.tier]++; });
+    return counts;
+  }, [leadScores]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -191,6 +200,35 @@ export default function ProspectingScreen() {
             ]}
             density="small"
           />
+        </View>
+
+        {/* Guided prospecting + tier summary */}
+        <View style={styles.guidedRow}>
+          <Button
+            mode="contained"
+            icon="navigation"
+            onPress={() => router.push('/prospecting/guided' as never)}
+            compact
+          >
+            Go Prospect
+          </Button>
+          <View style={styles.tierChips}>
+            {tierCounts.hot > 0 && (
+              <Chip compact style={[styles.tierChip, { backgroundColor: `${TIER_COLORS.hot}18` }]} textStyle={{ color: TIER_COLORS.hot, fontSize: 12 }}>
+                {tierCounts.hot} Hot
+              </Chip>
+            )}
+            {tierCounts.warm > 0 && (
+              <Chip compact style={[styles.tierChip, { backgroundColor: `${TIER_COLORS.warm}18` }]} textStyle={{ color: TIER_COLORS.warm, fontSize: 12 }}>
+                {tierCounts.warm} Warm
+              </Chip>
+            )}
+            {tierCounts.cold > 0 && (
+              <Chip compact style={[styles.tierChip, { backgroundColor: `${TIER_COLORS.cold}18` }]} textStyle={{ color: TIER_COLORS.cold, fontSize: 12 }}>
+                {tierCounts.cold} Cold
+              </Chip>
+            )}
+          </View>
         </View>
 
         {view === 'daily' && (
@@ -1297,6 +1335,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     elevation: 4,
+  },
+  guidedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 10,
+  },
+  tierChips: {
+    flexDirection: 'row',
+    gap: 6,
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  tierChip: {
+    height: 28,
   },
   segmentContainer: {
     marginBottom: 16,

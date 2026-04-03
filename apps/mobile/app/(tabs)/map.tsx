@@ -7,12 +7,14 @@ import MapView, { Marker, Polygon, Circle, Polyline, PROVIDER_GOOGLE, LongPressE
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useCRMStore, useStreetStats, usePropertyStore, useTrackingStore, useBuyerMatchStore, useProspectingMetrics, useProspectingMatcher } from '@realestate-crm/hooks';
+import { useCRMStore, useStreetStats, usePropertyStore, useTrackingStore, useBuyerMatchStore, useProspectingMetrics, useProspectingMatcher, useLeadScoringEngine } from '@realestate-crm/hooks';
 import type { MultiDwellingBuilding, NearbyContact } from '@realestate-crm/hooks';
 import type { Contact, Property, ActivityWithContact, ContactRequirement, OSMBuilding } from '@realestate-crm/types';
 import { fetchSuburbByName, decodePolyline, fetchMultiDwellingBuildings } from '@realestate-crm/api';
 import type { SuburbBoundary } from '@realestate-crm/types';
 import { FilterSheet, ContactPreview, MapSearchBar, PropertyPreview } from '@realestate-crm/ui';
+import TerritoryBriefingCard from '../../components/TerritoryBriefingCard';
+import { TIER_COLORS } from '../../components/LeadScoreBadge';
 
 const { width, height } = Dimensions.get('window');
 
@@ -32,7 +34,7 @@ const LAYER_DEFS: { key: keyof VisibleLayers; label: string; icon: string; activ
   { key: 'properties', label: 'Properties', icon: 'home-city', activeColor: '#7c3aed' },
   { key: 'fieldActivity', label: 'Field Activity', icon: 'map-marker-path', activeColor: '#0d9488' },
   { key: 'buildings', label: 'Buildings', icon: 'office-building', activeColor: '#7c3aed' },
-  { key: 'stats', label: 'Street Stats', icon: 'chart-bar', activeColor: '#ef4444' },
+  { key: 'stats', label: 'Opportunity', icon: 'chart-bar', activeColor: '#ef4444' },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -81,7 +83,11 @@ export default function MapScreen() {
 
   const fetchRequirements = useBuyerMatchStore(s => s.fetchRequirements);
 
-  const streetStats = useStreetStats();
+  const { streets: streetStats, getBriefing } = useStreetStats();
+  const { getTier } = useLeadScoringEngine();
+
+  const [briefingVisible, setBriefingVisible] = useState(false);
+  const [activeBriefing, setActiveBriefing] = useState<ReturnType<typeof getBriefing>>(null);
 
   const [visibleLayers, setVisibleLayers] = useState<VisibleLayers>({
     contacts: false,
@@ -443,14 +449,31 @@ export default function MapScreen() {
   }, [selectedContact]);
 
   const getMarkerColor = useCallback((contact: Contact) => {
+    const tier = getTier(contact.id);
+    if (tier !== 'dormant') return TIER_COLORS[tier];
     return contact.tags?.[0]?.color || contact.tag?.color || theme.colors.primary;
-  }, [theme.colors.primary]);
+  }, [theme.colors.primary, getTier]);
 
   const getStatsColor = useCallback((daysSinceLastContact: number | null): string => {
     if (daysSinceLastContact === null || daysSinceLastContact > 30) return 'rgba(239, 68, 68, 0.4)';
     if (daysSinceLastContact > 7) return 'rgba(234, 179, 8, 0.4)';
     return 'rgba(34, 197, 94, 0.4)';
   }, []);
+
+  const getOpportunityColor = useCallback((score: number | undefined): string => {
+    const s = score ?? 0;
+    if (s >= 70) return 'rgba(34, 197, 94, 0.5)';
+    if (s >= 40) return 'rgba(234, 179, 8, 0.4)';
+    return 'rgba(239, 68, 68, 0.3)';
+  }, []);
+
+  const handleStatCirclePress = useCallback((streetKey: string) => {
+    const briefing = getBriefing(streetKey);
+    if (briefing) {
+      setActiveBriefing(briefing);
+      setBriefingVisible(true);
+    }
+  }, [getBriefing]);
 
   // ── Buildings layer helpers ──────────────────────────────────────
 
@@ -607,12 +630,21 @@ export default function MapScreen() {
         {/* Street stats heat circles */}
         {visibleLayers.stats && streetStats.map((stat) => (
           <Circle
-            key={`${stat.streetName}-${stat.suburb}`}
+            key={`stat-${stat.streetName}-${stat.suburb}`}
             center={{ latitude: stat.averageLatitude, longitude: stat.averageLongitude }}
             radius={Math.max(30, stat.contactCount * 15)}
-            fillColor={getStatsColor(stat.daysSinceLastContact)}
-            strokeColor={getStatsColor(stat.daysSinceLastContact).replace('0.4', '0.8')}
+            fillColor={getOpportunityColor(stat.opportunityScore)}
+            strokeColor={getOpportunityColor(stat.opportunityScore).replace(/[\d.]+\)$/, '0.8)')}
             strokeWidth={1}
+          />
+        ))}
+        {visibleLayers.stats && streetStats.map((stat) => (
+          <Marker
+            key={`stat-tap-${stat.streetName}-${stat.suburb}`}
+            coordinate={{ latitude: stat.averageLatitude, longitude: stat.averageLongitude }}
+            onPress={() => handleStatCirclePress(`${stat.streetName}|${stat.suburb}`)}
+            opacity={0}
+            anchor={{ x: 0.5, y: 0.5 }}
           />
         ))}
 
@@ -1105,6 +1137,12 @@ export default function MapScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      <TerritoryBriefingCard
+        visible={briefingVisible}
+        onDismiss={() => setBriefingVisible(false)}
+        briefing={activeBriefing}
+      />
     </View>
   );
 }

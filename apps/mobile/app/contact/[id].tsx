@@ -17,7 +17,7 @@ import {
 } from 'react-native-paper';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useCRMStore, useEmailCampaignStore, useBuyerMatchStore, usePropertyStore, useInspectionStore, useCustomFieldStore } from '@realestate-crm/hooks';
+import { useCRMStore, useEmailCampaignStore, useBuyerMatchStore, usePropertyStore, useInspectionStore, useCustomFieldStore, useLeadScoringEngine } from '@realestate-crm/hooks';
 import { geocodeAddress } from '@realestate-crm/utils';
 import type {
   Contact, ContactFormData, ContactSource, ContactType as CType,
@@ -28,6 +28,8 @@ import { ContactForm } from '@realestate-crm/ui';
 import { ActivityFeed } from '@realestate-crm/ui';
 import { AddActivityDialog } from '@realestate-crm/ui';
 import { CustomFieldRenderer } from '@realestate-crm/ui';
+import LeadScoreBadge from '../../components/LeadScoreBadge';
+import ScoreBreakdownSheet from '../../components/ScoreBreakdownSheet';
 
 // --- Constants ---
 
@@ -242,6 +244,11 @@ export default function ContactDetailScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [activityDialogVisible, setActivityDialogVisible] = useState(false);
+
+  // Lead scoring
+  const { getScore } = useLeadScoringEngine();
+  const scoreBreakdown = id ? getScore(id) : null;
+  const [scoreSheetVisible, setScoreSheetVisible] = useState(false);
 
   // Edit enrichment dialog
   const [editEnrichmentVisible, setEditEnrichmentVisible] = useState(false);
@@ -768,7 +775,11 @@ export default function ContactDetailScreen() {
                 </View>
 
                 {/* Lead score */}
-                {contact.lead_score != null && (
+                {scoreBreakdown ? (
+                  <TouchableOpacity onPress={() => setScoreSheetVisible(true)} style={styles.infoRow}>
+                    <LeadScoreBadge score={scoreBreakdown.total} tier={scoreBreakdown.tier} size="medium" />
+                  </TouchableOpacity>
+                ) : contact.lead_score != null ? (
                   <View style={styles.infoRow}>
                     <Icon name="star" size={18} color={getLeadScoreColor(contact.lead_score, theme)} />
                     <Text
@@ -778,7 +789,7 @@ export default function ContactDetailScreen() {
                       Lead Score: {contact.lead_score}/100
                     </Text>
                   </View>
-                )}
+                ) : null}
 
                 {/* Dates */}
                 <View style={styles.twoCol}>
@@ -1591,6 +1602,12 @@ export default function ContactDetailScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      <ScoreBreakdownSheet
+        visible={scoreSheetVisible}
+        onDismiss={() => setScoreSheetVisible(false)}
+        breakdown={scoreBreakdown}
+      />
     </>
   );
 }

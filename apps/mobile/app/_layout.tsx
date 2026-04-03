@@ -252,6 +252,12 @@ export default function RootLayout() {
                 title: 'Tracking Session',
               }}
             />
+            <Stack.Screen
+              name="prospecting"
+              options={{
+                headerShown: false,
+              }}
+            />
           </Stack>
         </AuthGate>
       </PaperProvider>

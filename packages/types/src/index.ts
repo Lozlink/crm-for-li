@@ -31,6 +31,10 @@ export type {
 } from './entities';
 export type { SoldRecord, SuburbStats } from './entities';
 export type {
+  LeadTier, LeadScoreBreakdown, TerritoryBriefing,
+  ProspectingOutcome, GuidedStop,
+} from './entities';
+export type {
   SmsCampaign, SmsMessage, SmsOptOut,
   SmsCampaignStatus, SmsMessageStatus,
 } from './entities';

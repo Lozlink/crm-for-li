@@ -30,3 +30,6 @@ export { geocodeAddress, batchGeocodeAddresses, haversineDistance } from './geoc
 
 export { generateCallDedupKey, hasRecentCallActivity } from './callActivity';
 export type { PendingCallOutcome } from './callActivity';
+
+export { optimizeRoute } from './routeOptimizer';
+export type { RouteCandidate, OptimizedRoute } from './routeOptimizer';

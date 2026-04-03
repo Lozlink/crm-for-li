@@ -17,3 +17,4 @@ export { default as DropNoteDialog } from './DropNoteDialog';
 export { default as CustomFieldRenderer } from './CustomFieldRenderer';
 export { default as CustomFieldAdmin } from './CustomFieldAdmin';
 export { default as PropertyPreview } from './PropertyPreview';
+export { default as LeadScoreBadge, TIER_COLORS } from './LeadScoreBadge';
