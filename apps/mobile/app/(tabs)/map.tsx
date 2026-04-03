@@ -123,7 +123,7 @@ export default function MapScreen() {
     userLocation?.longitude ?? null,
     200, // 200m radius for field prospecting
   );
-  const [nearbyTrayExpanded, setNearbyTrayExpanded] = useState(false);
+  // Nearby contacts now handled by TrackingBanner bottom sheet
 
   // Multi-dwelling state for long-press dialog
   const bulkAddContacts = useCRMStore(state => state.bulkAddContacts);
@@ -731,68 +731,6 @@ export default function MapScreen() {
         )}
       </TouchableOpacity>
 
-      {/* ── Nearby Contacts tray ── */}
-      {userLocation && nearbyContacts.length > 0 && !fabOpen && (
-        <Surface
-          style={[
-            styles.nearbyTray,
-            { backgroundColor: theme.colors.surface },
-          ]}
-          elevation={3}
-        >
-          <TouchableOpacity
-            style={styles.nearbyTrayHeader}
-            onPress={() => {
-              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-              setNearbyTrayExpanded(prev => !prev);
-            }}
-            activeOpacity={0.7}
-          >
-            <Icon name="account-multiple-outline" size={16} color={theme.colors.primary} />
-            <Text variant="labelMedium" style={{ color: theme.colors.primary, marginLeft: 6, flex: 1 }}>
-              {nearbyContacts.length} nearby
-            </Text>
-            <Icon
-              name={nearbyTrayExpanded ? 'chevron-down' : 'chevron-up'}
-              size={18}
-              color={theme.colors.onSurfaceVariant}
-            />
-          </TouchableOpacity>
-
-          {nearbyTrayExpanded && (
-            <ScrollView style={styles.nearbyTrayList} nestedScrollEnabled>
-              {nearbyContacts.map(({ contact, distanceMeters }: NearbyContact) => (
-                <TouchableOpacity
-                  key={contact.id}
-                  style={styles.nearbyRow}
-                  onPress={() => router.push(`/contact/${contact.id}`)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.nearbyRowInfo}>
-                    <Text variant="bodyMedium" numberOfLines={1} style={{ color: theme.colors.onSurface }}>
-                      {contact.first_name} {contact.last_name || ''}
-                    </Text>
-                    <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
-                      {contact.unit_number ? `Unit ${contact.unit_number}, ` : ''}{contact.address || 'No address'}
-                    </Text>
-                  </View>
-                  <View style={styles.nearbyRowMeta}>
-                    <Text variant="labelSmall" style={{ color: theme.colors.primary }}>
-                      {Math.round(distanceMeters)}m
-                    </Text>
-                    {contact.last_contacted_at && (
-                      <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                        {new Date(contact.last_contacted_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
-                      </Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-        </Surface>
-      )}
-
       {/* ── Main FAB (bottom-right) ── */}
       <FAB.Group
         open={fabOpen}
@@ -1360,43 +1298,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // Nearby contacts tray
-  nearbyTray: {
-    position: 'absolute',
-    right: 12,
-    top: 12,
-    borderRadius: 16,
-    maxWidth: 260,
-    overflow: 'hidden',
-    zIndex: 10,
-  },
-  nearbyTrayHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  nearbyTrayList: {
-    maxHeight: 200,
-    paddingHorizontal: 10,
-    paddingBottom: 8,
-  },
-  nearbyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.08)',
-  },
-  nearbyRowInfo: {
-    flex: 1,
-    marginRight: 8,
-  },
-  nearbyRowMeta: {
-    alignItems: 'flex-end',
-    gap: 2,
-  },
 
   // Multi-dwelling
   multiDwellingToggleRow: {

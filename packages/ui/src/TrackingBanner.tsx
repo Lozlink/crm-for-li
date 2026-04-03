@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Button, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, Dialog, Portal, Surface, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
@@ -128,19 +129,34 @@ export default function TrackingBanner() {
     };
   }, [activeSession]);
 
-  const nearbyCount = useMemo(() => {
-    if (!currentPosition) return 0;
-    return contacts.filter((c: Contact) => {
-      if (c.latitude == null || c.longitude == null) return false;
-      const dist = haversineDistance(
-        currentPosition.latitude,
-        currentPosition.longitude,
-        c.latitude,
-        c.longitude,
-      );
-      return dist <= NEARBY_RADIUS_M;
-    }).length;
+  const [nearbySheetVisible, setNearbySheetVisible] = useState(false);
+
+  const nearbyContacts = useMemo(() => {
+    if (!currentPosition) return [];
+    return contacts
+      .filter((c: Contact) => {
+        if (c.latitude == null || c.longitude == null) return false;
+        const dist = haversineDistance(
+          currentPosition.latitude,
+          currentPosition.longitude,
+          c.latitude,
+          c.longitude,
+        );
+        return dist <= NEARBY_RADIUS_M;
+      })
+      .map((c: Contact) => ({
+        contact: c,
+        distanceMeters: haversineDistance(
+          currentPosition.latitude,
+          currentPosition.longitude,
+          c.latitude!,
+          c.longitude!,
+        ),
+      }))
+      .sort((a, b) => a.distanceMeters - b.distanceMeters);
   }, [currentPosition, contacts]);
+
+  const nearbyCount = nearbyContacts.length;
 
   const handleStop = useCallback(async () => {
     setStopping(true);
@@ -255,17 +271,18 @@ export default function TrackingBanner() {
 
             <TouchableOpacity
               style={[styles.expandedButton, { backgroundColor: theme.colors.surface }]}
-              onPress={handleToggleExpand}
+              onPress={() => { if (nearbyCount > 0) setNearbySheetVisible(true); }}
               activeOpacity={0.7}
+              disabled={nearbyCount === 0}
             >
               <Icon
                 name="account-group"
                 size={20}
-                color={theme.colors.primary}
+                color={nearbyCount > 0 ? theme.colors.primary : theme.colors.onSurfaceVariant}
               />
               <Text
                 variant="labelSmall"
-                style={{ color: theme.colors.onSurface }}
+                style={{ color: nearbyCount > 0 ? theme.colors.onSurface : theme.colors.onSurfaceVariant }}
                 numberOfLines={1}
               >
                 Nearby ({nearbyCount})
@@ -299,6 +316,46 @@ export default function TrackingBanner() {
         onDismiss={() => setNoteDialogVisible(false)}
         sessionId={activeSession.id}
       />
+
+      <Portal>
+        <Dialog visible={nearbySheetVisible} onDismiss={() => setNearbySheetVisible(false)} style={styles.nearbySheet}>
+          <Dialog.Title>Nearby Contacts ({nearbyCount})</Dialog.Title>
+          <Dialog.ScrollArea style={styles.nearbySheetScroll}>
+            <ScrollView>
+              {nearbyContacts.map(({ contact, distanceMeters }) => (
+                <TouchableOpacity
+                  key={contact.id}
+                  style={styles.nearbyRow}
+                  onPress={() => { setNearbySheetVisible(false); router.push(`/contact/${contact.id}` as never); }}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flex: 1, marginRight: 12 }}>
+                    <Text variant="bodyLarge" numberOfLines={1} style={{ color: theme.colors.onSurface }}>
+                      {contact.first_name} {contact.last_name || ''}
+                    </Text>
+                    <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                      {contact.unit_number ? `Unit ${contact.unit_number}, ` : ''}{contact.address || 'No address'}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text variant="labelMedium" style={{ color: theme.colors.primary, fontWeight: '700' }}>
+                      {Math.round(distanceMeters)}m
+                    </Text>
+                    {contact.last_contacted_at && (
+                      <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {new Date(contact.last_contacted_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => setNearbySheetVisible(false)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </>
   );
 }
@@ -358,5 +415,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderRadius: 12,
     gap: 4,
+  },
+  nearbySheet: {
+    maxHeight: '60%',
+  },
+  nearbySheetScroll: {
+    paddingHorizontal: 0,
+  },
+  nearbyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
   },
 });

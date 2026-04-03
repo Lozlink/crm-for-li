@@ -3,7 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { PaperProvider, MD3DarkTheme, MD3LightTheme, ActivityIndicator } from 'react-native-paper';
 import { useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore, useCallerIdSync, useCallLogSync, useTrackingStore } from '@realestate-crm/hooks';
 import { useCRMStore } from '@realestate-crm/hooks';
@@ -103,6 +103,42 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function SafeStack({ theme }: { theme: typeof MD3DarkTheme }) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: theme.colors.surface },
+        headerTintColor: theme.colors.onSurface,
+        contentStyle: { paddingBottom: insets.bottom },
+      }}
+    >
+      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false, contentStyle: { paddingBottom: 0 } }} />
+      <Stack.Screen name="contact/new" options={{ title: 'New Contact', presentation: 'modal' }} />
+      <Stack.Screen name="contact/[id]" options={{ title: 'Contact Details' }} />
+      <Stack.Screen name="contacts/import" options={{ title: 'Import Contacts', presentation: 'modal' }} />
+      <Stack.Screen name="team/create" options={{ title: 'Create Team', presentation: 'modal' }} />
+      <Stack.Screen name="team/switcher" options={{ title: 'Switch Team', presentation: 'modal' }} />
+      <Stack.Screen name="team/[teamId]/members" options={{ title: 'Team Members' }} />
+      <Stack.Screen name="team/[teamId]/invite" options={{ title: 'Invite Member' }} />
+      <Stack.Screen name="team/[teamId]/settings" options={{ title: 'Team Settings' }} />
+      <Stack.Screen name="property/new" options={{ title: 'New Property', presentation: 'modal' }} />
+      <Stack.Screen name="property/[id]" options={{ title: 'Property Details' }} />
+      <Stack.Screen name="inspection/[id]" options={{ title: 'Inspection' }} />
+      <Stack.Screen name="campaigns/index" options={{ title: 'Campaigns' }} />
+      <Stack.Screen name="campaigns/[id]" options={{ title: 'Campaign' }} />
+      <Stack.Screen name="route/[id]" options={{ title: 'Route' }} />
+      <Stack.Screen name="route/new" options={{ title: 'New Route', presentation: 'modal' }} />
+      <Stack.Screen name="settings/caller-id" options={{ title: 'Caller ID' }} />
+      <Stack.Screen name="settings/custom-fields" options={{ title: 'Custom Fields' }} />
+      <Stack.Screen name="tracking/[id]" options={{ title: 'Tracking Session' }} />
+      <Stack.Screen name="prospecting" options={{ headerShown: false }} />
+    </Stack>
+  );
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? MD3DarkTheme : MD3LightTheme;
@@ -134,131 +170,7 @@ export default function RootLayout() {
           onSkip={skipCallOutcome}
         />
         <AuthGate>
-          <Stack
-            screenOptions={{
-              headerStyle: {
-                backgroundColor: theme.colors.surface,
-              },
-              headerTintColor: theme.colors.onSurface,
-            }}
-          >
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="contact/new"
-              options={{
-                title: 'New Contact',
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="contact/[id]"
-              options={{
-                title: 'Contact Details',
-              }}
-            />
-            <Stack.Screen
-              name="contacts/import"
-              options={{
-                title: 'Import Contacts',
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="team/create"
-              options={{
-                title: 'Create Team',
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="team/switcher"
-              options={{
-                title: 'Switch Team',
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="team/[teamId]/members"
-              options={{ title: 'Team Members' }}
-            />
-            <Stack.Screen
-              name="team/[teamId]/invite"
-              options={{ title: 'Invite Member' }}
-            />
-            <Stack.Screen
-              name="team/[teamId]/settings"
-              options={{ title: 'Team Settings' }}
-            />
-            <Stack.Screen
-              name="property/new"
-              options={{
-                title: 'New Property',
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="property/[id]"
-              options={{
-                title: 'Property Details',
-              }}
-            />
-            <Stack.Screen
-              name="inspection/[id]"
-              options={{
-                title: 'Inspection',
-              }}
-            />
-            <Stack.Screen
-              name="campaigns/index"
-              options={{
-                title: 'Campaigns',
-              }}
-            />
-            <Stack.Screen
-              name="campaigns/[id]"
-              options={{
-                title: 'Campaign',
-              }}
-            />
-            <Stack.Screen
-              name="route/[id]"
-              options={{
-                title: 'Route',
-              }}
-            />
-            <Stack.Screen
-              name="route/new"
-              options={{
-                title: 'New Route',
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="settings/caller-id"
-              options={{
-                title: 'Caller ID',
-              }}
-            />
-            <Stack.Screen
-              name="settings/custom-fields"
-              options={{
-                title: 'Custom Fields',
-              }}
-            />
-            <Stack.Screen
-              name="tracking/[id]"
-              options={{
-                title: 'Tracking Session',
-              }}
-            />
-            <Stack.Screen
-              name="prospecting"
-              options={{
-                headerShown: false,
-              }}
-            />
-          </Stack>
+          <SafeStack theme={theme} />
         </AuthGate>
       </PaperProvider>
       </SafeAreaProvider>

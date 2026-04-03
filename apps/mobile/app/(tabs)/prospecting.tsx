@@ -264,19 +264,19 @@ export default function ProspectingScreen() {
         )}
       </ScrollView>
 
-      {/* Start Prospecting FAB */}
+      {/* Start Tracking FAB — GPS background recording only */}
       {!activeSession && (
         <FAB
-          icon="walk"
-          label="Start Prospecting"
-          style={[styles.prospectingFab, { backgroundColor: theme.colors.primary, bottom: insets.bottom + 16 }]}
-          color={theme.colors.onPrimary}
+          icon="map-marker-path"
+          label="Start Tracking"
+          style={[styles.prospectingFab, { backgroundColor: theme.colors.surfaceVariant, bottom: insets.bottom + 16 }]}
+          color={theme.colors.onSurfaceVariant}
           loading={isStartingTracking}
           disabled={isStartingTracking}
           onPress={() => {
             Alert.alert(
-              'Start Prospecting',
-              'This will record your location in the background for field tracking. Continue?',
+              'Start Tracking',
+              'This will record your GPS location in the background while you work. For guided prospecting with scored routes, use "Go Prospect" instead.',
               [
                 { text: 'Cancel', style: 'cancel' },
                 {
