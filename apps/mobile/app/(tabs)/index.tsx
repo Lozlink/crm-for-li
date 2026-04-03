@@ -59,7 +59,7 @@ function formatDistance(meters: number | undefined): string {
 
 const QUICK_ACTIONS = [
   { key: 'contact', icon: 'account-plus', label: 'Add Contact', route: '/contact/new', color: '#6366f1' },
-  { key: 'route', icon: 'map-marker-path', label: 'Start Route', route: '/(tabs)/routes', color: '#10b981' },
+  { key: 'route', icon: 'map-marker-path', label: 'Go Prospect', route: '/(tabs)/prospecting', color: '#10b981' },
   { key: 'task', icon: 'checkbox-marked-circle-plus-outline', label: 'New Task', route: '/(tabs)/tasks', color: '#f59e0b' },
   { key: 'property', icon: 'home-plus', label: 'Add Listing', route: '/property/new', color: '#3b82f6' },
 ] as const;

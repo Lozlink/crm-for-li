@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
-import { useTheme, Text, Surface, SegmentedButtons, ProgressBar, ActivityIndicator, FAB, TextInput, Button, Chip } from 'react-native-paper';
+import { StyleSheet, View, ScrollView, TouchableOpacity, RefreshControl, FlatList } from 'react-native';
+import { useTheme, Text, Surface, SegmentedButtons, ProgressBar, ActivityIndicator, TextInput, Button, Chip } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -11,7 +11,11 @@ import {
   useDataEnrichmentStore,
   useProspectingMatcher,
   useLeadScoringEngine,
+  useRouteStore,
+  useGuidedProspectingStore,
 } from '@realestate-crm/hooks';
+import type { Route } from '@realestate-crm/types';
+import type { TrackingSession } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { TIER_COLORS } from '../../components/LeadScoreBadge';
 
@@ -58,7 +62,7 @@ function formatSalePrice(price: number | undefined | null): string {
   return `$${price.toLocaleString()}`;
 }
 
-type ViewMode = 'daily' | 'weekly' | 'funnel' | 'territory';
+type ViewMode = 'daily' | 'weekly' | 'funnel' | 'territory' | 'sessions';
 
 // ── Funnel colors ────────────────────────────────────────────────────
 
@@ -90,6 +94,18 @@ export default function ProspectingScreen() {
   const fetchProperties = usePropertyStore(s => s.fetchProperties);
   const sessions = useTrackingStore(s => s.sessions);
 
+  // Routes store (for Sessions view)
+  const routes = useRouteStore(s => s.routes);
+  const fetchRoutes = useRouteStore(s => s.fetchRoutes);
+
+  // Guided session state (for active status display)
+  const guidedIsActive = useGuidedProspectingStore(s => s.isActive);
+  const guidedStops = useGuidedProspectingStore(s => s.stops);
+  const guidedVisitedCount = useMemo(
+    () => guidedStops.filter(s => s.status === 'visited').length,
+    [guidedStops],
+  );
+
   // Data enrichment
   const suburbStats = useDataEnrichmentStore(s => s.suburbStats);
   const suburbStatsLoading = useDataEnrichmentStore(s => s.suburbStatsLoading);
@@ -107,9 +123,9 @@ export default function ProspectingScreen() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([fetchSessions(), fetchAllAnnotations(), fetchContacts(), fetchProperties(), fetchSuburbStats(), fetchRecentActivities()]);
+    await Promise.all([fetchSessions(), fetchAllAnnotations(), fetchContacts(), fetchProperties(), fetchSuburbStats(), fetchRecentActivities(), fetchRoutes()]);
     setRefreshing(false);
-  }, [fetchSessions, fetchAllAnnotations, fetchContacts, fetchProperties, fetchSuburbStats, fetchRecentActivities]);
+  }, [fetchSessions, fetchAllAnnotations, fetchContacts, fetchProperties, fetchSuburbStats, fetchRecentActivities, fetchRoutes]);
 
   useFocusEffect(
     useCallback(() => {
@@ -119,7 +135,8 @@ export default function ProspectingScreen() {
       fetchProperties();
       fetchSuburbStats();
       fetchRecentActivities();
-    }, [fetchSessions, fetchAllAnnotations, fetchContacts, fetchProperties, fetchSuburbStats, fetchRecentActivities])
+      fetchRoutes();
+    }, [fetchSessions, fetchAllAnnotations, fetchContacts, fetchProperties, fetchSuburbStats, fetchRecentActivities, fetchRoutes])
   );
 
   // Use pre-computed suburb contact counts from the hook (covers ALL contacts, not just stale streets)
@@ -197,39 +214,127 @@ export default function ProspectingScreen() {
               { value: 'weekly', label: 'Weekly' },
               { value: 'funnel', label: 'Funnel' },
               { value: 'territory', label: 'Territory' },
+              { value: 'sessions', label: 'Sessions' },
             ]}
             density="small"
           />
         </View>
 
-        {/* Guided prospecting + tier summary */}
-        <View style={styles.guidedRow}>
-          <Button
-            mode="contained"
-            icon="navigation"
-            onPress={() => router.push('/prospecting/guided' as never)}
-            compact
-          >
-            Go Prospect
-          </Button>
-          <View style={styles.tierChips}>
-            {tierCounts.hot > 0 && (
-              <Chip compact style={[styles.tierChip, { backgroundColor: `${TIER_COLORS.hot}18` }]} textStyle={{ color: TIER_COLORS.hot, fontSize: 12 }}>
-                {tierCounts.hot} Hot
-              </Chip>
-            )}
-            {tierCounts.warm > 0 && (
-              <Chip compact style={[styles.tierChip, { backgroundColor: `${TIER_COLORS.warm}18` }]} textStyle={{ color: TIER_COLORS.warm, fontSize: 12 }}>
-                {tierCounts.warm} Warm
-              </Chip>
-            )}
-            {tierCounts.cold > 0 && (
-              <Chip compact style={[styles.tierChip, { backgroundColor: `${TIER_COLORS.cold}18` }]} textStyle={{ color: TIER_COLORS.cold, fontSize: 12 }}>
-                {tierCounts.cold} Cold
-              </Chip>
-            )}
+        {/* Start actions or active session status */}
+        {activeSession || guidedIsActive ? (
+          <Surface style={[styles.activeSessionCard, { backgroundColor: theme.colors.primaryContainer }]} elevation={1}>
+            <View style={styles.activeSessionInner}>
+              <Icon
+                name={guidedIsActive ? 'walk' : 'record-circle-outline'}
+                size={22}
+                color={theme.colors.onPrimaryContainer}
+              />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text variant="titleSmall" style={{ fontWeight: '700', color: theme.colors.onPrimaryContainer }}>
+                  {guidedIsActive
+                    ? `Guided session active`
+                    : 'Tracking in progress'}
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onPrimaryContainer, opacity: 0.8 }}>
+                  {guidedIsActive
+                    ? `${guidedVisitedCount}/${guidedStops.length} stops visited`
+                    : activeSession?.started_at
+                      ? `Started ${formatTime(activeSession.started_at)}`
+                      : 'Recording GPS...'}
+                </Text>
+              </View>
+              <Button
+                mode="contained-tonal"
+                compact
+                onPress={() => {
+                  if (guidedIsActive) {
+                    router.push('/prospecting/guided' as never);
+                  } else {
+                    router.push('/(tabs)/map' as never);
+                  }
+                }}
+              >
+                Resume
+              </Button>
+            </View>
+          </Surface>
+        ) : (
+          <View style={styles.startActionsContainer}>
+            {/* Primary: Start Guided Session */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push('/prospecting/guided' as never)}
+            >
+              <Surface style={[styles.startActionCard, { backgroundColor: theme.colors.primary }]} elevation={2}>
+                <View style={styles.startActionInner}>
+                  <View style={styles.startActionIconBg}>
+                    <Icon name="navigation-variant" size={22} color={theme.colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="titleSmall" style={{ fontWeight: '700', color: theme.colors.onPrimary }}>
+                      Start Guided Session
+                    </Text>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onPrimary, opacity: 0.85 }}>
+                      Scored route with door-knock tracking
+                    </Text>
+                  </View>
+                  <Icon name="chevron-right" size={22} color={theme.colors.onPrimary} />
+                </View>
+                {/* Tier chips as context */}
+                {(tierCounts.hot > 0 || tierCounts.warm > 0 || tierCounts.cold > 0) && (
+                  <View style={styles.tierChipsRow}>
+                    {tierCounts.hot > 0 && (
+                      <Chip compact style={[styles.tierChipOnPrimary]} textStyle={{ color: TIER_COLORS.hot, fontSize: 11, fontWeight: '700' }}>
+                        {tierCounts.hot} Hot
+                      </Chip>
+                    )}
+                    {tierCounts.warm > 0 && (
+                      <Chip compact style={[styles.tierChipOnPrimary]} textStyle={{ color: TIER_COLORS.warm, fontSize: 11, fontWeight: '700' }}>
+                        {tierCounts.warm} Warm
+                      </Chip>
+                    )}
+                    {tierCounts.cold > 0 && (
+                      <Chip compact style={[styles.tierChipOnPrimary]} textStyle={{ color: TIER_COLORS.cold, fontSize: 11, fontWeight: '700' }}>
+                        {tierCounts.cold} Cold
+                      </Chip>
+                    )}
+                  </View>
+                )}
+              </Surface>
+            </TouchableOpacity>
+
+            {/* Secondary: Start Tracking */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              disabled={isStartingTracking}
+              onPress={async () => {
+                setIsStartingTracking(true);
+                await startSession();
+                setIsStartingTracking(false);
+                router.push('/(tabs)/map' as never);
+              }}
+            >
+              <Surface style={[styles.startActionCardSecondary, { backgroundColor: theme.colors.surfaceVariant }]} elevation={1}>
+                <View style={styles.startActionInner}>
+                  <Icon name="map-marker-path" size={20} color={theme.colors.onSurfaceVariant} />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text variant="titleSmall" style={{ fontWeight: '600', color: theme.colors.onSurface }}>
+                      Start Tracking
+                    </Text>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      GPS recording only
+                    </Text>
+                  </View>
+                  {isStartingTracking ? (
+                    <ActivityIndicator size={18} />
+                  ) : (
+                    <Icon name="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
+                  )}
+                </View>
+              </Surface>
+            </TouchableOpacity>
           </View>
-        </View>
+        )}
 
         {view === 'daily' && (
           <DailyView
@@ -262,37 +367,17 @@ export default function ProspectingScreen() {
             suburbStatsLoading={suburbStatsLoading}
           />
         )}
+
+        {view === 'sessions' && (
+          <SessionsView
+            sessions={sessions}
+            routes={routes}
+            onSessionPress={(id: string) => router.push(`/tracking/${id}` as never)}
+            onRoutePress={(id: string) => router.push(`/route/${id}` as never)}
+          />
+        )}
       </ScrollView>
 
-      {/* Start Tracking FAB — GPS background recording only */}
-      {!activeSession && (
-        <FAB
-          icon="map-marker-path"
-          label="Start Tracking"
-          style={[styles.prospectingFab, { backgroundColor: theme.colors.surfaceVariant, bottom: insets.bottom + 16 }]}
-          color={theme.colors.onSurfaceVariant}
-          loading={isStartingTracking}
-          disabled={isStartingTracking}
-          onPress={() => {
-            Alert.alert(
-              'Start Tracking',
-              'This will record your GPS location in the background while you work. For guided prospecting with scored routes, use "Go Prospect" instead.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Start',
-                  onPress: async () => {
-                    setIsStartingTracking(true);
-                    await startSession();
-                    setIsStartingTracking(false);
-                    router.push('/(tabs)/map' as never);
-                  },
-                },
-              ],
-            );
-          }}
-        />
-      )}
     </View>
   );
 }
@@ -1093,6 +1178,183 @@ function TerritoryView({
   );
 }
 
+// ── Sessions View ────────────────────────────────────────────────────
+
+interface SessionItem {
+  id: string;
+  type: 'tracking' | 'guided';
+  date: string;
+  durationSeconds: number | undefined;
+  distanceMeters: number | undefined;
+  stopCount: number;
+  name?: string;
+  status?: string;
+}
+
+function SessionsView({
+  sessions,
+  routes,
+  onSessionPress,
+  onRoutePress,
+}: {
+  sessions: TrackingSession[];
+  routes: Route[];
+  onSessionPress: (id: string) => void;
+  onRoutePress: (id: string) => void;
+}) {
+  const theme = useTheme();
+
+  const combinedSessions = useMemo(() => {
+    const items: SessionItem[] = [];
+
+    // Add completed tracking sessions
+    for (const s of sessions) {
+      if (!s.completed_at) continue;
+      items.push({
+        id: s.id,
+        type: 'tracking',
+        date: s.started_at,
+        durationSeconds: s.duration_seconds,
+        distanceMeters: s.total_distance_meters,
+        stopCount: 0,
+      });
+    }
+
+    // Add completed routes
+    for (const r of routes) {
+      // route_stops(count) from Supabase returns [{ count: N }]
+      const stopsAgg = (r as any).route_stops;
+      let stopCount = 0;
+      if (Array.isArray(stopsAgg) && stopsAgg.length > 0 && typeof stopsAgg[0].count === 'number') {
+        stopCount = stopsAgg[0].count;
+      } else if (r.stops && r.stops.length > 0) {
+        stopCount = r.stops.length;
+      }
+
+      items.push({
+        id: r.id,
+        type: 'guided',
+        date: r.created_at || r.started_at || '',
+        durationSeconds: r.estimated_duration_minutes ? r.estimated_duration_minutes * 60 : undefined,
+        distanceMeters: undefined,
+        stopCount,
+        name: r.name,
+        status: r.status,
+      });
+    }
+
+    // Sort by date descending
+    items.sort((a, b) => {
+      const aTime = a.date ? new Date(a.date).getTime() : 0;
+      const bTime = b.date ? new Date(b.date).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    return items;
+  }, [sessions, routes]);
+
+  const formatSessionDate = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+  };
+
+  const renderItem = useCallback(({ item }: { item: SessionItem }) => {
+    const isTracking = item.type === 'tracking';
+    const badgeColor = isTracking ? theme.colors.tertiaryContainer : theme.colors.primaryContainer;
+    const badgeTextColor = isTracking ? theme.colors.onTertiaryContainer : theme.colors.onPrimaryContainer;
+
+    return (
+      <TouchableOpacity
+        onPress={() => isTracking ? onSessionPress(item.id) : onRoutePress(item.id)}
+        activeOpacity={0.7}
+      >
+        <Surface style={styles.sessionRow} elevation={1}>
+          <View style={styles.sessionRowInner}>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Text variant="bodyMedium" style={{ fontWeight: '600' }}>
+                  {item.name || formatSessionDate(item.date)}
+                </Text>
+                <Chip
+                  compact
+                  style={{ backgroundColor: badgeColor, height: 24 }}
+                  textStyle={{ color: badgeTextColor, fontSize: 10 }}
+                >
+                  {isTracking ? 'Tracking' : 'Guided'}
+                </Chip>
+                {item.status && item.status !== 'completed' && (
+                  <Chip
+                    compact
+                    style={{ backgroundColor: theme.colors.surfaceVariant, height: 24 }}
+                    textStyle={{ color: theme.colors.onSurfaceVariant, fontSize: 10 }}
+                  >
+                    {item.status === 'planned' ? 'Planned' : 'In Progress'}
+                  </Chip>
+                )}
+              </View>
+              {item.name && (
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 2 }}>
+                  {formatSessionDate(item.date)}
+                </Text>
+              )}
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 2 }}>
+                {item.durationSeconds != null && (
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {formatDuration(item.durationSeconds)}
+                  </Text>
+                )}
+                {item.distanceMeters != null && (
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {formatDistance(item.distanceMeters)}
+                  </Text>
+                )}
+                {item.stopCount > 0 && (
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {item.stopCount} stop{item.stopCount !== 1 ? 's' : ''}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <Icon name="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
+          </View>
+        </Surface>
+      </TouchableOpacity>
+    );
+  }, [theme, onSessionPress, onRoutePress]);
+
+  if (combinedSessions.length === 0) {
+    return (
+      <Surface style={[styles.card, { backgroundColor: theme.colors.surface }]} elevation={1}>
+        <View style={[styles.cardInner, { alignItems: 'center', paddingVertical: 32 }]}>
+          <Icon name="history" size={40} color={theme.colors.onSurfaceVariant} style={{ opacity: 0.5 }} />
+          <Text variant="bodyLarge" style={{ color: theme.colors.onSurfaceVariant, marginTop: 12 }}>
+            No sessions yet
+          </Text>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4, textAlign: 'center' }}>
+            Start tracking or create a guided route to see your session history here.
+          </Text>
+        </View>
+      </Surface>
+    );
+  }
+
+  return (
+    <View>
+      <Text variant="titleSmall" style={{ fontWeight: '700', marginBottom: 8 }}>
+        All Sessions ({combinedSessions.length})
+      </Text>
+      <FlatList
+        data={combinedSessions}
+        keyExtractor={(item) => `${item.type}-${item.id}`}
+        renderItem={renderItem}
+        scrollEnabled={false}
+      />
+    </View>
+  );
+}
+
 // ── Multi-Dwelling Quick Add ─────────────────────────────────────────
 
 function MultiDwellingQuickAdd() {
@@ -1331,25 +1593,53 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 80,
   },
-  prospectingFab: {
-    position: 'absolute',
-    right: 16,
-    elevation: 4,
+  // Start actions
+  startActionsContainer: {
+    marginBottom: 16,
+    gap: 8,
   },
-  guidedRow: {
+  startActionCard: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  startActionCardSecondary: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  startActionInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    padding: 14,
     gap: 10,
   },
-  tierChips: {
+  startActionIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tierChipsRow: {
     flexDirection: 'row',
     gap: 6,
-    flex: 1,
-    flexWrap: 'wrap',
+    paddingHorizontal: 14,
+    paddingBottom: 10,
   },
-  tierChip: {
-    height: 28,
+  tierChipOnPrimary: {
+    height: 26,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+  },
+  // Active session card
+  activeSessionCard: {
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  activeSessionInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
   },
   segmentContainer: {
     marginBottom: 16,

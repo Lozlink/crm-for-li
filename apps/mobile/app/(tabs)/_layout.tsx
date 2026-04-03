@@ -195,12 +195,6 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="routes"
-          options={{ title: 'Routes', href: null,
-            tabBarIcon: ({ color, size }) => <Icon name="routes" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
           name="stats"
           options={{ title: 'Reports', href: null,
             tabBarIcon: ({ color, size }) => <Icon name="chart-bar" size={size} color={color} />,

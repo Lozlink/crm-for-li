@@ -11,6 +11,7 @@ import { useAuthStore } from './useAuthStore';
 import { useCRMStore } from './useCRMStore';
 import { useTaskStore } from './useTaskStore';
 import { useRouteStore } from './useRouteStore';
+import { useTrackingStore } from './useTrackingStore';
 
 interface GuidedProspectingState {
   isActive: boolean;
@@ -26,6 +27,9 @@ interface GuidedProspectingState {
     radiusMeters?: number,
     maxStops?: number,
   ) => void;
+  addStop: (stop: GuidedStop) => void;
+  removeStop: (contactId: string) => void;
+  reorderStops: (fromIndex: number, toIndex: number) => void;
   completeStop: (contactId: string, outcome: ProspectingOutcome, notes?: string) => Promise<void>;
   skipStop: (contactId: string) => void;
   updateProximityAlerts: (lat: number, lng: number) => void;
@@ -201,6 +205,34 @@ export const useGuidedProspectingStore = create<GuidedProspectingState>()((set, 
     });
   },
 
+  addStop: (stop) => {
+    const state = get();
+    // Avoid duplicate contactIds
+    if (state.stops.some(s => s.contactId === stop.contactId)) return;
+    const updatedStops = [...state.stops, { ...stop, routePosition: state.stops.length }];
+    set({ stops: updatedStops });
+  },
+
+  removeStop: (contactId) => {
+    const state = get();
+    const updatedStops = state.stops
+      .filter(s => s.contactId !== contactId)
+      .map((s, i) => ({ ...s, routePosition: i }));
+    // Adjust currentStopIndex if needed
+    const newIndex = Math.min(state.currentStopIndex, Math.max(updatedStops.length - 1, 0));
+    set({ stops: updatedStops, currentStopIndex: newIndex });
+  },
+
+  reorderStops: (fromIndex, toIndex) => {
+    const state = get();
+    const updatedStops = [...state.stops];
+    const [moved] = updatedStops.splice(fromIndex, 1);
+    updatedStops.splice(toIndex, 0, moved);
+    // Recalculate routePosition
+    const reindexed = updatedStops.map((s, i) => ({ ...s, routePosition: i }));
+    set({ stops: reindexed });
+  },
+
   completeStop: async (contactId, outcome, notes) => {
     const { isDemo } = getTeamContext();
     const now = new Date();
@@ -357,8 +389,11 @@ export const useGuidedProspectingStore = create<GuidedProspectingState>()((set, 
     const state = get();
     if (!state.isActive) return;
 
-    // Persist route via useRouteStore
     const visitedStops = state.stops.filter(s => s.status === 'visited');
+    const skippedStops = state.stops.filter(s => s.status === 'skipped');
+    const totalStops = state.stops.length;
+
+    // Persist route via useRouteStore
     if (visitedStops.length > 0) {
       await useRouteStore.getState().createRoute(
         {
@@ -378,6 +413,61 @@ export const useGuidedProspectingStore = create<GuidedProspectingState>()((set, 
           visited_at: stop.visitedAt,
         })),
       );
+    }
+
+    // Feed guided session data into the active tracking session as annotations
+    const activeSession = useTrackingStore.getState().activeSession;
+    if (activeSession) {
+      const createAnnotation = useTrackingStore.getState().createAnnotation;
+
+      // Summary annotation
+      const outcomeCounts: Record<string, number> = {};
+      for (const stop of visitedStops) {
+        const key = stop.outcome || 'unknown';
+        outcomeCounts[key] = (outcomeCounts[key] || 0) + 1;
+      }
+      const outcomeLines = Object.entries(outcomeCounts)
+        .map(([outcome, count]) => `${outcome.replace(/_/g, ' ')}: ${count}`)
+        .join(', ');
+
+      const coverageEntries = Array.from(state.buildingCoverage.entries());
+      const coverageLine = coverageEntries.length > 0
+        ? `\nBuildings: ${coverageEntries.map(([, v]) => `${v.visited}/${v.total}`).join(', ')}`
+        : '';
+
+      const summaryNote = `📋 Guided Prospecting Summary\n` +
+        `Stops: ${visitedStops.length} visited, ${skippedStops.length} skipped (${totalStops} planned)\n` +
+        `Outcomes: ${outcomeLines}${coverageLine}`;
+
+      // Create summary annotation at the centroid of visited stops
+      if (visitedStops.length > 0) {
+        const avgLat = visitedStops.reduce((sum, s) => sum + s.latitude, 0) / visitedStops.length;
+        const avgLng = visitedStops.reduce((sum, s) => sum + s.longitude, 0) / visitedStops.length;
+
+        await createAnnotation({
+          session_id: activeSession.id,
+          latitude: avgLat,
+          longitude: avgLng,
+          note: summaryNote,
+        });
+      }
+
+      // Create individual annotations for each visited stop with outcome
+      for (const stop of visitedStops) {
+        const contact = useCRMStore.getState().contacts.find(c => c.id === stop.contactId);
+        const contactName = contact
+          ? `${contact.first_name} ${contact.last_name || ''}`.trim()
+          : stop.address;
+        const outcomeLabel = stop.outcome ? stop.outcome.replace(/_/g, ' ') : 'visited';
+
+        await createAnnotation({
+          session_id: activeSession.id,
+          latitude: stop.latitude,
+          longitude: stop.longitude,
+          note: `🚪 ${contactName} — ${outcomeLabel} (score: ${stop.scoreBreakdown.total})`,
+          contact_id: stop.contactId,
+        });
+      }
     }
 
     set({

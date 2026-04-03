@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Button, Dialog, Portal, Surface, Text, useTheme } from 'react-native-paper';
+import { Button, Dialog, Portal, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
@@ -62,6 +62,9 @@ export default function TrackingBanner() {
   const [elapsed, setElapsed] = useState('00:00');
   const [stopping, setStopping] = useState(false);
   const [noteDialogVisible, setNoteDialogVisible] = useState(false);
+  const [buildingDialogVisible, setBuildingDialogVisible] = useState(false);
+  const [buildingUnits, setBuildingUnits] = useState('4');
+  const [buildingAddress, setBuildingAddress] = useState('');
   const [currentPosition, setCurrentPosition] = useState<{
     latitude: number;
     longitude: number;
@@ -180,8 +183,30 @@ export default function TrackingBanner() {
   }, [router, currentPosition]);
 
   const handleViewRoute = useCallback(() => {
-    router.push('/(tabs)/routes' as never);
+    router.push('/(tabs)/prospecting' as never);
   }, [router]);
+
+  const handleLogBuilding = useCallback(async () => {
+    if (!activeSession || !currentPosition) return;
+    const units = parseInt(buildingUnits, 10);
+    if (isNaN(units) || units < 1) return;
+
+    const address = buildingAddress.trim() || 'Unknown address';
+    const createAnnotation = useTrackingStore.getState().createAnnotation;
+
+    // Structured annotation format: parseable by scoring engine for persistent coverage tracking
+    // Format: 🏢 BUILDING_COVERAGE|address|units_visited|total_units
+    await createAnnotation({
+      session_id: activeSession.id,
+      latitude: currentPosition.latitude,
+      longitude: currentPosition.longitude,
+      note: `🏢 BUILDING_COVERAGE|${address}|${units}|${units}`,
+    });
+
+    setBuildingDialogVisible(false);
+    setBuildingUnits('4');
+    setBuildingAddress('');
+  }, [activeSession, currentPosition, buildingUnits, buildingAddress]);
 
   if (!activeSession) return null;
 
@@ -291,6 +316,25 @@ export default function TrackingBanner() {
 
             <TouchableOpacity
               style={[styles.expandedButton, { backgroundColor: theme.colors.surface }]}
+              onPress={() => setBuildingDialogVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Icon
+                name="office-building-outline"
+                size={20}
+                color={theme.colors.primary}
+              />
+              <Text
+                variant="labelSmall"
+                style={{ color: theme.colors.onSurface }}
+                numberOfLines={1}
+              >
+                Log Building
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.expandedButton, { backgroundColor: theme.colors.surface }]}
               onPress={handleViewRoute}
               activeOpacity={0.7}
             >
@@ -353,6 +397,35 @@ export default function TrackingBanner() {
           </Dialog.ScrollArea>
           <Dialog.Actions>
             <Button onPress={() => setNearbySheetVisible(false)}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Building coverage dialog */}
+        <Dialog visible={buildingDialogVisible} onDismiss={() => setBuildingDialogVisible(false)}>
+          <Dialog.Title>Log Building Coverage</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 16 }}>
+              Record how many units you knocked at this building. No contacts will be created.
+            </Text>
+            <TextInput
+              label="Address"
+              value={buildingAddress}
+              onChangeText={setBuildingAddress}
+              placeholder="e.g. 42 Smith Street"
+              mode="outlined"
+              style={{ marginBottom: 12 }}
+            />
+            <TextInput
+              label="Units knocked"
+              value={buildingUnits}
+              onChangeText={setBuildingUnits}
+              keyboardType="number-pad"
+              mode="outlined"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setBuildingDialogVisible(false)}>Cancel</Button>
+            <Button mode="contained" onPress={handleLogBuilding}>Log</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

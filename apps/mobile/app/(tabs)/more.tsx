@@ -15,7 +15,7 @@ const SECTIONS = [
   {
     title: 'Field Work',
     items: [
-      { label: 'Routes', icon: 'map-marker-path', route: '/(tabs)/routes', color: '#10b981' },
+      { label: 'Sessions', icon: 'map-marker-path', route: '/(tabs)/prospecting', color: '#10b981' },
       { label: 'Notes', icon: 'note-text-outline', route: '/(tabs)/notes', color: '#6366f1' },
       { label: 'Campaigns', icon: 'email-multiple-outline', route: '/campaigns/', color: '#ec4899' },
     ],

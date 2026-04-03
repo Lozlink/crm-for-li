@@ -1,5 +1,56 @@
 # Changelog
 
+## [Unreleased] - 2026-04-03
+
+### Added
+
+#### Smart Prospecting Engine
+- **Lead Scoring Engine** (`useLeadScoringEngine`) — 5-component scoring algorithm (0-100) computing likelihood-to-list for every contact: staleness decay (25pts), nearby sales momentum (25pts), engagement history (25pts), street conversion rate (15pts), dwelling penetration (10pts). Tiers: hot (75+), warm (50-74), cold (25-49), dormant (<25). Batch write-back to Supabase on session end.
+- **LeadScoreBadge component** — colored pill badge showing score/tier, small (inline) and medium (header) sizes. Wired into ContactCard, contact detail, and map markers.
+- **ScoreBreakdownSheet** — tap a score badge to see the 5-component breakdown with progress bars
+- **Route Optimizer** (`routeOptimizer.ts`) — nearest-neighbour TSP with score weighting. Effective distance = haversine * (1.5 - score/100), so high-score contacts are prioritized.
+- **Guided Prospecting Store** (`useGuidedProspectingStore`) — manages guided session lifecycle: startGuidedSession (auto-generates scored route), completeStop (outcome → follow-up task rules), skipStop, proximity alerts, building coverage tracking. Follow-up rules: no_answer → 2d task, voicemail → 3d task, interested → 1d appraisal, not_interested → dormant 90d, callback → 1d high priority.
+- **Guided Prospecting Screen** (`/prospecting/guided`) — 3-phase flow: loading → editing → walking. Editing phase: full-height map with contact markers, manual stop add/remove/reorder, ad-hoc stops via long-press (reverse geocode), address search via Google Places autocomplete. Walking phase: current stop card with outcome buttons, upcoming stops list, proximity alert banner, building coverage chip.
+- **Territory Heatmap** — refactored `useStreetStats` with 5-factor opportunity score: (1-penetration/10)*40 + freshness*30 + salesMomentum*20 + conversionRate*10. New fields: opportunityScore, salesMomentum, penetrationPct, conversionCount. Added `getBriefing()` method returning TerritoryBriefing.
+- **TerritoryBriefingCard** — tap a heatmap circle on the map for suburb intel: median price, days on market, penetration %, contact count, recent sales, recommended action chip
+
+#### Prospecting Hub Restructure
+- **Prospecting is the central hub** — all field operations flow from the Prospecting tab
+- **Past Sessions view** — new "Sessions" segment combining tracking sessions + guided routes, sorted by date, with type badges (Tracking/Guided), duration, distance, stop count. Tap to view detail.
+- **Consolidated start actions** — replaced "Go Prospect" chip + "Start Prospecting" FAB with two clear cards: "Start Guided Session" (primary, scored route) and "Start Tracking" (secondary, GPS only). Active session status display when running.
+- **Routes tab removed** — functionality migrated to Prospecting hub. Route creation absorbed into guided prospecting editing phase. Past routes visible in Sessions view. Route detail screen preserved as stack screen.
+- **Guided session → tracking session bridge** — ending a guided session creates annotations on the active tracking session: summary (stops visited/skipped, outcome breakdown, building coverage) + individual stop annotations linked to contacts
+
+#### Mobile Data Harmonization
+- **Activity consolidation** — merged dual arrays (`activities` + `recentActivities`) into single `activities: ActivityWithContact[]`. Unified `fetchActivities(contactIdOrLimit?)` method. All consumers updated.
+- **Call outcome dedup** — new `callActivity.ts` utility with `generateCallDedupKey()` and `hasRecentCallActivity()`. Prevents double-logging between auto-detection and manual entry. Respects pre-created activities (checks `call_outcome` before suppressing).
+- **Bidirectional Contact ↔ Property sync** — `getPropertiesForContact(contactId)` on usePropertyStore, `propertyLinksVersion` reactivity counter, cascade cleanup on deletion
+- **Multi-tag granular methods** — `addTagToContact()` and `removeTagFromContact()` complement existing `syncContactTags()`. ContactForm wired to multi-select TagPicker.
+- **Campaign ↔ subscription sync** — `subscriptionStatuses` map in useCRMStore, campaign `addRecipients()` checks opt-out status, returns `{ added, skippedOptOut }`
+- **Inspection attendee auto-linking** — `findMatchingContact()` matches by phone (last 8 digits) or email, auto-links or sets `suggestedContactMatch` flag
+- **Orphaned types cleanup** — deleted `apps/mobile/lib/types.ts`, migrated 10 import sites to `@realestate-crm/types`, promoted `PlaceAddressComponent` to canonical types
+
+#### TrackingBanner Enhancements
+- **Nearby Contacts bottom sheet** — "Nearby" button on expanded tracking banner opens full-width Dialog with sorted contacts (by distance), replacing the cramped top-right floating tray
+- **Log Building coverage** — "Log Building" button opens dialog to record units knocked at an address without creating contacts. Stored as structured `BUILDING_COVERAGE` annotations for scoring engine.
+
+### Changed
+
+- **"Start Prospecting" → "Start Tracking"** on prospecting tab — clarifies it's GPS recording only, not guided mode
+- **Heatmap layer renamed** "Stats" → "Opportunity" in map layer toggle
+- **TrackingBanner "View Route"** → navigates to Prospecting tab instead of removed Routes tab
+- **Today screen "Start Route"** → "Go Prospect" pointing to Prospecting tab
+
+### Fixed
+
+- **Post-call modal broken** — `addActivity` was sending `call_dedup_key` (in-memory field) to Supabase insert, causing PostgREST 400 errors on ALL call activity creation. Fixed by stripping the field before insert and re-attaching to in-memory object.
+- **Post-call modal suppressed by pre-created activities** — `hasRecentCallActivity` now skips activities without `call_outcome` (pre-created by contact detail before call completes)
+- **Android content behind nav buttons** — systemic fix: extracted `SafeStack` component inside `SafeAreaProvider` context, all stack/modal screens get `contentStyle: { paddingBottom: insets.bottom }`. Tab screens excluded.
+- **3 missed `fetchRecentActivities` renames** — prospecting.tsx, stats.tsx, web StatsView.tsx updated to `fetchActivities`
+- **`as any` cast in inspection store** — replaced with proper `suggestedContactMatch` field on `InspectionAttendee` type
+
+---
+
 ## [Unreleased] - 2026-04-01
 
 ### Added
