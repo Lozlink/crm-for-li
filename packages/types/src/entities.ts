@@ -50,7 +50,7 @@ export type CallOutcome = 'connected' | 'no_answer' | 'voicemail' | 'wrong_numbe
 export interface Activity {
   id: string;
   contact_id: string;
-  type: 'note' | 'call' | 'meeting' | 'email';
+  type: 'note' | 'call' | 'meeting' | 'email' | 'sms';
   content?: string;
   source?: ActivitySource;
   call_outcome?: CallOutcome | null;

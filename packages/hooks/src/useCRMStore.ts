@@ -846,7 +846,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
         };
         set(state => ({
           activities: [newActivity, ...state.activities],
-          contacts: ['call', 'meeting', 'email'].includes(activityWithSource.type)
+          contacts: ['call', 'meeting', 'email', 'sms'].includes(activityWithSource.type)
             ? state.contacts.map((c) =>
                 c.id === activityWithSource.contact_id
                   ? { ...c, last_contacted_at: new Date().toISOString() }
@@ -881,7 +881,7 @@ export const useCRMStore = create<CRMState>()((set, get) => ({
       };
 
       // Auto-update last_contacted_at for communication activities
-      if (['call', 'meeting', 'email'].includes(activityWithSource.type)) {
+      if (['call', 'meeting', 'email', 'sms'].includes(activityWithSource.type)) {
         const now = new Date().toISOString();
         await supabase
           .from('contacts')

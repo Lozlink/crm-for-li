@@ -1,9 +1,10 @@
 import { useState, useCallback, useMemo } from 'react';
-import { StyleSheet, View, FlatList, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, FlatList, ScrollView, Alert, Linking, Platform, Pressable } from 'react-native';
 import {
   Searchbar, FAB, useTheme, Text, ActivityIndicator, Button,
-  IconButton, Portal, Dialog, Chip, TextInput, Switch, Checkbox,
+  IconButton, Portal, Dialog, Chip, TextInput, Switch, Checkbox, Modal, Surface,
 } from 'react-native-paper';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -98,6 +99,15 @@ function recordToFilters(record: Record<string, unknown>): ContactFilters {
   };
 }
 
+function getContactDisplayName(contact: Contact): string {
+  const parts = [contact.first_name, contact.last_name].filter(Boolean);
+  return parts.length > 0 ? parts.join(' ') : 'there';
+}
+
+function sanitizePhone(phone: string): string {
+  return phone.replace(/[^\d+]/g, '');
+}
+
 export default function ContactsScreen() {
   const theme = useTheme();
   const router = useRouter();
@@ -111,6 +121,7 @@ export default function ContactsScreen() {
   const fetchContacts = useCRMStore(state => state.fetchContacts);
   const fetchTags = useCRMStore(state => state.fetchTags);
   const bulkDeleteContacts = useCRMStore((s) => s.bulkDeleteContacts);
+  const addActivity = useCRMStore((s) => s.addActivity);
 
   const { scores: leadScores } = useLeadScoringEngine();
 
@@ -128,6 +139,14 @@ export default function ContactsScreen() {
   // Multi-select state
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Bulk SMS state
+  const [bulkSmsModalVisible, setBulkSmsModalVisible] = useState(false);
+  const [bulkSmsMessage, setBulkSmsMessage] = useState('');
+  const [bulkSmsCurrentIndex, setBulkSmsCurrentIndex] = useState(0);
+  const [bulkSmsSentCount, setBulkSmsSentCount] = useState(0);
+  const [bulkSmsSkippedCount, setBulkSmsSkippedCount] = useState(0);
+  const [bulkSmsPhase, setBulkSmsPhase] = useState<'compose' | 'sending' | 'done'>('compose');
 
   const contactSavedSearches = useMemo(
     () => savedSearches.filter(s => s.entity_type === 'contact'),
@@ -261,6 +280,78 @@ export default function ContactsScreen() {
       ]
     );
   }, [selectedIds, bulkDeleteContacts]);
+
+  // ── Bulk SMS helpers ─────────────────────────────────────────────
+  const bulkSmsEligibleContacts = useMemo(() => {
+    return contacts.filter(c => selectedIds.has(c.id) && c.phone);
+  }, [contacts, selectedIds]);
+
+  const bulkSmsSkippedContacts = useMemo(() => {
+    return contacts.filter(c => selectedIds.has(c.id) && !c.phone);
+  }, [contacts, selectedIds]);
+
+  const handleOpenBulkSms = useCallback(() => {
+    if (bulkSmsEligibleContacts.length === 0) return;
+    setBulkSmsMessage('Hi {name}, just touching base. Would love to catch up when you have a moment.');
+    setBulkSmsPhase('compose');
+    setBulkSmsCurrentIndex(0);
+    setBulkSmsSentCount(0);
+    setBulkSmsSkippedCount(0);
+    setBulkSmsModalVisible(true);
+  }, [bulkSmsEligibleContacts]);
+
+  const handleStartBulkSmsSend = useCallback(() => {
+    setBulkSmsPhase('sending');
+    setBulkSmsCurrentIndex(0);
+    setBulkSmsSentCount(0);
+    setBulkSmsSkippedCount(0);
+  }, []);
+
+  const currentBulkContact = bulkSmsEligibleContacts[bulkSmsCurrentIndex] as Contact | undefined;
+
+  const handleSendCurrentContactSms = useCallback(() => {
+    if (!currentBulkContact?.phone) return;
+    const phone = sanitizePhone(currentBulkContact.phone);
+    const contactName = getContactDisplayName(currentBulkContact);
+    const personalizedMessage = bulkSmsMessage.replace(/\{name\}/g, contactName);
+    const body = encodeURIComponent(personalizedMessage);
+    const separator = Platform.OS === 'ios' ? '&' : '?';
+    Linking.openURL(`sms:${phone}${separator}body=${body}`).catch(() => {});
+    if (currentBulkContact.id) {
+      const preview = personalizedMessage.length > 200 ? `${personalizedMessage.slice(0, 200)}…` : personalizedMessage;
+      addActivity({
+        contact_id: currentBulkContact.id,
+        type: 'sms',
+        content: `SMS initiated: ${preview}`,
+      }).catch(() => {});
+    }
+    setBulkSmsSentCount(prev => prev + 1);
+    const nextIdx = bulkSmsCurrentIndex + 1;
+    if (nextIdx >= bulkSmsEligibleContacts.length) {
+      setBulkSmsPhase('done');
+    } else {
+      setBulkSmsCurrentIndex(nextIdx);
+    }
+  }, [currentBulkContact, bulkSmsMessage, bulkSmsCurrentIndex, bulkSmsEligibleContacts.length, addActivity]);
+
+  const handleSkipCurrentContactSms = useCallback(() => {
+    setBulkSmsSkippedCount(prev => prev + 1);
+    const nextIdx = bulkSmsCurrentIndex + 1;
+    if (nextIdx >= bulkSmsEligibleContacts.length) {
+      setBulkSmsPhase('done');
+    } else {
+      setBulkSmsCurrentIndex(nextIdx);
+    }
+  }, [bulkSmsCurrentIndex, bulkSmsEligibleContacts.length]);
+
+  const handleStopBulkSmsSend = useCallback(() => {
+    setBulkSmsPhase('done');
+  }, []);
+
+  const handleCloseBulkSms = useCallback(() => {
+    setBulkSmsModalVisible(false);
+    exitSelectMode();
+  }, [exitSelectMode]);
 
   const handleContactPress = useCallback((contact: Contact) => {
     if (selectMode) {
@@ -508,6 +599,16 @@ export default function ContactsScreen() {
           <Button compact onPress={handleSelectAll} textColor={theme.colors.onPrimaryContainer}>
             Select All
           </Button>
+          {selectedIds.size >= 2 && (
+            <Button
+              compact
+              icon="message-text-outline"
+              onPress={handleOpenBulkSms}
+              textColor={theme.colors.primary}
+            >
+              Bulk SMS
+            </Button>
+          )}
           <Button compact onPress={handleBulkDelete} textColor={theme.colors.error}>
             Delete
           </Button>
@@ -717,6 +818,121 @@ export default function ContactsScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      {/* Bulk SMS Modal */}
+      <Portal>
+        <Modal
+          visible={bulkSmsModalVisible}
+          onDismiss={handleCloseBulkSms}
+          contentContainerStyle={[
+            styles.bulkSmsModal,
+            { backgroundColor: theme.colors.surface },
+          ]}
+        >
+          {bulkSmsPhase === 'compose' && (
+            <View style={styles.bulkSmsContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <Icon name="message-text-outline" size={24} color={theme.colors.primary} />
+                <Text variant="titleMedium" style={{ fontWeight: '700' }}>Bulk SMS</Text>
+              </View>
+
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
+                Will send to {bulkSmsEligibleContacts.length} contact{bulkSmsEligibleContacts.length !== 1 ? 's' : ''}
+                {bulkSmsSkippedContacts.length > 0
+                  ? ` (${bulkSmsSkippedContacts.length} skipped — no phone)`
+                  : ''}
+              </Text>
+
+              <Text variant="labelMedium" style={{ marginBottom: 4, color: theme.colors.onSurfaceVariant }}>
+                Message template (use {'{name}'} for contact name)
+              </Text>
+              <TextInput
+                value={bulkSmsMessage}
+                onChangeText={setBulkSmsMessage}
+                mode="outlined"
+                multiline
+                numberOfLines={4}
+                style={{ marginBottom: 16 }}
+              />
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+                <Button onPress={handleCloseBulkSms}>Cancel</Button>
+                <Button
+                  mode="contained"
+                  icon="send"
+                  onPress={handleStartBulkSmsSend}
+                  disabled={bulkSmsEligibleContacts.length === 0 || !bulkSmsMessage.trim()}
+                >
+                  Start Sending
+                </Button>
+              </View>
+            </View>
+          )}
+
+          {bulkSmsPhase === 'sending' && currentBulkContact && (
+            <View style={styles.bulkSmsContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <Icon name="message-text-outline" size={24} color={theme.colors.primary} />
+                <Text variant="titleMedium" style={{ fontWeight: '700' }}>
+                  Sending {bulkSmsCurrentIndex + 1} of {bulkSmsEligibleContacts.length}
+                </Text>
+              </View>
+
+              <Surface style={[styles.bulkSmsRecipient, { backgroundColor: theme.colors.surfaceVariant }]} elevation={0}>
+                <Icon name="account" size={18} color={theme.colors.onSurfaceVariant} />
+                <Text variant="bodyMedium" style={{ fontWeight: '600', marginLeft: 8, flex: 1 }}>
+                  {getContactDisplayName(currentBulkContact)}
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  {currentBulkContact.phone}
+                </Text>
+              </Surface>
+
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8, marginBottom: 16 }}>
+                Tapping "Send" will open the native SMS app for this contact.
+              </Text>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+                <Button onPress={handleStopBulkSmsSend} textColor={theme.colors.error}>
+                  Stop
+                </Button>
+                <Button onPress={handleSkipCurrentContactSms}>
+                  Skip
+                </Button>
+                <Button mode="contained" icon="message-text" onPress={handleSendCurrentContactSms}>
+                  Send
+                </Button>
+              </View>
+            </View>
+          )}
+
+          {bulkSmsPhase === 'done' && (
+            <View style={styles.bulkSmsContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <Icon name="check-circle" size={24} color="#16a34a" />
+                <Text variant="titleMedium" style={{ fontWeight: '700' }}>Bulk SMS Complete</Text>
+              </View>
+
+              <View style={{ gap: 4, marginBottom: 16 }}>
+                <Text variant="bodyMedium">
+                  {bulkSmsSentCount} sent, {bulkSmsSkippedCount} skipped
+                </Text>
+                {bulkSmsSkippedContacts.length > 0 && (
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {bulkSmsSkippedContacts.length} had no phone number
+                  </Text>
+                )}
+              </View>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                <Button mode="contained" onPress={handleCloseBulkSms}>
+                  Done
+                </Button>
+              </View>
+            </View>
+          )}
+        </Modal>
+      </Portal>
     </View>
   );
 }
@@ -826,5 +1042,19 @@ const styles = StyleSheet.create({
   },
   selectableCardWrapper: {
     flex: 1,
+  },
+  bulkSmsModal: {
+    margin: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  bulkSmsContent: {
+    padding: 20,
+  },
+  bulkSmsRecipient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
   },
 });

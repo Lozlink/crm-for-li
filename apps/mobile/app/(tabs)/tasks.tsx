@@ -18,8 +18,8 @@ import {
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
-import { useTaskStore, useAuthStore } from '@realestate-crm/hooks';
-import type { Task, TaskType, TaskStatus, TaskPriority } from '@realestate-crm/types';
+import { useTaskStore, useAuthStore, useCRMStore, usePropertyStore } from '@realestate-crm/hooks';
+import type { Task, TaskType, TaskStatus, TaskPriority, Contact, Property, Activity } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 type StatusFilter = 'outstanding' | 'completed';
@@ -116,18 +116,27 @@ function handleTaskEmail(task: Task) {
   Linking.openURL(`mailto:${encodeURIComponent(contact.email)}?subject=${subject}&body=${body}`).catch(() => {});
 }
 
-function handleTaskSMS(task: Task) {
+function handleTaskSMS(task: Task, addActivity?: (activity: Omit<Activity, 'id' | 'created_at'>) => void) {
   const contact = task.contact;
   if (!contact?.phone) return;
   const phone = sanitizePhone(contact.phone);
   const name = getContactDisplayName(contact) || 'there';
-  const body = encodeURIComponent(generateTaskMessage(task.type, name, {
+  const message = generateTaskMessage(task.type, name, {
     property: task.property?.address,
     date: task.due_at ? formatDueDate(task.due_at) : undefined,
     title: task.title,
-  }));
+  });
+  const body = encodeURIComponent(message);
   const separator = Platform.OS === 'ios' ? '&' : '?';
   Linking.openURL(`sms:${phone}${separator}body=${body}`).catch(() => {});
+  if (addActivity && contact.id) {
+    const preview = message.length > 200 ? `${message.slice(0, 200)}…` : message;
+    addActivity({
+      contact_id: contact.id,
+      type: 'sms',
+      content: `SMS initiated: ${preview}`,
+    });
+  }
 }
 
 function handleTaskCall(task: Task) {
@@ -147,6 +156,11 @@ export default function TasksScreen() {
   const createTask = useTaskStore(state => state.createTask);
 
   const currentUserId = useAuthStore(state => state.user?.id);
+  const allContacts = useCRMStore(state => state.contacts);
+  const fetchContacts = useCRMStore(state => state.fetchContacts);
+  const addActivity = useCRMStore(state => state.addActivity);
+  const allProperties = usePropertyStore(state => state.properties);
+  const fetchProperties = usePropertyStore(state => state.fetchProperties);
 
   const [refreshing, setRefreshing] = useState(false);
   const [myTasksOnly, setMyTasksOnly] = useState(true);
@@ -167,15 +181,53 @@ export default function TasksScreen() {
   // Create dialog state
   const [createDialogVisible, setCreateDialogVisible] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [newDescription, setNewDescription] = useState('');
   const [newType, setNewType] = useState<TaskType>('task');
   const [newPriority, setNewPriority] = useState<TaskPriority>('normal');
   const [newDueDate, setNewDueDate] = useState('');
+  const [newContactId, setNewContactId] = useState<string | undefined>(undefined);
+  const [newPropertyId, setNewPropertyId] = useState<string | undefined>(undefined);
+  const [contactSearchQuery, setContactSearchQuery] = useState('');
+  const [propertySearchQuery, setPropertySearchQuery] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+
+  // Filtered contacts/properties for the pickers
+  const filteredPickerContacts = useMemo(() => {
+    if (!contactSearchQuery) return allContacts.filter(c => c.first_name).slice(0, 20);
+    const q = contactSearchQuery.toLowerCase();
+    return allContacts
+      .filter(c => c.first_name)
+      .filter(c => {
+        const name = `${c.first_name} ${c.last_name || ''}`.toLowerCase();
+        return name.includes(q);
+      })
+      .slice(0, 20);
+  }, [allContacts, contactSearchQuery]);
+
+  const filteredPickerProperties = useMemo(() => {
+    if (!propertySearchQuery) return allProperties.slice(0, 20);
+    const q = propertySearchQuery.toLowerCase();
+    return allProperties
+      .filter(p => (p.address || '').toLowerCase().includes(q))
+      .slice(0, 20);
+  }, [allProperties, propertySearchQuery]);
+
+  const selectedContact = useMemo(
+    () => newContactId ? allContacts.find(c => c.id === newContactId) : undefined,
+    [allContacts, newContactId],
+  );
+
+  const selectedProperty = useMemo(
+    () => newPropertyId ? allProperties.find(p => p.id === newPropertyId) : undefined,
+    [allProperties, newPropertyId],
+  );
 
   useFocusEffect(
     useCallback(() => {
       fetchTasks();
-    }, [fetchTasks])
+      fetchContacts();
+      fetchProperties();
+    }, [fetchTasks, fetchContacts, fetchProperties])
   );
 
   const filteredAndSortedTasks = useMemo(() => {
@@ -224,9 +276,14 @@ export default function TasksScreen() {
 
   const handleOpenCreate = () => {
     setNewTitle('');
+    setNewDescription('');
     setNewType('task');
     setNewPriority('normal');
     setNewDueDate('');
+    setNewContactId(undefined);
+    setNewPropertyId(undefined);
+    setContactSearchQuery('');
+    setPropertySearchQuery('');
     setCreateDialogVisible(true);
   };
 
@@ -236,10 +293,13 @@ export default function TasksScreen() {
 
     const taskData: Omit<Task, 'id' | 'created_at' | 'updated_at' | 'contact' | 'property'> = {
       title: newTitle.trim(),
+      description: newDescription.trim() || undefined,
       type: newType,
       status: 'pending',
       priority: newPriority,
       assigned_to: currentUserId || undefined,
+      contact_id: newContactId,
+      property_id: newPropertyId,
     };
 
     if (newDueDate.trim()) {
@@ -330,6 +390,14 @@ export default function TasksScreen() {
     const body = encodeURIComponent(personalizedMessage);
     const separator = Platform.OS === 'ios' ? '&' : '?';
     Linking.openURL(`sms:${phone}${separator}body=${body}`).catch(() => {});
+    if (currentBulkTask.contact.id) {
+      const preview = personalizedMessage.length > 200 ? `${personalizedMessage.slice(0, 200)}…` : personalizedMessage;
+      addActivity({
+        contact_id: currentBulkTask.contact.id,
+        type: 'sms',
+        content: `SMS initiated: ${preview}`,
+      }).catch(() => {});
+    }
     setBulkSmsSentCount(prev => prev + 1);
     const nextIdx = bulkSmsCurrentIndex + 1;
     if (nextIdx >= bulkSmsEligibleTasks.length) {
@@ -337,7 +405,7 @@ export default function TasksScreen() {
     } else {
       setBulkSmsCurrentIndex(nextIdx);
     }
-  }, [currentBulkTask, bulkSmsMessage, bulkSmsCurrentIndex, bulkSmsEligibleTasks.length]);
+  }, [currentBulkTask, bulkSmsMessage, bulkSmsCurrentIndex, bulkSmsEligibleTasks.length, addActivity]);
 
   const handleSkipCurrentSms = useCallback(() => {
     setBulkSmsSkippedCount(prev => prev + 1);
@@ -538,7 +606,7 @@ export default function TasksScreen() {
                 size={20}
                 iconColor={theme.colors.primary}
                 style={styles.actionButton}
-                onPress={() => handleTaskSMS(item)}
+                onPress={() => handleTaskSMS(item, addActivity)}
                 accessibilityLabel="Send SMS"
               />
             )}
@@ -653,10 +721,11 @@ export default function TasksScreen() {
         <Dialog
           visible={createDialogVisible}
           onDismiss={() => setCreateDialogVisible(false)}
+          style={styles.createDialog}
         >
           <Dialog.Title>New Task</Dialog.Title>
           <Dialog.ScrollArea style={styles.dialogScrollArea}>
-            <ScrollView>
+            <ScrollView keyboardShouldPersistTaps="handled">
               <View style={styles.dialogContent}>
                 <TextInput
                   label="Title *"
@@ -664,6 +733,15 @@ export default function TasksScreen() {
                   onChangeText={setNewTitle}
                   mode="outlined"
                   autoFocus
+                />
+
+                <TextInput
+                  label="Description"
+                  value={newDescription}
+                  onChangeText={setNewDescription}
+                  mode="outlined"
+                  multiline
+                  numberOfLines={3}
                 />
 
                 <Text variant="labelMedium" style={styles.fieldLabel}>
@@ -707,6 +785,103 @@ export default function TasksScreen() {
                   mode="outlined"
                   placeholder="e.g. 2026-03-01"
                 />
+
+                {/* Contact Picker */}
+                <Text variant="labelMedium" style={styles.fieldLabel}>
+                  Link Contact
+                </Text>
+                {selectedContact ? (
+                  <Chip
+                    icon="account"
+                    onClose={() => setNewContactId(undefined)}
+                    style={{ alignSelf: 'flex-start' }}
+                  >
+                    {[selectedContact.first_name, selectedContact.last_name].filter(Boolean).join(' ')}
+                  </Chip>
+                ) : (
+                  <View>
+                    <TextInput
+                      label="Search contacts..."
+                      value={contactSearchQuery}
+                      onChangeText={setContactSearchQuery}
+                      mode="outlined"
+                      dense
+                      left={<TextInput.Icon icon="magnify" />}
+                    />
+                    {contactSearchQuery.length > 0 && filteredPickerContacts.length > 0 && (
+                      <Surface style={styles.pickerList} elevation={2}>
+                        <ScrollView style={styles.pickerScroll} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+                          {filteredPickerContacts.map(c => (
+                            <Pressable
+                              key={c.id}
+                              style={styles.pickerItem}
+                              onPress={() => {
+                                setNewContactId(c.id);
+                                setContactSearchQuery('');
+                              }}
+                            >
+                              <Icon name="account" size={16} color={theme.colors.onSurfaceVariant} />
+                              <Text variant="bodyMedium" style={{ marginLeft: 8 }}>
+                                {[c.first_name, c.last_name].filter(Boolean).join(' ')}
+                              </Text>
+                              {c.phone && (
+                                <Text variant="bodySmall" style={{ marginLeft: 'auto', color: theme.colors.onSurfaceVariant }}>
+                                  {c.phone}
+                                </Text>
+                              )}
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      </Surface>
+                    )}
+                  </View>
+                )}
+
+                {/* Property Picker */}
+                <Text variant="labelMedium" style={styles.fieldLabel}>
+                  Link Property
+                </Text>
+                {selectedProperty ? (
+                  <Chip
+                    icon="home"
+                    onClose={() => setNewPropertyId(undefined)}
+                    style={{ alignSelf: 'flex-start' }}
+                  >
+                    {selectedProperty.address}
+                  </Chip>
+                ) : (
+                  <View>
+                    <TextInput
+                      label="Search properties..."
+                      value={propertySearchQuery}
+                      onChangeText={setPropertySearchQuery}
+                      mode="outlined"
+                      dense
+                      left={<TextInput.Icon icon="magnify" />}
+                    />
+                    {propertySearchQuery.length > 0 && filteredPickerProperties.length > 0 && (
+                      <Surface style={styles.pickerList} elevation={2}>
+                        <ScrollView style={styles.pickerScroll} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+                          {filteredPickerProperties.map(p => (
+                            <Pressable
+                              key={p.id}
+                              style={styles.pickerItem}
+                              onPress={() => {
+                                setNewPropertyId(p.id);
+                                setPropertySearchQuery('');
+                              }}
+                            >
+                              <Icon name="home" size={16} color={theme.colors.onSurfaceVariant} />
+                              <Text variant="bodyMedium" style={{ marginLeft: 8 }} numberOfLines={1}>
+                                {[p.address, p.suburb].filter(Boolean).join(', ')}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      </Surface>
+                    )}
+                  </View>
+                )}
               </View>
             </ScrollView>
           </Dialog.ScrollArea>
@@ -935,6 +1110,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
   },
+  createDialog: {
+    maxHeight: '85%',
+  },
   dialogScrollArea: {
     paddingHorizontal: 0,
   },
@@ -945,6 +1123,20 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     marginTop: 4,
+  },
+  pickerList: {
+    borderRadius: 8,
+    marginTop: 4,
+    overflow: 'hidden',
+  },
+  pickerScroll: {
+    maxHeight: 160,
+  },
+  pickerItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   selectBar: {
     flexDirection: 'row',
