@@ -135,7 +135,7 @@ function handleTaskSMS(task: Task, addActivity?: (activity: Omit<Activity, 'id' 
       contact_id: contact.id,
       type: 'sms',
       content: `SMS initiated: ${preview}`,
-    });
+    })?.catch?.((e: unknown) => console.warn('SMS activity log failed:', e));
   }
 }
 
@@ -396,7 +396,7 @@ export default function TasksScreen() {
         contact_id: currentBulkTask.contact.id,
         type: 'sms',
         content: `SMS initiated: ${preview}`,
-      }).catch(() => {});
+      }).catch((e) => console.warn('SMS activity log failed:', e));
     }
     setBulkSmsSentCount(prev => prev + 1);
     const nextIdx = bulkSmsCurrentIndex + 1;

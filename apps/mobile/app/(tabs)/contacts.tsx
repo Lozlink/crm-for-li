@@ -323,7 +323,7 @@ export default function ContactsScreen() {
         contact_id: currentBulkContact.id,
         type: 'sms',
         content: `SMS initiated: ${preview}`,
-      }).catch(() => {});
+      }).catch((e) => console.warn('SMS activity log failed:', e));
     }
     setBulkSmsSentCount(prev => prev + 1);
     const nextIdx = bulkSmsCurrentIndex + 1;
