@@ -4,14 +4,10 @@
 
 [38;5;142m[dotenvx@1.52.0] injecting env (4) from .env[39m
 Starting Metro Bundler
-Android apps/mobile/index.ts ▓▓▓▓░░░░░░░░░░░░ 30.5% (291/527)
-iOS apps/mobile/index.ts ▓▓▓▓░░░░░░░░░░░░ 29.9% (275/503)
-Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.3% (1696/1731)
-iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1753/1753)
-Android Bundled 7758ms apps/mobile/index.ts (1731 modules)
-Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.3% (1696/1731)
-iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1753/1753)
-iOS Bundled 10395ms apps/mobile/index.ts (1753 modules)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.2% (1687/1720)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1755/1755)
+Android Bundled 3542ms apps/mobile/index.ts (1720 modules)
+iOS Bundled 5429ms apps/mobile/index.ts (1755 modules)
 
 › Assets (33):
 ../../node_modules/.pnpm/@expo+vector-icons@15.0.3_expo-font@14.0.11_expo@54.0.33_react-native@0.81.5_@babel+cor_dffeba5e71c136362da807d9acd294ec/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf (1.31 MB)
@@ -30,10 +26,10 @@ iOS Bundled 10395ms apps/mobile/index.ts (1753 modules)
 ../../node_modules/.pnpm/react-native-paper@5.15.0_react-native-safe-area-context@5.6.2_react-native@0.81.5_@bab_41d9b5c0467b7e446469252509ed76ee/node_modules/react-native-paper/src/assets/back-chevron.png (489 B)
 
 › android bundles (1):
-_expo/static/js/android/index-eeb548018a561c24a1fe9e4fb973677a.hbc (6.02 MB)
+_expo/static/js/android/index-067413ce96d411db4d19ca76792db824.hbc (6.03 MB)
 
 › ios bundles (1):
-_expo/static/js/ios/index-c3b8c4fe5d9188a034ef25d2717563b0.hbc (6.02 MB)
+_expo/static/js/ios/index-dcbdab88c1bf95653e69707cbc5f165a.hbc (6.04 MB)
 
 › Files (1):
 metadata.json (3.71 kB)
