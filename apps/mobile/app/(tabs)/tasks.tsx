@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, View, FlatList, ScrollView, Linking, Pressable } from 'react-native';
+import { Alert, StyleSheet, View, FlatList, ScrollView, Linking, Platform, Pressable } from 'react-native';
 import {
   FAB,
   useTheme,
@@ -18,6 +18,14 @@ import {
 } from 'react-native-paper';
 import * as SMS from 'expo-sms';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Lazy-import CallerID native module (not available in Expo Go)
+let CallerIdModule: {
+  hasSmsPermission(): Promise<boolean>;
+  requestSmsPermission(): Promise<boolean>;
+  sendDirectSms(phone: string, message: string): Promise<{ success: boolean; error: string | null }>;
+} | null = null;
+try { CallerIdModule = require('caller-id').default; } catch { /* Expo Go / web */ }
 import { useFocusEffect } from 'expo-router';
 import { useTaskStore, useAuthStore, useCRMStore, usePropertyStore } from '@realestate-crm/hooks';
 import type { Task, TaskType, TaskStatus, TaskPriority, Contact, Property, Activity } from '@realestate-crm/types';
@@ -150,11 +158,6 @@ function handleTaskEmail(task: Task) {
 async function handleTaskSMS(task: Task, addActivity?: (activity: Omit<Activity, 'id' | 'created_at'>) => Promise<unknown> | void) {
   const contact = task.contact;
   if (!contact?.phone) return;
-  const available = await SMS.isAvailableAsync();
-  if (!available) {
-    Alert.alert('SMS Not Available', 'SMS is not supported on this device.');
-    return;
-  }
   const phone = sanitizePhone(contact.phone);
   const name = getContactDisplayName(contact) || 'there';
   const message = generateTaskMessage(task.type, name, {
@@ -162,23 +165,34 @@ async function handleTaskSMS(task: Task, addActivity?: (activity: Omit<Activity,
     date: task.due_at ? formatDueDate(task.due_at) : undefined,
     title: task.title,
   });
-  const { result } = await SMS.sendSMSAsync([phone], message);
-  if (addActivity && contact.id) {
-    const preview = message.length > 200 ? `${message.slice(0, 200)}…` : message;
-    if (result === 'sent') {
-      void Promise.resolve(addActivity({
-        contact_id: contact.id,
-        type: 'sms',
-        content: `SMS sent: ${preview}`,
-      })).catch((e: unknown) => console.warn('SMS activity log failed:', e));
-    } else if (result === 'unknown') {
-      void Promise.resolve(addActivity({
-        contact_id: contact.id,
-        type: 'sms',
-        content: `SMS initiated: ${preview}`,
-      })).catch((e: unknown) => console.warn('SMS activity log failed:', e));
+  const preview = message.length > 200 ? `${message.slice(0, 200)}…` : message;
+
+  if (Platform.OS === 'android' && CallerIdModule) {
+    const hasPermission = await CallerIdModule.hasSmsPermission();
+    if (!hasPermission) {
+      const granted = await CallerIdModule.requestSmsPermission();
+      if (!granted) { Alert.alert('SMS Permission Required', 'Please grant SMS permission to send messages.'); return; }
     }
-    // result === 'cancelled' — do not log
+    const { success, error } = await CallerIdModule.sendDirectSms(phone, message);
+    if (success && addActivity && contact.id) {
+      void Promise.resolve(addActivity({ contact_id: contact.id, type: 'sms', content: `SMS sent: ${preview}` }))
+        .catch((e: unknown) => console.warn('SMS activity log failed:', e));
+    } else if (!success) {
+      Alert.alert('SMS Failed', error || 'Could not send SMS.');
+    }
+  } else {
+    const available = await SMS.isAvailableAsync();
+    if (!available) { Alert.alert('SMS Not Available', 'SMS is not supported on this device.'); return; }
+    const { result } = await SMS.sendSMSAsync([phone], message);
+    if (addActivity && contact.id) {
+      if (result === 'sent') {
+        void Promise.resolve(addActivity({ contact_id: contact.id, type: 'sms', content: `SMS sent: ${preview}` }))
+          .catch((e: unknown) => console.warn('SMS activity log failed:', e));
+      } else if (result === 'unknown') {
+        void Promise.resolve(addActivity({ contact_id: contact.id, type: 'sms', content: `SMS initiated: ${preview}` }))
+          .catch((e: unknown) => console.warn('SMS activity log failed:', e));
+      }
+    }
   }
 }
 
@@ -421,11 +435,24 @@ export default function TasksScreen() {
   // Auto-send ref: triggers sendSMSAsync automatically when index advances
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const useDirectSend = Platform.OS === 'android' && CallerIdModule != null;
+
   const handleStartBulkSend = useCallback(async () => {
-    const available = await SMS.isAvailableAsync();
-    if (!available) {
-      Alert.alert('SMS Not Available', 'SMS is not supported on this device.');
-      return;
+    if (useDirectSend) {
+      const hasPermission = await CallerIdModule!.hasSmsPermission();
+      if (!hasPermission) {
+        const granted = await CallerIdModule!.requestSmsPermission();
+        if (!granted) {
+          Alert.alert('SMS Permission Required', 'Please grant SMS permission to send messages directly from the app.');
+          return;
+        }
+      }
+    } else {
+      const available = await SMS.isAvailableAsync();
+      if (!available) {
+        Alert.alert('SMS Not Available', 'SMS is not supported on this device.');
+        return;
+      }
     }
     setBulkSmsPhase('sending');
     setBulkSmsCurrentIndex(0);
@@ -443,6 +470,15 @@ export default function TasksScreen() {
     }
   }, [bulkSmsEligibleTasks.length]);
 
+  const logSmsActivity = useCallback((contactId: string, message: string, status: 'sent' | 'initiated') => {
+    const preview = message.length > 200 ? `${message.slice(0, 200)}…` : message;
+    addActivity({
+      contact_id: contactId,
+      type: 'sms',
+      content: `SMS ${status}: ${preview}`,
+    }).catch((e: unknown) => console.warn('SMS activity log failed:', e));
+  }, [addActivity]);
+
   const handleSendCurrentSms = useCallback(async () => {
     if (!currentBulkTask?.contact?.phone || isSendingRef.current) return;
     isSendingRef.current = true;
@@ -453,67 +489,45 @@ export default function TasksScreen() {
     const personalizedMessage = bulkSmsMessage.replace(/\{name\}/g, contactName);
 
     try {
-      const { result } = await SMS.sendSMSAsync([phone], personalizedMessage);
-
-      if (result === 'sent') {
-        if (currentBulkTask.contact.id) {
-          const preview = personalizedMessage.length > 200 ? `${personalizedMessage.slice(0, 200)}…` : personalizedMessage;
-          addActivity({
-            contact_id: currentBulkTask.contact.id,
-            type: 'sms',
-            content: `SMS sent: ${preview}`,
-          }).catch((e: unknown) => console.warn('SMS activity log failed:', e));
+      if (useDirectSend) {
+        const { success, error } = await CallerIdModule!.sendDirectSms(phone, personalizedMessage);
+        if (success) {
+          if (currentBulkTask.contact.id) logSmsActivity(currentBulkTask.contact.id, personalizedMessage, 'sent');
+          setBulkSmsSentCount(prev => prev + 1);
+          advanceBulkSmsTasks(bulkSmsCurrentIndex + 1);
+        } else {
+          Alert.alert('SMS Failed', error || 'Could not send SMS. Please try again.');
         }
-        setBulkSmsSentCount(prev => prev + 1);
-        advanceBulkSmsTasks(bulkSmsCurrentIndex + 1);
-      } else if (result === 'unknown') {
-        if (currentBulkTask.contact.id) {
-          const preview = personalizedMessage.length > 200 ? `${personalizedMessage.slice(0, 200)}…` : personalizedMessage;
-          addActivity({
-            contact_id: currentBulkTask.contact.id,
-            type: 'sms',
-            content: `SMS initiated: ${preview}`,
-          }).catch((e: unknown) => console.warn('SMS activity log failed:', e));
-        }
-        setBulkSmsSentCount(prev => prev + 1);
-        advanceBulkSmsTasks(bulkSmsCurrentIndex + 1);
       } else {
-        // result === 'cancelled'
-        const displayName = contactName !== 'there' ? contactName : 'this contact';
-        Alert.alert(
-          'SMS Interrupted',
-          `You cancelled your message to ${displayName}. What would you like to do?`,
-          [
-            {
-              text: `Skip ${displayName}`,
-              onPress: () => {
-                setBulkSmsSkippedCount(prev => prev + 1);
-                advanceBulkSmsTasks(bulkSmsCurrentIndex + 1);
-              },
-            },
-            {
-              text: `Retry ${displayName}`,
-              onPress: () => {
-                // Reset lock so user can tap Send again
-              },
-            },
-            {
-              text: 'Cancel Bulk SMS',
-              style: 'destructive',
-              onPress: () => {
-                setBulkSmsPhase('done');
-              },
-            },
-          ],
-        );
+        const { result } = await SMS.sendSMSAsync([phone], personalizedMessage);
+        if (result === 'sent') {
+          if (currentBulkTask.contact.id) logSmsActivity(currentBulkTask.contact.id, personalizedMessage, 'sent');
+          setBulkSmsSentCount(prev => prev + 1);
+          advanceBulkSmsTasks(bulkSmsCurrentIndex + 1);
+        } else if (result === 'unknown') {
+          if (currentBulkTask.contact.id) logSmsActivity(currentBulkTask.contact.id, personalizedMessage, 'initiated');
+          setBulkSmsSentCount(prev => prev + 1);
+          advanceBulkSmsTasks(bulkSmsCurrentIndex + 1);
+        } else {
+          const displayName = contactName !== 'there' ? contactName : 'this contact';
+          Alert.alert(
+            'SMS Interrupted',
+            `You cancelled your message to ${displayName}. What would you like to do?`,
+            [
+              { text: `Skip ${displayName}`, onPress: () => { setBulkSmsSkippedCount(prev => prev + 1); advanceBulkSmsTasks(bulkSmsCurrentIndex + 1); } },
+              { text: `Retry ${displayName}`, onPress: () => {} },
+              { text: 'Cancel Bulk SMS', style: 'destructive', onPress: () => { setBulkSmsPhase('done'); } },
+            ],
+          );
+        }
       }
     } catch {
-      Alert.alert('SMS Error', 'Could not open SMS composer. Please try again.');
+      Alert.alert('SMS Error', 'Could not send SMS. Please try again.');
     } finally {
       isSendingRef.current = false;
       setIsSendingCurrentSms(false);
     }
-  }, [currentBulkTask, bulkSmsMessage, bulkSmsCurrentIndex, advanceBulkSmsTasks, addActivity]);
+  }, [currentBulkTask, bulkSmsMessage, bulkSmsCurrentIndex, advanceBulkSmsTasks, logSmsActivity]);
 
   const handleSkipCurrentSms = useCallback(() => {
     setBulkSmsSkippedCount(prev => prev + 1);

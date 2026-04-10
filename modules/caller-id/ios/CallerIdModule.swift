@@ -30,6 +30,20 @@ public class CallerIdModule: Module {
       // iOS does not expose the call log to third-party apps.
       return []
     }
+
+    AsyncFunction("hasSmsPermission") { () -> Bool in
+      // iOS does not support direct SMS sending — always returns false.
+      return false
+    }
+
+    AsyncFunction("requestSmsPermission") { () -> Bool in
+      return false
+    }
+
+    AsyncFunction("sendDirectSms") { (_: String, _: String) -> [String: Any?] in
+      // iOS does not allow programmatic SMS sending.
+      return ["success": false, "error": "Direct SMS is not available on iOS. Use SMS.sendSMSAsync instead."]
+    }
   }
 
   // MARK: - Private Helpers

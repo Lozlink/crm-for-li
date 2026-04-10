@@ -56,6 +56,27 @@ interface CallerIdModuleInterface {
    * @param sinceTimestamp - Unix timestamp in milliseconds; only calls after this time are returned
    */
   getRecentCalls(sinceTimestamp: number): Promise<RecentCall[]>;
+
+  /**
+   * Check whether SEND_SMS permission is granted.
+   * On iOS, always returns false (direct SMS not supported).
+   */
+  hasSmsPermission(): Promise<boolean>;
+
+  /**
+   * Request SEND_SMS permission from the user.
+   * On iOS, always returns false.
+   */
+  requestSmsPermission(): Promise<boolean>;
+
+  /**
+   * Send an SMS directly without opening the native compose UI (Android only).
+   * Uses Android SmsManager.sendTextMessage for seamless in-app sending.
+   * On iOS, returns { success: false } — use expo-sms sendSMSAsync instead.
+   * @param phone - Phone number to send to
+   * @param message - Message body
+   */
+  sendDirectSms(phone: string, message: string): Promise<{ success: boolean; error: string | null }>;
 }
 
 export default requireNativeModule<CallerIdModuleInterface>('CallerId');

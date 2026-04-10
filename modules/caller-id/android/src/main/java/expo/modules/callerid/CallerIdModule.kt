@@ -1,9 +1,11 @@
 package expo.modules.callerid
 
 import android.Manifest
+import android.app.PendingIntent
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.CallLog
+import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
@@ -59,6 +61,46 @@ class CallerIdModule : Module() {
       }
 
       return@AsyncFunction queryRecentCalls(sinceTimestamp.toLong())
+    }
+
+    AsyncFunction("hasSmsPermission") {
+      return@AsyncFunction hasPermission(Manifest.permission.SEND_SMS)
+    }
+
+    AsyncFunction("requestSmsPermission") {
+      if (hasPermission(Manifest.permission.SEND_SMS)) {
+        return@AsyncFunction true
+      }
+
+      val activity = appContext.currentActivity
+        ?: throw MissingActivityException()
+
+      activity.requestPermissions(
+        arrayOf(Manifest.permission.SEND_SMS),
+        SMS_PERMISSION_REQUEST_CODE
+      )
+
+      return@AsyncFunction hasPermission(Manifest.permission.SEND_SMS)
+    }
+
+    AsyncFunction("sendDirectSms") { phone: String, message: String ->
+      if (!hasPermission(Manifest.permission.SEND_SMS)) {
+        return@AsyncFunction mapOf("success" to false, "error" to "SEND_SMS permission not granted")
+      }
+
+      try {
+        val smsManager = SmsManager.getDefault()
+        // Split long messages into parts
+        val parts = smsManager.divideMessage(message)
+        if (parts.size == 1) {
+          smsManager.sendTextMessage(phone, null, message, null, null)
+        } else {
+          smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
+        }
+        return@AsyncFunction mapOf("success" to true, "error" to null)
+      } catch (e: Exception) {
+        return@AsyncFunction mapOf("success" to false, "error" to (e.message ?: "Unknown error"))
+      }
     }
   }
 
@@ -147,6 +189,7 @@ class CallerIdModule : Module() {
 
   companion object {
     private const val PERMISSION_REQUEST_CODE = 1001
+    private const val SMS_PERMISSION_REQUEST_CODE = 1002
   }
 }
 

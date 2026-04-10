@@ -1,11 +1,19 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { StyleSheet, View, FlatList, ScrollView, Alert, Linking, Pressable } from 'react-native';
+import { StyleSheet, View, FlatList, ScrollView, Alert, Linking, Platform, Pressable } from 'react-native';
 import {
   Searchbar, FAB, useTheme, Text, ActivityIndicator, Button,
   IconButton, Portal, Dialog, Chip, TextInput, Switch, Checkbox, Modal, Surface,
 } from 'react-native-paper';
 import * as SMS from 'expo-sms';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
+// Lazy-import CallerID native module (not available in Expo Go)
+let CallerIdModule: {
+  hasSmsPermission(): Promise<boolean>;
+  requestSmsPermission(): Promise<boolean>;
+  sendDirectSms(phone: string, message: string): Promise<{ success: boolean; error: string | null }>;
+} | null = null;
+try { CallerIdModule = require('caller-id').default; } catch { /* Expo Go / web */ }
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -336,17 +344,31 @@ export default function ContactsScreen() {
   // Auto-send ref: triggers sendSMSAsync automatically when index advances
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const useDirectSend = Platform.OS === 'android' && CallerIdModule != null;
+
   const handleStartBulkSmsSend = useCallback(async () => {
-    const available = await SMS.isAvailableAsync();
-    if (!available) {
-      Alert.alert('SMS Not Available', 'SMS is not supported on this device.');
-      return;
+    if (useDirectSend) {
+      // Request SEND_SMS permission for direct sending on Android
+      const hasPermission = await CallerIdModule!.hasSmsPermission();
+      if (!hasPermission) {
+        const granted = await CallerIdModule!.requestSmsPermission();
+        if (!granted) {
+          Alert.alert('SMS Permission Required', 'Please grant SMS permission to send messages directly from the app.');
+          return;
+        }
+      }
+    } else {
+      const available = await SMS.isAvailableAsync();
+      if (!available) {
+        Alert.alert('SMS Not Available', 'SMS is not supported on this device.');
+        return;
+      }
     }
     setBulkSmsPhase('sending');
     setBulkSmsCurrentIndex(0);
     setBulkSmsSentCount(0);
     setBulkSmsSkippedCount(0);
-  }, []);
+  }, [useDirectSend]);
 
   const currentBulkContact = bulkSmsEligibleContacts[bulkSmsCurrentIndex] as Contact | undefined;
 
@@ -358,6 +380,15 @@ export default function ContactsScreen() {
     }
   }, [bulkSmsEligibleContacts.length]);
 
+  const logSmsActivity = useCallback((contactId: string, message: string, status: 'sent' | 'initiated') => {
+    const preview = message.length > 200 ? `${message.slice(0, 200)}…` : message;
+    addActivity({
+      contact_id: contactId,
+      type: 'sms',
+      content: `SMS ${status}: ${preview}`,
+    }).catch((e: unknown) => console.warn('SMS activity log failed:', e));
+  }, [addActivity]);
+
   const handleSendCurrentContactSms = useCallback(async () => {
     if (!currentBulkContact?.phone || isSendingRef.current) return;
     isSendingRef.current = true;
@@ -368,68 +399,47 @@ export default function ContactsScreen() {
     const personalizedMessage = bulkSmsMessage.replace(/\{name\}/g, contactName);
 
     try {
-      const { result } = await SMS.sendSMSAsync([phone], personalizedMessage);
-
-      if (result === 'sent') {
-        if (currentBulkContact.id) {
-          const preview = personalizedMessage.length > 200 ? `${personalizedMessage.slice(0, 200)}…` : personalizedMessage;
-          addActivity({
-            contact_id: currentBulkContact.id,
-            type: 'sms',
-            content: `SMS sent: ${preview}`,
-          }).catch((e: unknown) => console.warn('SMS activity log failed:', e));
+      if (useDirectSend) {
+        // Direct send on Android — no app switching
+        const { success, error } = await CallerIdModule!.sendDirectSms(phone, personalizedMessage);
+        if (success) {
+          if (currentBulkContact.id) logSmsActivity(currentBulkContact.id, personalizedMessage, 'sent');
+          setBulkSmsSentCount(prev => prev + 1);
+          advanceBulkSms(bulkSmsCurrentIndex + 1);
+        } else {
+          Alert.alert('SMS Failed', error || 'Could not send SMS. Please try again.');
         }
-        setBulkSmsSentCount(prev => prev + 1);
-        advanceBulkSms(bulkSmsCurrentIndex + 1);
-      } else if (result === 'unknown') {
-        // Android sometimes returns unknown — log as initiated, advance
-        if (currentBulkContact.id) {
-          const preview = personalizedMessage.length > 200 ? `${personalizedMessage.slice(0, 200)}…` : personalizedMessage;
-          addActivity({
-            contact_id: currentBulkContact.id,
-            type: 'sms',
-            content: `SMS initiated: ${preview}`,
-          }).catch((e: unknown) => console.warn('SMS activity log failed:', e));
-        }
-        setBulkSmsSentCount(prev => prev + 1);
-        advanceBulkSms(bulkSmsCurrentIndex + 1);
       } else {
-        // result === 'cancelled' — show SMS Interrupted dialog
-        const displayName = contactName || 'this contact';
-        Alert.alert(
-          'SMS Interrupted',
-          `You cancelled your message to ${displayName}. What would you like to do?`,
-          [
-            {
-              text: `Skip ${displayName}`,
-              onPress: () => {
-                setBulkSmsSkippedCount(prev => prev + 1);
-                advanceBulkSms(bulkSmsCurrentIndex + 1);
-              },
-            },
-            {
-              text: `Retry ${displayName}`,
-              onPress: () => {
-                // isSendingRef already reset below — user can tap Send again
-              },
-            },
-            {
-              text: 'Cancel Bulk SMS',
-              style: 'destructive',
-              onPress: () => {
-                setBulkSmsPhase('done');
-              },
-            },
-          ],
-        );
+        // iOS — use expo-sms modal overlay
+        const { result } = await SMS.sendSMSAsync([phone], personalizedMessage);
+        if (result === 'sent') {
+          if (currentBulkContact.id) logSmsActivity(currentBulkContact.id, personalizedMessage, 'sent');
+          setBulkSmsSentCount(prev => prev + 1);
+          advanceBulkSms(bulkSmsCurrentIndex + 1);
+        } else if (result === 'unknown') {
+          if (currentBulkContact.id) logSmsActivity(currentBulkContact.id, personalizedMessage, 'initiated');
+          setBulkSmsSentCount(prev => prev + 1);
+          advanceBulkSms(bulkSmsCurrentIndex + 1);
+        } else {
+          const displayName = contactName || 'this contact';
+          Alert.alert(
+            'SMS Interrupted',
+            `You cancelled your message to ${displayName}. What would you like to do?`,
+            [
+              { text: `Skip ${displayName}`, onPress: () => { setBulkSmsSkippedCount(prev => prev + 1); advanceBulkSms(bulkSmsCurrentIndex + 1); } },
+              { text: `Retry ${displayName}`, onPress: () => {} },
+              { text: 'Cancel Bulk SMS', style: 'destructive', onPress: () => { setBulkSmsPhase('done'); } },
+            ],
+          );
+        }
       }
     } catch {
-      Alert.alert('SMS Error', 'Could not open SMS composer. Please try again.');
+      Alert.alert('SMS Error', 'Could not send SMS. Please try again.');
     } finally {
       isSendingRef.current = false;
       setIsSendingCurrentSms(false);
     }
-  }, [currentBulkContact, bulkSmsMessage, bulkSmsCurrentIndex, advanceBulkSms, addActivity]);
+  }, [currentBulkContact, bulkSmsMessage, bulkSmsCurrentIndex, advanceBulkSms, logSmsActivity]);
 
   const handleSkipCurrentContactSms = useCallback(() => {
     setBulkSmsSkippedCount(prev => prev + 1);

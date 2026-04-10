@@ -383,6 +383,7 @@ function withCallerIdAndroidManifest(config) {
       "android.permission.READ_PHONE_STATE",
       "android.permission.READ_CALL_LOG",
       "android.permission.POST_NOTIFICATIONS",
+      "android.permission.SEND_SMS",
     ];
 
     if (!manifest.manifest["uses-permission"]) {
