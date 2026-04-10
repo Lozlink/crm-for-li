@@ -1,35 +1,45 @@
 
-> mobile@1.0.0 build /Users/markmekhayl/WebstormProjects/crm-for-li/apps/mobile
+> mobile@1.0.0 build /Volumes/Untitled/WebstormProjects/crm-for-li/apps/mobile
 > dotenvx run --env-file=.env -- expo export --platform ios --platform android
 
-[38;5;142m[dotenvx@1.52.0] injecting env (4) from .env[39m
+[38;5;136m⟐ injected env (4) from .env · dotenvx@1.61.0[39m
 Starting Metro Bundler
-Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.2% (1687/1720)
-iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1755/1755)
-Android Bundled 3542ms apps/mobile/index.ts (1720 modules)
-iOS Bundled 5429ms apps/mobile/index.ts (1755 modules)
+iOS apps/mobile/index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android apps/mobile/index.ts ░░░░░░░░░░░░░░░░  0.0% (0/1)
+iOS apps/mobile/index.ts ▓▓░░░░░░░░░░░░░░ 14.8% ( 21/150)
+Android apps/mobile/index.ts ▓▓░░░░░░░░░░░░░░ 16.0% ( 75/268)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓░░░░░░░░░░ 38.2% (397/642)
+Android apps/mobile/index.ts ▓▓▓▓▓░░░░░░░░░░░ 36.0% (379/632)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 74.9% ( 970/1121)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓░░░░░░ 68.5% ( 883/1120)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 92.6% (1510/1600)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 92.1% (1514/1578)
+iOS apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 98.2% (1733/1749)
+Android apps/mobile/index.ts ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (1754/1754)
+iOS Bundled 17939ms apps/mobile/index.ts (1749 modules)
+Android Bundled 19924ms apps/mobile/index.ts (1754 modules)
 
 › Assets (33):
-../../node_modules/.pnpm/@expo+vector-icons@15.0.3_expo-font@14.0.11_expo@54.0.33_react-native@0.81.5_@babel+cor_dffeba5e71c136362da807d9acd294ec/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf (1.31 MB)
-../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/back-icon-mask.png (653 B)
-../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/back-icon.png (8 variations | 359 B)
-../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/clear-icon.png (4 variations | 425 B)
-../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/close-icon.png (4 variations | 235 B)
-../../node_modules/.pnpm/@react-navigation+elements@2.9.5_@react-navigation+native@7.1.28_react-native@0.81.5_@b_35b3e1ad2c77ffceaa02fa09a2e9b901/node_modules/@react-navigation/elements/lib/module/assets/search-icon.png (7 variations | 592 B)
-../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/arrow_down.png (9.46 kB)
-../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/error.png (469 B)
-../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/file.png (138 B)
-../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/forward.png (188 B)
-../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/pkg.png (364 B)
-../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/sitemap.png (465 B)
-../../node_modules/.pnpm/expo-router@6.0.23_8522392b4fbca8339af028941fb956d1/node_modules/expo-router/assets/unmatched.png (4.75 kB)
+../../node_modules/.pnpm/@expo+vector-icons@15.1.1_expo-font@14.0.11_expo@54.0.33_react-native@0.81.5_@babel+cor_578ada966b57244f0fb5b55de8754f09/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf (1.31 MB)
+../../node_modules/.pnpm/@react-navigation+elements@2.9.14_@react-navigation+native@7.2.2_react-native@0.81.5_@b_3894088b0be9e53b4bb1977a6131bbf0/node_modules/@react-navigation/elements/lib/module/assets/back-icon-mask.png (653 B)
+../../node_modules/.pnpm/@react-navigation+elements@2.9.14_@react-navigation+native@7.2.2_react-native@0.81.5_@b_3894088b0be9e53b4bb1977a6131bbf0/node_modules/@react-navigation/elements/lib/module/assets/back-icon.png (8 variations | 359 B)
+../../node_modules/.pnpm/@react-navigation+elements@2.9.14_@react-navigation+native@7.2.2_react-native@0.81.5_@b_3894088b0be9e53b4bb1977a6131bbf0/node_modules/@react-navigation/elements/lib/module/assets/clear-icon.png (4 variations | 425 B)
+../../node_modules/.pnpm/@react-navigation+elements@2.9.14_@react-navigation+native@7.2.2_react-native@0.81.5_@b_3894088b0be9e53b4bb1977a6131bbf0/node_modules/@react-navigation/elements/lib/module/assets/close-icon.png (4 variations | 235 B)
+../../node_modules/.pnpm/@react-navigation+elements@2.9.14_@react-navigation+native@7.2.2_react-native@0.81.5_@b_3894088b0be9e53b4bb1977a6131bbf0/node_modules/@react-navigation/elements/lib/module/assets/search-icon.png (7 variations | 592 B)
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react-dom@19.2.3_@types+react@19.1._09997682c55368699a9f1578e9ef87ee/node_modules/expo-router/assets/arrow_down.png (9.46 kB)
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react-dom@19.2.3_@types+react@19.1._09997682c55368699a9f1578e9ef87ee/node_modules/expo-router/assets/error.png (469 B)
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react-dom@19.2.3_@types+react@19.1._09997682c55368699a9f1578e9ef87ee/node_modules/expo-router/assets/file.png (138 B)
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react-dom@19.2.3_@types+react@19.1._09997682c55368699a9f1578e9ef87ee/node_modules/expo-router/assets/forward.png (188 B)
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react-dom@19.2.3_@types+react@19.1._09997682c55368699a9f1578e9ef87ee/node_modules/expo-router/assets/pkg.png (364 B)
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react-dom@19.2.3_@types+react@19.1._09997682c55368699a9f1578e9ef87ee/node_modules/expo-router/assets/sitemap.png (465 B)
+../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react-dom@19.2.3_@types+react@19.1._09997682c55368699a9f1578e9ef87ee/node_modules/expo-router/assets/unmatched.png (4.75 kB)
 ../../node_modules/.pnpm/react-native-paper@5.15.0_react-native-safe-area-context@5.6.2_react-native@0.81.5_@bab_41d9b5c0467b7e446469252509ed76ee/node_modules/react-native-paper/src/assets/back-chevron.png (489 B)
 
-› android bundles (1):
-_expo/static/js/android/index-067413ce96d411db4d19ca76792db824.hbc (6.03 MB)
-
 › ios bundles (1):
-_expo/static/js/ios/index-dcbdab88c1bf95653e69707cbc5f165a.hbc (6.04 MB)
+_expo/static/js/ios/index-07534083c340e593d7917d874c7c91fd.hbc (6.1 MB)
+
+› android bundles (1):
+_expo/static/js/android/index-2e4d41721752b0e7259268192118fade.hbc (6.09 MB)
 
 › Files (1):
 metadata.json (3.71 kB)

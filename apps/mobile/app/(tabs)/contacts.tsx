@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { StyleSheet, View, FlatList, ScrollView, Alert, Linking, Pressable } from 'react-native';
 import {
   Searchbar, FAB, useTheme, Text, ActivityIndicator, Button,
@@ -333,6 +333,9 @@ export default function ContactsScreen() {
     setBulkSmsModalVisible(true);
   }, [bulkSmsEligibleContacts]);
 
+  // Auto-send ref: triggers sendSMSAsync automatically when index advances
+  const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleStartBulkSmsSend = useCallback(async () => {
     const available = await SMS.isAvailableAsync();
     if (!available) {
@@ -436,6 +439,18 @@ export default function ContactsScreen() {
   const handleStopBulkSmsSend = useCallback(() => {
     setBulkSmsPhase('done');
   }, []);
+
+  // Auto-advance: when phase is 'sending' and index changes, auto-trigger next SMS after a brief delay
+  useEffect(() => {
+    if (bulkSmsPhase !== 'sending' || !currentBulkContact?.phone || isSendingRef.current) return;
+    if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current);
+    autoSendTimerRef.current = setTimeout(() => {
+      handleSendCurrentContactSms();
+    }, 800);
+    return () => {
+      if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current);
+    };
+  }, [bulkSmsPhase, bulkSmsCurrentIndex, currentBulkContact, handleSendCurrentContactSms]);
 
   const handleCloseBulkSms = useCallback(() => {
     setBulkSmsModalVisible(false);
@@ -1078,13 +1093,13 @@ export default function ContactsScreen() {
               <View style={styles.sendActionRow}>
                 <Button
                   mode="contained"
-                  icon="message-text"
+                  icon={isSendingCurrentSms ? undefined : 'message-text'}
                   onPress={handleSendCurrentContactSms}
                   loading={isSendingCurrentSms}
                   disabled={isSendingCurrentSms}
                   style={{ flex: 1 }}
                 >
-                  {isSendingCurrentSms ? 'Opening SMS...' : `Send to ${getContactDisplayName(currentBulkContact).split(' ')[0]}`}
+                  {isSendingCurrentSms ? 'Opening SMS...' : `Opening SMS for ${getContactDisplayName(currentBulkContact).split(' ')[0]}...`}
                 </Button>
               </View>
             )}

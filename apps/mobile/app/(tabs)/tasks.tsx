@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, View, FlatList, ScrollView, Linking, Pressable } from 'react-native';
 import {
   FAB,
@@ -418,6 +418,9 @@ export default function TasksScreen() {
     setBulkSmsModalVisible(true);
   }, [bulkSmsEligibleTasks]);
 
+  // Auto-send ref: triggers sendSMSAsync automatically when index advances
+  const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleStartBulkSend = useCallback(async () => {
     const available = await SMS.isAvailableAsync();
     if (!available) {
@@ -520,6 +523,18 @@ export default function TasksScreen() {
   const handleStopBulkSend = useCallback(() => {
     setBulkSmsPhase('done');
   }, []);
+
+  // Auto-advance: when phase is 'sending' and index changes, auto-trigger next SMS after a brief delay
+  useEffect(() => {
+    if (bulkSmsPhase !== 'sending' || !currentBulkTask?.contact?.phone || isSendingRef.current) return;
+    if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current);
+    autoSendTimerRef.current = setTimeout(() => {
+      handleSendCurrentSms();
+    }, 800);
+    return () => {
+      if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current);
+    };
+  }, [bulkSmsPhase, bulkSmsCurrentIndex, currentBulkTask, handleSendCurrentSms]);
 
   const handleCloseBulkSms = useCallback(() => {
     setBulkSmsModalVisible(false);
@@ -1180,7 +1195,7 @@ export default function TasksScreen() {
                 >
                   {isSendingCurrentSms
                     ? 'Opening SMS...'
-                    : `Send to ${(getContactDisplayName(currentBulkTask.contact) || 'Unknown').split(' ')[0]}`}
+                    : `Opening SMS for ${(getContactDisplayName(currentBulkTask.contact) || 'Unknown').split(' ')[0]}...`}
                 </Button>
               </View>
             )}
