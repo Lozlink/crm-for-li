@@ -46,8 +46,8 @@ export default {
       permissions: [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.READ_CONTACTS",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.SEND_SMS",
         "android.permission.CALL_PHONE",
         "android.permission.FOREGROUND_SERVICE",
@@ -72,7 +72,6 @@ export default {
           contactsPermission: "Allow $(PRODUCT_NAME) to access your contacts."
         }
       ],
-      "expo-sms",
       "../../modules/caller-id/app.plugin.js"
     ],
 

@@ -8,16 +8,22 @@
     "android": "dotenvx run --env-file=.env -- expo run:android",
     "ios": "dotenvx run --env-file=.env -- expo run:ios",
     "build": "dotenvx run --env-file=.env -- expo export --platform ios --platform android",
-    "build:dev": "eas build --profile development --platform all",
-    "build:preview": "eas build --profile preview --platform all",
-    "build:production": "eas build --profile production --platform all",
-    "build:ios": "eas build --profile production --platform ios",
-    "build:android": "eas build --profile production --platform android",
+    "build:dev": "NODE_OPTIONS=--no-experimental-strip-types eas build --profile development --platform all",
+    "build:preview": "NODE_OPTIONS=--no-experimental-strip-types eas build --profile preview --platform all",
+    "build:production": "NODE_OPTIONS=--no-experimental-strip-types eas build --profile production --platform all",
+    "build:ios": "NODE_OPTIONS=--no-experimental-strip-types eas build --profile production --platform ios",
+    "build:android": "NODE_OPTIONS=--no-experimental-strip-types eas build --profile production --platform android",
     "type-check": "tsc --noEmit",
     "eas-build-pre-install": "corepack enable"
   },
+  "expo": {
+    "autolinking": {
+      "nativeModulesDir": "../../modules"
+    }
+  },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
+    "caller-id": "workspace:../../modules/caller-id",
     "@realestate-crm/api": "workspace:*",
     "@realestate-crm/config": "workspace:*",
     "@realestate-crm/hooks": "workspace:*",

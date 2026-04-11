@@ -1,0 +1,15 @@
+{
+  "name": "caller-id",
+  "version": "1.0.0",
+  "description": "Native CallerID and SMS module for the Real Estate CRM app",
+  "main": "src/index.ts",
+  "source": "src/index.ts",
+  "private": true,
+  "files": [
+    "src",
+    "android",
+    "ios",
+    "app.plugin.js",
+    "expo-module.config.json"
+  ]
+}

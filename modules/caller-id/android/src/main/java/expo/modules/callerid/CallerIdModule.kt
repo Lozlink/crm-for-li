@@ -1,7 +1,6 @@
 package expo.modules.callerid
 
 import android.Manifest
-import android.app.PendingIntent
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.CallLog
@@ -89,7 +88,13 @@ class CallerIdModule : Module() {
       }
 
       try {
-        val smsManager = SmsManager.getDefault()
+        val smsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+          context.getSystemService(android.telephony.SmsManager::class.java)
+            ?: return@AsyncFunction mapOf("success" to false, "error" to "SmsManager service unavailable")
+        } else {
+          @Suppress("DEPRECATION")
+          SmsManager.getDefault()
+        }
         // Split long messages into parts
         val parts = smsManager.divideMessage(message)
         if (parts.size == 1) {

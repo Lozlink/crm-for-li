@@ -2,14 +2,14 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { useCRMStore } from './useCRMStore';
 import type { CallOutcome, Contact } from '@realestate-crm/types';
-import type { RecentCall } from '../../../modules/caller-id/src/CallerIdModule';
+import type { RecentCall } from 'caller-id/src/CallerIdModule';
 import { generateCallDedupKey, hasRecentCallActivity } from '@realestate-crm/utils';
 
 // Lazy-import CallerIdModule to avoid crash when native module is not available
 // (e.g. running in web or Expo Go where native modules aren't linked)
 let CallerIdModule: ReturnType<typeof require> = null;
 try {
-  CallerIdModule = require('../../../modules/caller-id/src').default;
+  CallerIdModule = require('caller-id').default;
 } catch {}
 
 /**

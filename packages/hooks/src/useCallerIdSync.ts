@@ -5,7 +5,7 @@ import { useCRMStore } from './useCRMStore';
 // (e.g. running in web or Expo Go where native modules aren't linked)
 let CallerIdModule: any = null;
 try {
-  CallerIdModule = require('../../../modules/caller-id/src').default;
+  CallerIdModule = require('caller-id').default;
 } catch {}
 
 /**
