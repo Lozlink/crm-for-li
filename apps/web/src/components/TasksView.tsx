@@ -407,10 +407,10 @@ function generateTaskMessage(type: TaskType, name: string, context?: { property?
   }
 }
 
-function getTaskContactName(task: Task): string {
+function getTaskContactFirstName(task: Task): string {
   const c = Array.isArray(task.contact) ? task.contact[0] : task.contact;
   if (!c) return 'there';
-  return [c.first_name, c.last_name].filter(Boolean).join(' ') || 'there';
+  return c.first_name || 'there';
 }
 
 function getTaskProperty(task: Task): string | undefined {
@@ -466,12 +466,12 @@ function BulkSmsModal({
   const [error, setError] = useState('');
 
   // Compose phase: preview against first contact
-  const previewName = getTaskContactName(tasksWithPhone[0] ?? tasks[0] ?? ({} as Task));
+  const previewName = getTaskContactFirstName(tasksWithPhone[0] ?? tasks[0] ?? ({} as Task));
   const composePreview = template.replace(/\{\{first_name\}\}/g, previewName);
 
   // Sending phase: current task
   const currentTask = tasksWithPhone[currentIndex];
-  const currentName = currentTask ? getTaskContactName(currentTask) : '';
+  const currentName = currentTask ? getTaskContactFirstName(currentTask) : '';
   const currentPhone = currentTask ? getTaskContactPhone(currentTask) : '';
   const currentMessage = currentTask
     ? template.replace(/\{\{first_name\}\}/g, currentName)
@@ -607,7 +607,7 @@ function BulkSmsModal({
                 <div className="max-h-32 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-2 space-y-1">
                   {tasksWithPhone.map((t) => (
                     <div key={t.id} className="flex items-center justify-between text-xs text-gray-600">
-                      <span className="font-medium">{getTaskContactName(t)}</span>
+                      <span className="font-medium">{getTaskContactFirstName(t)}</span>
                       <span className="text-gray-400">{getTaskContactPhone(t)}</span>
                     </div>
                   ))}
@@ -689,7 +689,7 @@ function BulkSmsModal({
               {currentIndex + 1 < tasksWithPhone.length && (
                 <p className="text-xs text-gray-400">
                   Up next: <span className="font-medium text-gray-600">
-                    {getTaskContactName(tasksWithPhone[currentIndex + 1])}
+                    {getTaskContactFirstName(tasksWithPhone[currentIndex + 1])}
                   </span>
                   {currentIndex + 2 < tasksWithPhone.length && (
                     <> and {tasksWithPhone.length - currentIndex - 2} more</>

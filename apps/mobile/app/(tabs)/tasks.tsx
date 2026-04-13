@@ -95,6 +95,11 @@ function getContactDisplayName(contact: Task['contact']): string | null {
   return parts.length > 0 ? parts.join(' ') : null;
 }
 
+function getContactFirstName(contact: Task['contact']): string {
+  if (!contact) return 'there';
+  return contact.first_name || 'there';
+}
+
 function generateTaskMessage(type: TaskType, name: string, context?: { property?: string; date?: string; title?: string }): string {
   switch (type) {
     case 'follow_up':
@@ -486,8 +491,9 @@ export default function TasksScreen() {
     setIsSendingCurrentSms(true);
 
     const phone = sanitizePhone(currentBulkTask.contact.phone);
+    const contactFirstName = getContactFirstName(currentBulkTask.contact);
     const contactName = getContactDisplayName(currentBulkTask.contact) || 'there';
-    const personalizedMessage = bulkSmsMessage.replace(/\{name\}/g, contactName);
+    const personalizedMessage = bulkSmsMessage.replace(/\{name\}/g, contactFirstName);
 
     try {
       if (useDirectSend) {
@@ -1161,7 +1167,7 @@ export default function TasksScreen() {
             {/* ── Message template editor ── */}
             <View style={styles.messageSection}>
               <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 6 }}>
-                Message (use {'{name}'} for personalized name)
+                Message (use {'{name}'} for first name)
               </Text>
               <TextInput
                 value={bulkSmsMessage}
@@ -1174,7 +1180,7 @@ export default function TasksScreen() {
               />
               {bulkSmsPhase === 'compose' && bulkSmsMessage.includes('{name}') && bulkSmsEligibleTasks[0]?.contact && (
                 <Text variant="bodySmall" style={{ color: theme.colors.primary, marginTop: 4 }}>
-                  Preview: {bulkSmsMessage.replace(/\{name\}/g, getContactDisplayName(bulkSmsEligibleTasks[0].contact) || 'there')}
+                  Preview: {bulkSmsMessage.replace(/\{name\}/g, getContactFirstName(bulkSmsEligibleTasks[0].contact))}
                 </Text>
               )}
             </View>

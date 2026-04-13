@@ -113,6 +113,10 @@ function getContactDisplayName(contact: Contact): string {
   return parts.length > 0 ? parts.join(' ') : 'there';
 }
 
+function getContactFirstName(contact: Contact): string {
+  return contact.first_name || 'there';
+}
+
 function sanitizePhone(phone: string): string {
   return phone.replace(/[^\d+]/g, '');
 }
@@ -396,8 +400,8 @@ export default function ContactsScreen() {
     setIsSendingCurrentSms(true);
 
     const phone = sanitizePhone(currentBulkContact.phone);
-    const contactName = getContactDisplayName(currentBulkContact);
-    const personalizedMessage = bulkSmsMessage.replace(/\{name\}/g, contactName);
+    const contactFirstName = getContactFirstName(currentBulkContact);
+    const personalizedMessage = bulkSmsMessage.replace(/\{name\}/g, contactFirstName);
 
     try {
       if (useDirectSend) {
@@ -422,7 +426,7 @@ export default function ContactsScreen() {
           setBulkSmsSentCount(prev => prev + 1);
           advanceBulkSms(bulkSmsCurrentIndex + 1);
         } else {
-          const displayName = contactName || 'this contact';
+          const displayName = getContactDisplayName(currentBulkContact);
           Alert.alert(
             'SMS Interrupted',
             `You cancelled your message to ${displayName}. What would you like to do?`,
@@ -1061,7 +1065,7 @@ export default function ContactsScreen() {
             {/* ── Message template editor ── */}
             <View style={styles.messageSection}>
               <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 6 }}>
-                Message (use {'{name}'} for personalized name)
+                Message (use {'{name}'} for first name)
               </Text>
               <TextInput
                 value={bulkSmsMessage}
@@ -1075,7 +1079,7 @@ export default function ContactsScreen() {
               {bulkSmsPhase === 'compose' && bulkSmsMessage.includes('{name}') && (
                 <Text variant="bodySmall" style={{ color: theme.colors.primary, marginTop: 4 }}>
                   Preview: {bulkSmsMessage.replace(/\{name\}/g, bulkSmsEligibleContacts[0]
-                    ? getContactDisplayName(bulkSmsEligibleContacts[0])
+                    ? getContactFirstName(bulkSmsEligibleContacts[0])
                     : 'there')}
                 </Text>
               )}

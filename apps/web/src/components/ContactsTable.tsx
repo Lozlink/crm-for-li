@@ -607,7 +607,17 @@ export default function ContactsTable() {
 
           {/* Source filter */}
           <div className="mt-4">
-            <label className="mb-1.5 block text-xs font-medium text-gray-500">Source</label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="block text-xs font-medium text-gray-500">Source</label>
+              {advanced.sources.length > 0 && (
+                <button
+                  onClick={() => setAdvanced((p) => ({ ...p, sources: [] }))}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
             <div className="flex flex-wrap gap-2">
               {SOURCE_VALUES.map((src) => (
                 <label key={src} className="flex items-center gap-1.5 text-sm text-gray-700">
@@ -625,7 +635,17 @@ export default function ContactsTable() {
 
           {/* Contact type filter */}
           <div className="mt-4">
-            <label className="mb-1.5 block text-xs font-medium text-gray-500">Contact Type</label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="block text-xs font-medium text-gray-500">Contact Type</label>
+              {advanced.contactTypes.length > 0 && (
+                <button
+                  onClick={() => setAdvanced((p) => ({ ...p, contactTypes: [] }))}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
             <div className="flex flex-wrap gap-2">
               {TYPE_VALUES.map((type) => (
                 <label key={type} className="flex items-center gap-1.5 text-sm text-gray-700">
