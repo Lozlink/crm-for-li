@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { StyleSheet, View, FlatList, ScrollView, Alert, Linking, Platform, Pressable } from 'react-native';
+import { StyleSheet, View, FlatList, ScrollView, Alert, Linking, Platform, Pressable, useWindowDimensions } from 'react-native';
 import {
   Searchbar, FAB, useTheme, Text, ActivityIndicator, Button,
   IconButton, Portal, Dialog, Chip, TextInput, Switch, Checkbox, Modal, Surface,
@@ -151,6 +151,7 @@ export default function ContactsScreen() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
 
   const allContacts = useCRMStore(state => state.contacts);
   const tags = useCRMStore(state => state.tags);
@@ -940,7 +941,7 @@ export default function ContactsScreen() {
           onDismiss={bulkSmsPhase !== 'sending' ? handleCloseBulkSms : undefined}
           contentContainerStyle={[
             styles.bulkSmsModal,
-            { backgroundColor: theme.colors.surface },
+            { backgroundColor: theme.colors.surface, height: windowHeight - 48 },
           ]}
         >
           {/* ── Header ── */}
@@ -1233,8 +1234,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     overflow: 'hidden',
-    maxHeight: '92%',
-    flex: 1,
   },
   broadcastHeader: {
     flexDirection: 'row',

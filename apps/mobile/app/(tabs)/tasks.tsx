@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, View, FlatList, ScrollView, Linking, Platform, Pressable } from 'react-native';
+import { Alert, StyleSheet, View, FlatList, ScrollView, Linking, Platform, Pressable, useWindowDimensions } from 'react-native';
 import {
   FAB,
   useTheme,
@@ -205,6 +205,7 @@ function handleTaskCall(task: Task) {
 export default function TasksScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
 
   const tasks = useTaskStore(state => state.tasks);
   const isLoading = useTaskStore(state => state.isLoading);
@@ -1032,7 +1033,7 @@ export default function TasksScreen() {
           onDismiss={bulkSmsPhase !== 'sending' ? handleCloseBulkSms : undefined}
           contentContainerStyle={[
             styles.bulkSmsModal,
-            { backgroundColor: theme.colors.surface },
+            { backgroundColor: theme.colors.surface, height: windowHeight - 48 },
           ]}
         >
           {/* ── Header ── */}
@@ -1357,8 +1358,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     overflow: 'hidden',
-    maxHeight: '92%',
-    flex: 1,
   },
   broadcastHeader: {
     flexDirection: 'row',
