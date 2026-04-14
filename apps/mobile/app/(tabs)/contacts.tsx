@@ -731,6 +731,9 @@ export default function ContactsScreen() {
           <Button compact onPress={handleBulkDelete} textColor={theme.colors.error}>
             Delete
           </Button>
+          <Button compact onPress={() => setSelectedIds(new Set())} textColor={theme.colors.onPrimaryContainer}>
+            Clear
+          </Button>
           <Button compact onPress={exitSelectMode} textColor={theme.colors.onPrimaryContainer}>
             Cancel
           </Button>

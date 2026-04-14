@@ -62,3 +62,5 @@ yarn-error.*
 # Data imports (raw CSVs)
 /data/
 /schemadump.sql
+/CLAUDE.md
+/.CLAUDE.md.swp

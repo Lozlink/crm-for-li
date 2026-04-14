@@ -820,8 +820,11 @@ export default function TasksScreen() {
               Bulk SMS
             </Button>
           )}
-          <Button compact onPress={exitSelectMode} textColor={theme.colors.onPrimaryContainer}>
+          <Button compact onPress={() => setSelectedTaskIds(new Set())} textColor={theme.colors.onPrimaryContainer}>
             Clear
+          </Button>
+          <Button compact onPress={exitSelectMode} textColor={theme.colors.onPrimaryContainer}>
+            Cancel
           </Button>
         </View>
       )}

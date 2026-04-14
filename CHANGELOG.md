@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased] - 2026-04-14
+
+### Changed
+
+- **Bulk SMS uses first name only** — SMS personalization (`{name}` on mobile, `{{first_name}}` on web) now resolves to `first_name` instead of full name, for more natural casual messaging ("Hi John" instead of "Hi John Smith"). Label updated from "personalized name" to "first name".
+- **"Clear Selected" on all multi-select screens** — Web TasksView now has a "Clear Selected" button when tasks are checked. Mobile contacts adds a "Clear" button (deselects all, stays in select mode) alongside "Cancel" (exits mode). Mobile tasks splits the old "Clear" into "Clear" (deselect) + "Cancel" (exit mode). Web ContactsTable already had this.
+
+---
+
 ## [Unreleased] - 2026-04-03
 
 ### Added
