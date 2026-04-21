@@ -1062,15 +1062,16 @@ export default function MapScreen() {
           </Dialog.Content>
           <Dialog.Actions style={styles.dialogActions}>
             <Button onPress={dismissLongPressDialog}>Cancel</Button>
-            {multiDwellingEnabled ? (
+            {multiDwellingEnabled && (
               <Button icon="office-building" mode="contained" onPress={handleMultiDwellingCreate}>
                 Create {Math.min(parseInt(multiDwellingCount, 10) || 0, 100)} Units
               </Button>
-            ) : (
-              <>
-                <Button icon="note-plus" onPress={() => handleLongPressAction(true)}>Quick Note</Button>
-                <Button icon="account-plus" mode="contained" onPress={() => handleLongPressAction(false)}>Contact</Button>
-              </>
+            )}
+            {!multiDwellingEnabled && (
+              <Button icon="note-plus" onPress={() => handleLongPressAction(true)}>Quick Note</Button>
+            )}
+            {!multiDwellingEnabled && (
+              <Button icon="account-plus" mode="contained" onPress={() => handleLongPressAction(false)}>Contact</Button>
             )}
           </Dialog.Actions>
         </Dialog>
