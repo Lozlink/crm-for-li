@@ -4,7 +4,9 @@ import { useCRMStore } from './useCRMStore';
 import { usePropertyStore } from './usePropertyStore';
 import { useInspectionStore } from './useInspectionStore';
 import { useAuthStore } from './useAuthStore';
-import type { Contact, Property, TrackingSession, TrackingAnnotation, Inspection, ActivityWithContact } from '@realestate-crm/types';
+import { useDeclaredBuildingsStore } from './useDeclaredBuildingsStore';
+import { normalizeAddress } from '@realestate-crm/utils';
+import type { Contact, Property, TrackingSession, TrackingAnnotation, Inspection, ActivityWithContact, DeclaredBuilding } from '@realestate-crm/types';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -90,6 +92,9 @@ export interface MultiDwellingBuilding {
   lastVisited: string | null;
   latitude: number;
   longitude: number;
+  estimatedUnits?: number;
+  source: 'annotation' | 'declared' | 'both';
+  declaredBuildingId?: string;
 }
 
 export interface CallConnectMetrics {
@@ -543,7 +548,21 @@ function computeRecommendedAreas(staleStreets: StaleStreet[], properties: Proper
   .slice(0, 10);
 }
 
-function computeMultiDwellingBuildings(annotations: TrackingAnnotation[]): MultiDwellingBuilding[] {
+// ~50m proximity threshold at Australian latitudes — matches map.tsx PROXIMITY_THRESHOLD
+const BUILDING_PROXIMITY_THRESHOLD = 0.00045;
+
+function coordsWithinProximity(
+  aLat: number, aLng: number, bLat: number, bLng: number,
+): boolean {
+  return Math.abs(aLat - bLat) < BUILDING_PROXIMITY_THRESHOLD
+    && Math.abs(aLng - bLng) < BUILDING_PROXIMITY_THRESHOLD;
+}
+
+function computeMultiDwellingBuildings(
+  annotations: TrackingAnnotation[],
+  declaredBuildings: DeclaredBuilding[],
+  contacts: Contact[],
+): MultiDwellingBuilding[] {
   // Parse [Unit X] annotations and group by approximate location
   const buildings = new Map<string, {
     units: Set<string>;
@@ -581,18 +600,87 @@ function computeMultiDwellingBuildings(annotations: TrackingAnnotation[]): Multi
     }
   }
 
-  return [...buildings.entries()]
-    .filter(([, b]) => b.units.size >= 2) // Only multi-unit
-    .map(([, b]) => ({
+  const annotationEntries: Array<MultiDwellingBuilding & { _key: string }> = [...buildings.entries()]
+    .filter(([, b]) => b.units.size >= 2)
+    .map(([k, b]) => ({
+      _key: k,
       address: b.address,
       totalUnitsVisited: b.units.size,
       uniqueUnits: [...b.units].sort(),
       lastVisited: b.lastVisited,
       latitude: b.lat,
       longitude: b.lng,
-    }))
-    .sort((a, b) => b.totalUnitsVisited - a.totalUnitsVisited)
-    .slice(0, 20);
+      source: 'annotation' as const,
+    }));
+
+  // Merge declared buildings with annotation-derived buildings when colocated (~50m).
+  // Declared buildings win on address/coords/estimated_units; uniqueUnits come from contacts at matching addr.
+  const consumedAnnotationKeys = new Set<string>();
+  const merged: MultiDwellingBuilding[] = [];
+
+  for (const declared of declaredBuildings) {
+    const match = annotationEntries.find(e =>
+      !consumedAnnotationKeys.has(e._key)
+      && coordsWithinProximity(e.latitude, e.longitude, declared.latitude, declared.longitude),
+    );
+
+    const declaredAddrKey = normalizeAddress(declared.address);
+    const contactsAtAddr = contacts.filter(c =>
+      !!c.unit_number
+      && !!c.address
+      && normalizeAddress(c.address) === declaredAddrKey,
+    );
+    const contactUnits = new Set<string>(
+      contactsAtAddr.map(c => (c.unit_number as string).trim()).filter(Boolean),
+    );
+    const contactLastCreated = contactsAtAddr
+      .map(c => c.created_at || null)
+      .filter((d): d is string => !!d)
+      .sort()
+      .pop() || null;
+
+    if (match) {
+      consumedAnnotationKeys.add(match._key);
+      const combinedUnits = new Set<string>([...match.uniqueUnits, ...contactUnits]);
+      const lastVisited = [match.lastVisited, contactLastCreated]
+        .filter((d): d is string => !!d)
+        .sort()
+        .pop() || null;
+      merged.push({
+        address: declared.address,
+        totalUnitsVisited: combinedUnits.size,
+        uniqueUnits: [...combinedUnits].sort(),
+        lastVisited,
+        latitude: declared.latitude,
+        longitude: declared.longitude,
+        estimatedUnits: declared.estimated_units,
+        source: 'both',
+        declaredBuildingId: declared.id,
+      });
+    } else {
+      merged.push({
+        address: declared.address,
+        totalUnitsVisited: contactUnits.size,
+        uniqueUnits: [...contactUnits].sort(),
+        lastVisited: contactLastCreated,
+        latitude: declared.latitude,
+        longitude: declared.longitude,
+        estimatedUnits: declared.estimated_units,
+        source: 'declared',
+        declaredBuildingId: declared.id,
+      });
+    }
+  }
+
+  // Carry over any annotation-only entries that didn't match a declared building.
+  for (const e of annotationEntries) {
+    if (consumedAnnotationKeys.has(e._key)) continue;
+    const { _key: _discard, ...rest } = e;
+    void _discard;
+    merged.push(rest);
+  }
+
+  return merged.sort((a, b) => b.totalUnitsVisited - a.totalUnitsVisited);
 }
 
 function computeCallMetrics(activities: ActivityWithContact[]): CallConnectMetrics {
@@ -645,6 +733,7 @@ export function useProspectingMetrics(): ProspectingMetrics {
   const recentActivities = useCRMStore(s => s.activities);
   const properties = usePropertyStore(s => s.properties);
   const inspections = useInspectionStore(s => s.inspections);
+  const declaredBuildings = useDeclaredBuildingsStore(s => s.declaredBuildings);
 
   return useMemo(() => {
     const now = new Date();
@@ -697,8 +786,8 @@ export function useProspectingMetrics(): ProspectingMetrics {
     // Phase 3: Recommended areas
     const recommendedAreas = computeRecommendedAreas(staleStreets, properties);
 
-    // Phase 3: Multi-dwelling buildings
-    const multiDwellingBuildings = computeMultiDwellingBuildings(allAnnotations);
+    // Phase 3: Multi-dwelling buildings (annotation-derived + user-declared)
+    const multiDwellingBuildings = computeMultiDwellingBuildings(allAnnotations, declaredBuildings, contacts);
 
     // Phase 2: Monthly trends (12 weeks)
     const monthlyDoorsTrend = computeWeeklyTrend(
@@ -726,5 +815,5 @@ export function useProspectingMetrics(): ProspectingMetrics {
       suburbContactCounts: computeSuburbContactCounts(contacts),
       callMetrics,
     };
-  }, [sessions, allAnnotations, contacts, recentActivities, properties, inspections]);
+  }, [sessions, allAnnotations, contacts, recentActivities, properties, inspections, declaredBuildings]);
 }

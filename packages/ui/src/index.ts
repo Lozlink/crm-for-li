@@ -6,6 +6,7 @@ export { default as ContactForm } from './ContactForm';
 export { default as ContactPreview } from './ContactPreview';
 export { default as FilterSheet } from './FilterSheet';
 export { default as MapSearchBar } from './MapSearchBar';
+export { default as MultiDwellingQuickAdd } from './MultiDwellingQuickAdd';
 export { default as TagManager } from './TagManager';
 export { default as TagPicker } from './TagPicker';
 export { default as RoleGuard } from './RoleGuard';

@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore, useCallerIdSync, useCallLogSync, useTrackingStore } from '@realestate-crm/hooks';
-import { useCRMStore } from '@realestate-crm/hooks';
+import { useCRMStore, useDeclaredBuildingsStore } from '@realestate-crm/hooks';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import CallOutcomeModal from '../components/CallOutcomeModal';
 
@@ -35,6 +35,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const fetchContacts = useCRMStore(s => s.fetchContacts);
   const fetchTags = useCRMStore(s => s.fetchTags);
   const clearData = useCRMStore(s => s.clearData);
+  const fetchDeclaredBuildings = useDeclaredBuildingsStore(s => s.fetchDeclaredBuildings);
+  const clearDeclaredBuildings = useDeclaredBuildingsStore(s => s.clearData);
 
   const [dataLoaded, setDataLoaded] = useState(false);
   const prevTeamIdRef = useRef<string | undefined>(activeTeam?.id);
@@ -43,6 +45,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isLoading && !isAuthenticated && !isDemoMode) {
       clearData();
+      clearDeclaredBuildings();
       setDataLoaded(false);
     }
   }, [isAuthenticated, isDemoMode, isLoading]);
@@ -55,6 +58,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         await hydrate();
         await fetchTags();
         await fetchContacts();
+        await fetchDeclaredBuildings();
         setDataLoaded(true);
       };
       loadData();

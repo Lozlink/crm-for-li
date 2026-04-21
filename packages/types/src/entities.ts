@@ -563,6 +563,20 @@ export interface SmsOptOut {
   team_id?: string;
 }
 
+// --- Declared Buildings ---
+
+export interface DeclaredBuilding {
+  id: string;
+  team_id: string | null;
+  address: string;
+  latitude: number;
+  longitude: number;
+  estimated_units: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- Suburb Statistics (abs Census) ---
 
 export interface SuburbStats {

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity, RefreshControl, FlatList } from 'react-native';
-import { useTheme, Text, Surface, SegmentedButtons, ProgressBar, ActivityIndicator, TextInput, Button, Chip } from 'react-native-paper';
+import { useTheme, Text, Surface, SegmentedButtons, ProgressBar, ActivityIndicator, Button, Chip } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -9,7 +9,6 @@ import {
   usePropertyStore,
   useProspectingMetrics,
   useDataEnrichmentStore,
-  useProspectingMatcher,
   useLeadScoringEngine,
   useRouteStore,
   useGuidedProspectingStore,
@@ -17,6 +16,7 @@ import {
 import type { Route } from '@realestate-crm/types';
 import type { TrackingSession } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MultiDwellingQuickAdd } from '@realestate-crm/ui';
 import { TIER_COLORS } from '../../components/LeadScoreBadge';
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -1355,183 +1355,6 @@ function SessionsView({
   );
 }
 
-// ── Multi-Dwelling Quick Add ─────────────────────────────────────────
-
-function MultiDwellingQuickAdd() {
-  const theme = useTheme();
-  const [expanded, setExpanded] = useState(false);
-  const [address, setAddress] = useState('');
-  const [startingUnit, setStartingUnit] = useState('1');
-  const [unitCount, setUnitCount] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const [createdCount, setCreatedCount] = useState<number | null>(null);
-
-  const bulkAddContacts = useCRMStore(s => s.bulkAddContacts);
-  const { matchContactByAddress } = useProspectingMatcher(null, null);
-
-  const existingContacts = useMemo(() => {
-    if (address.trim().length < 3) return [];
-    return matchContactByAddress(address);
-  }, [address, matchContactByAddress]);
-
-  const existingUnitNumbers = useMemo(() => {
-    return new Set(
-      existingContacts
-        .map(c => c.unit_number)
-        .filter((u): u is string => !!u),
-    );
-  }, [existingContacts]);
-
-  const startNum = parseInt(startingUnit, 10) || 1;
-  const count = parseInt(unitCount, 10) || 0;
-
-  const unitsToCreate = useMemo(() => {
-    if (count <= 0 || count > 200) return [];
-    const units: number[] = [];
-    for (let i = 0; i < count; i++) {
-      const unitNum = startNum + i;
-      if (!existingUnitNumbers.has(String(unitNum))) {
-        units.push(unitNum);
-      }
-    }
-    return units;
-  }, [startNum, count, existingUnitNumbers]);
-
-  const handleCreate = async () => {
-    if (unitsToCreate.length === 0 || !address.trim()) return;
-    setIsCreating(true);
-    setCreatedCount(null);
-
-    const contacts = unitsToCreate.map(unitNum => ({
-      first_name: `Unit ${unitNum}`,
-      address: address.trim(),
-      unit_number: String(unitNum),
-      source: 'walk_in' as const,
-    }));
-
-    const created = await bulkAddContacts(contacts);
-    setCreatedCount(created.length);
-    setIsCreating(false);
-  };
-
-  const handleReset = () => {
-    setAddress('');
-    setStartingUnit('1');
-    setUnitCount('');
-    setCreatedCount(null);
-  };
-
-  return (
-    <Surface style={[styles.card, { backgroundColor: theme.colors.surface }]} elevation={1}>
-      <TouchableOpacity
-        onPress={() => setExpanded(!expanded)}
-        activeOpacity={0.7}
-        style={styles.cardInner}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Icon name="office-building-marker" size={18} color={theme.colors.primary} />
-          <Text variant="titleSmall" style={{ fontWeight: '700', flex: 1 }}>
-            Quick Add Multi-Dwelling
-          </Text>
-          <Icon
-            name={expanded ? 'chevron-up' : 'chevron-down'}
-            size={20}
-            color={theme.colors.onSurfaceVariant}
-          />
-        </View>
-      </TouchableOpacity>
-
-      {expanded && (
-        <View style={styles.multiDwellingBody}>
-          <TextInput
-            label="Building address"
-            value={address}
-            onChangeText={(text) => { setAddress(text); setCreatedCount(null); }}
-            mode="outlined"
-            dense
-            left={<TextInput.Icon icon="map-marker" />}
-          />
-
-          {existingContacts.length > 0 && (
-            <View style={{ marginTop: 8 }}>
-              <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
-                Existing contacts at this address ({existingContacts.length})
-              </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-                {existingContacts.map(c => (
-                  <Chip
-                    key={c.id}
-                    compact
-                    style={{ backgroundColor: theme.colors.secondaryContainer }}
-                    textStyle={{ fontSize: 10 }}
-                  >
-                    {c.unit_number ? `Unit ${c.unit_number}` : c.first_name}
-                  </Chip>
-                ))}
-              </View>
-            </View>
-          )}
-
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-            <TextInput
-              label="Starting unit"
-              value={startingUnit}
-              onChangeText={(text) => { setStartingUnit(text); setCreatedCount(null); }}
-              mode="outlined"
-              dense
-              keyboardType="number-pad"
-              style={{ flex: 1 }}
-            />
-            <TextInput
-              label="Number of units"
-              value={unitCount}
-              onChangeText={(text) => { setUnitCount(text); setCreatedCount(null); }}
-              mode="outlined"
-              dense
-              keyboardType="number-pad"
-              style={{ flex: 1 }}
-              placeholder="e.g. 12"
-            />
-          </View>
-
-          {count > 0 && existingUnitNumbers.size > 0 && (
-            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
-              {count - unitsToCreate.length} of {count} units already have contacts (will be skipped)
-            </Text>
-          )}
-
-          {createdCount !== null && (
-            <View style={[styles.multiDwellingSuccess, { backgroundColor: '#16a34a14' }]}>
-              <Icon name="check-circle" size={16} color="#16a34a" />
-              <Text variant="bodySmall" style={{ color: '#16a34a', fontWeight: '600', marginLeft: 6 }}>
-                Created {createdCount} contacts
-              </Text>
-            </View>
-          )}
-
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-            {(address || unitCount) && (
-              <Button compact onPress={handleReset}>
-                Reset
-              </Button>
-            )}
-            <Button
-              mode="contained"
-              compact
-              onPress={handleCreate}
-              disabled={unitsToCreate.length === 0 || !address.trim() || isCreating}
-              loading={isCreating}
-              icon="account-multiple-plus"
-            >
-              Create {unitsToCreate.length} Contact{unitsToCreate.length !== 1 ? 's' : ''}
-            </Button>
-          </View>
-        </View>
-      )}
-    </Surface>
-  );
-}
-
 // ── Shared Stat Cell ─────────────────────────────────────────────────
 
 function StatCell({
@@ -1818,19 +1641,5 @@ const styles = StyleSheet.create({
   suburbCol: {
     flex: 1,
     paddingHorizontal: 2,
-  },
-
-  // Multi-Dwelling Quick Add
-  multiDwellingBody: {
-    paddingHorizontal: 14,
-    paddingBottom: 14,
-    gap: 0,
-  },
-  multiDwellingSuccess: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 8,
   },
 });

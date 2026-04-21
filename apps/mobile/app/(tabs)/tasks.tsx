@@ -36,7 +36,7 @@ type StatusFilter = 'outstanding' | 'completed';
 const TYPE_ICONS: Record<TaskType, string> = {
   task: 'checkbox-marked-outline',
   appointment: 'calendar-clock',
-  follow_up: 'phone-return-in-talk',
+  follow_up: 'phone-return',
   inspection_reminder: 'home-search',
 };
 

@@ -18,7 +18,7 @@ type UnitOutcome = 'not_home' | 'spoke' | 'callback' | 'not_interested' | 'skip'
 const OUTCOME_OPTIONS: { value: UnitOutcome; label: string; icon: string; color: string }[] = [
   { value: 'not_home', label: 'Not Home', icon: 'home-off-outline', color: '#9ca3af' },
   { value: 'spoke', label: 'Spoke', icon: 'chat-outline', color: '#16a34a' },
-  { value: 'callback', label: 'Callback', icon: 'phone-return-in-talk', color: '#f59e0b' },
+  { value: 'callback', label: 'Callback', icon: 'phone-return', color: '#f59e0b' },
   { value: 'not_interested', label: 'Not Interested', icon: 'close-circle-outline', color: '#ef4444' },
   { value: 'skip', label: 'Skip', icon: 'skip-next', color: '#6b7280' },
 ];
@@ -291,35 +291,29 @@ export default function DropNoteDialog({
         </Dialog.ScrollArea>
 
         <Dialog.Actions>
-          {!multiMode ? (
-            <>
-              <Button onPress={handleCancel} disabled={saving}>
-                Cancel
-              </Button>
-              <Button
-                mode="contained"
-                buttonColor="#F59E0B"
-                textColor="#FFFFFF"
-                onPress={handleSaveSingle}
-                loading={saving}
-                disabled={!noteText.trim() || saving}
-              >
-                Save
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button onPress={handleCancel} disabled={saving}>
-                Cancel
-              </Button>
-              <Button
-                mode="contained"
-                onPress={handleFinishMulti}
-                disabled={saving}
-              >
-                Done ({units.length} logged)
-              </Button>
-            </>
+          <Button onPress={handleCancel} disabled={saving}>
+            Cancel
+          </Button>
+          {!multiMode && (
+            <Button
+              mode="contained"
+              buttonColor="#F59E0B"
+              textColor="#FFFFFF"
+              onPress={handleSaveSingle}
+              loading={saving}
+              disabled={!noteText.trim() || saving}
+            >
+              Save
+            </Button>
+          )}
+          {multiMode && (
+            <Button
+              mode="contained"
+              onPress={handleFinishMulti}
+              disabled={saving}
+            >
+              Done ({units.length} logged)
+            </Button>
           )}
         </Dialog.Actions>
       </Dialog>

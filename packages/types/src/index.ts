@@ -30,6 +30,7 @@ export type {
   CustomFieldDefinition, CustomFieldValue, CustomFieldWithValue,
 } from './entities';
 export type { SoldRecord, SuburbStats } from './entities';
+export type { DeclaredBuilding } from './entities';
 export type {
   LeadTier, LeadScoreBreakdown, TerritoryBriefing,
   ProspectingOutcome, GuidedStop,

@@ -14,6 +14,53 @@ const OVERPASS_SERVERS = [
 ];
 let currentServerIndex = 0;
 
+type OverpassResponse = { elements?: Array<Record<string, unknown>> };
+
+// Status codes that indicate we should skip to the next server rather than
+// treat the response as fatal. 406 was added after Overpass tightened content
+// negotiation — anonymous requests without Accept were rejected.
+const OVERPASS_RETRY_STATUSES = new Set([403, 406, 429, 504]);
+
+/**
+ * POST a query to the Overpass API with server rotation and proper headers.
+ * Returns parsed JSON on success, or null if every server failed.
+ * Callers are responsible for their own caching and rate limiting.
+ */
+async function callOverpass(query: string, queryType: string): Promise<OverpassResponse | null> {
+  for (let attempt = 0; attempt < OVERPASS_SERVERS.length; attempt++) {
+    const serverUrl = OVERPASS_SERVERS[(currentServerIndex + attempt) % OVERPASS_SERVERS.length];
+
+    try {
+      const response = await fetch(serverUrl, {
+        method: 'POST',
+        body: `data=${encodeURIComponent(query)}`,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+          'User-Agent': 'RealEstateCRM/1.0 (+https://lozlink.com.au)',
+        },
+      });
+
+      if (OVERPASS_RETRY_STATUSES.has(response.status)) {
+        currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Overpass API error: ${response.status}`);
+      }
+
+      return (await response.json()) as OverpassResponse;
+    } catch (error) {
+      console.warn(`Overpass server ${serverUrl} failed for ${queryType}:`, error);
+      currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
+    }
+  }
+
+  console.error(`All Overpass servers failed for ${queryType}`);
+  return null;
+}
+
 function getCacheKey(minLat: number, minLng: number, maxLat: number, maxLng: number): string {
   // Round to reduce cache misses for nearby regions
   return `${minLat.toFixed(3)},${minLng.toFixed(3)},${maxLat.toFixed(3)},${maxLng.toFixed(3)}`;
@@ -57,45 +104,12 @@ export async function fetchSuburbBoundaries(
     out geom;
   `;
 
-  // Try servers with rotation on failure
-  for (let attempt = 0; attempt < OVERPASS_SERVERS.length; attempt++) {
-    const serverUrl = OVERPASS_SERVERS[(currentServerIndex + attempt) % OVERPASS_SERVERS.length];
+  const data = await callOverpass(query, 'boundary query');
+  if (!data) return cached?.data || [];
 
-    try {
-      const response = await fetch(serverUrl, {
-        method: 'POST',
-        body: `data=${encodeURIComponent(query)}`,
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      });
-
-      if (response.status === 429) {
-        // Rate limited, try next server
-        currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
-        continue;
-      }
-
-      if (!response.ok) {
-        throw new Error(`Overpass API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const boundaries = parseOverpassResponse(data);
-
-      // Cache the result
-      boundaryCache.set(cacheKey, { data: boundaries, timestamp: Date.now() });
-
-      return boundaries;
-    } catch (error) {
-      console.warn(`Overpass server ${serverUrl} failed:`, error);
-      // Try next server
-      currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
-    }
-  }
-
-  console.error('All Overpass servers failed');
-  return cached?.data || [];
+  const boundaries = parseOverpassResponse(data);
+  boundaryCache.set(cacheKey, { data: boundaries, timestamp: Date.now() });
+  return boundaries;
 }
 
 function parseOverpassResponse(data: any): SuburbBoundary[] {
@@ -223,44 +237,15 @@ export async function fetchSuburbByName(
   ];
 
   for (const query of queries) {
-    // Try each server
-    for (let attempt = 0; attempt < OVERPASS_SERVERS.length; attempt++) {
-      const serverUrl = OVERPASS_SERVERS[(currentServerIndex + attempt) % OVERPASS_SERVERS.length];
+    const data = await callOverpass(query, `suburb query "${suburbName}"`);
+    if (!data) continue;
 
-      try {
-        const response = await fetch(serverUrl, {
-          method: 'POST',
-          body: `data=${encodeURIComponent(query)}`,
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        });
-
-        if (response.status === 429 || response.status === 504) {
-          currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
-          continue;
-        }
-
-        if (!response.ok) {
-          throw new Error(`Overpass API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const boundaries = parseOverpassResponse(data);
-        const result = boundaries[0] || null;
-
-        // Cache result
-        suburbNameCache.set(cacheKey, { data: result, timestamp: Date.now() });
-
-        return result;
-      } catch (error) {
-        console.warn(`Overpass server ${serverUrl} failed for suburb query:`, error);
-        currentServerIndex = (currentServerIndex + 1) % OVERPASS_SERVERS.length;
-      }
-    }
+    const boundaries = parseOverpassResponse(data);
+    const result = boundaries[0] || null;
+    suburbNameCache.set(cacheKey, { data: result, timestamp: Date.now() });
+    return result;
   }
 
-  console.error('All Overpass servers failed for suburb:', suburbName);
   return cached?.data || null;
 }
 
@@ -305,34 +290,12 @@ export async function fetchMultiDwellingBuildings(
     out body geom;
   `;
 
-  // Always start from primary server for building queries
-  for (let attempt = 0; attempt < OVERPASS_SERVERS.length; attempt++) {
-    const serverUrl = OVERPASS_SERVERS[attempt];
+  const data = await callOverpass(query, 'building query');
+  if (!data) return cached?.data || [];
 
-    try {
-      const response = await fetch(serverUrl, {
-        method: 'POST',
-        body: `data=${encodeURIComponent(query)}`,
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      });
-
-      if (response.status === 429 || response.status === 403 || response.status === 504) {
-        continue; // try next server
-      }
-      if (!response.ok) throw new Error(`Overpass API error: ${response.status}`);
-
-      const data = await response.json();
-      const buildings = parseBuildingResponse(data);
-
-      buildingCache.set(cacheKey, { data: buildings, timestamp: Date.now() });
-      return buildings;
-    } catch (error) {
-      console.warn(`Overpass server ${serverUrl} failed for building query:`, error);
-    }
-  }
-
-  console.error('All Overpass servers failed for building query');
-  return cached?.data || [];
+  const buildings = parseBuildingResponse(data);
+  buildingCache.set(cacheKey, { data: buildings, timestamp: Date.now() });
+  return buildings;
 }
 
 function parseBuildingResponse(data: { elements?: Array<Record<string, unknown>> }): OSMBuilding[] {

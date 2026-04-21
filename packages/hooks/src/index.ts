@@ -1,4 +1,5 @@
 export { useCRMStore, syncContactTags } from './useCRMStore';
+export { useDeclaredBuildingsStore } from './useDeclaredBuildingsStore';
 export { useAuthStore } from './useAuthStore';
 export { usePermissions } from './usePermissions';
 export { useRouteStore } from './useRouteStore';

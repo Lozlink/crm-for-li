@@ -1,18 +1,18 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { StyleSheet, View, Dimensions, Linking, TouchableOpacity, ScrollView, LayoutAnimation } from 'react-native';
-import { FAB, Portal, useTheme, Chip, Surface, Text, Dialog, Button, Switch, TextInput } from 'react-native-paper';
+import { FAB, Portal, useTheme, Chip, Surface, Text, Dialog, Button, Switch } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import MapView, { Marker, Polygon, Circle, Polyline, PROVIDER_GOOGLE, LongPressEvent, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useCRMStore, useStreetStats, usePropertyStore, useTrackingStore, useBuyerMatchStore, useProspectingMetrics, useProspectingMatcher, useLeadScoringEngine } from '@realestate-crm/hooks';
+import { useCRMStore, useStreetStats, usePropertyStore, useTrackingStore, useBuyerMatchStore, useProspectingMetrics, useProspectingMatcher, useLeadScoringEngine, useDeclaredBuildingsStore } from '@realestate-crm/hooks';
 import type { MultiDwellingBuilding, NearbyContact } from '@realestate-crm/hooks';
-import type { Contact, Property, ActivityWithContact, ContactRequirement, OSMBuilding } from '@realestate-crm/types';
+import type { Contact, Property, ActivityWithContact, ContactRequirement, OSMBuilding, DeclaredBuilding } from '@realestate-crm/types';
 import { fetchSuburbByName, decodePolyline, fetchMultiDwellingBuildings } from '@realestate-crm/api';
 import type { SuburbBoundary } from '@realestate-crm/types';
-import { FilterSheet, ContactPreview, MapSearchBar, PropertyPreview } from '@realestate-crm/ui';
+import { FilterSheet, ContactPreview, MapSearchBar, PropertyPreview, MultiDwellingQuickAdd } from '@realestate-crm/ui';
 import TerritoryBriefingCard from '../../components/TerritoryBriefingCard';
 import { TIER_COLORS } from '../../components/LeadScoreBadge';
 
@@ -113,6 +113,12 @@ export default function MapScreen() {
     longitude: number;
     address: string;
   }>({ visible: false, latitude: 0, longitude: 0, address: '' });
+  const [multiDwellingDialog, setMultiDwellingDialog] = useState<{
+    visible: boolean;
+    latitude: number;
+    longitude: number;
+    address: string;
+  }>({ visible: false, latitude: 0, longitude: 0, address: '' });
 
   const [fieldActivityWindow, setFieldActivityWindow] = useState<FieldActivityWindow>('30d');
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
@@ -125,17 +131,17 @@ export default function MapScreen() {
   );
   // Nearby contacts now handled by TrackingBanner bottom sheet
 
-  // Multi-dwelling state for long-press dialog
-  const bulkAddContacts = useCRMStore(state => state.bulkAddContacts);
-  const [multiDwellingEnabled, setMultiDwellingEnabled] = useState(false);
-  const [multiDwellingStartUnit, setMultiDwellingStartUnit] = useState('1');
-  const [multiDwellingCount, setMultiDwellingCount] = useState('4');
-
   // Buildings layer state
   const metrics = useProspectingMetrics();
+  const declaredBuildings = useDeclaredBuildingsStore(s => s.declaredBuildings);
+  const fetchDeclaredBuildings = useDeclaredBuildingsStore(s => s.fetchDeclaredBuildings);
   const [osmBuildings, setOsmBuildings] = useState<OSMBuilding[]>([]);
   const [buildingDialogVisible, setBuildingDialogVisible] = useState(false);
-  const [selectedBuilding, setSelectedBuilding] = useState<OSMBuilding | null>(null);
+  const [selectedBuildingView, setSelectedBuildingView] = useState<
+    | { kind: 'osm'; building: OSMBuilding }
+    | { kind: 'declared'; building: DeclaredBuilding }
+    | null
+  >(null);
   const [selectedBuildingCoverage, setSelectedBuildingCoverage] = useState<MultiDwellingBuilding | null>(null);
 
   // Fly to coordinates when navigated with ?lat=X&lng=Y params
@@ -176,7 +182,8 @@ export default function MapScreen() {
       fetchSessions();
       fetchAllAnnotations();
       fetchRecentActivities(200);
-    }, [fetchContacts, fetchProperties, fetchSessions, fetchAllAnnotations, fetchRecentActivities])
+      fetchDeclaredBuildings();
+    }, [fetchContacts, fetchProperties, fetchSessions, fetchAllAnnotations, fetchRecentActivities, fetchDeclaredBuildings])
   );
 
   // Get user location on first mount and center map there
@@ -394,32 +401,14 @@ export default function MapScreen() {
   const dismissLongPressDialog = useCallback(() => {
     setLongPressDialog(prev => ({ ...prev, visible: false }));
     setPendingMarker(null);
-    setMultiDwellingEnabled(false);
-    setMultiDwellingStartUnit('1');
-    setMultiDwellingCount('4');
   }, []);
 
-  const handleMultiDwellingCreate = useCallback(async () => {
+  const handleLongPressMultiDwelling = useCallback(() => {
     const { latitude, longitude, address } = longPressDialog;
-    const startUnit = parseInt(multiDwellingStartUnit, 10) || 1;
-    const count = Math.min(parseInt(multiDwellingCount, 10) || 1, 100); // cap at 100
-
-    const contactsToCreate: Omit<Contact, 'id' | 'created_at' | 'updated_at'>[] = [];
-    for (let i = 0; i < count; i++) {
-      const unitNum = String(startUnit + i);
-      contactsToCreate.push({
-        first_name: `Unit ${unitNum}`,
-        address,
-        unit_number: unitNum,
-        latitude,
-        longitude,
-        source: 'walk_in',
-      });
-    }
-
-    await bulkAddContacts(contactsToCreate);
-    dismissLongPressDialog();
-  }, [longPressDialog, multiDwellingStartUnit, multiDwellingCount, bulkAddContacts, dismissLongPressDialog]);
+    setLongPressDialog(prev => ({ ...prev, visible: false }));
+    setMultiDwellingDialog({ visible: true, latitude, longitude, address });
+    setTimeout(() => setPendingMarker(null), 500);
+  }, [longPressDialog]);
 
   const handleViewContact = useCallback(() => {
     if (selectedContact) {
@@ -477,13 +466,29 @@ export default function MapScreen() {
 
   // ── Buildings layer helpers ──────────────────────────────────────
 
+  const BUILDING_PROXIMITY_THRESHOLD = 0.00045; // ~50m at Australian latitudes
+
   /** Match an OSM building to our prospecting coverage data by proximity (~50m). */
   const findBuildingCoverage = useCallback((building: OSMBuilding): MultiDwellingBuilding | null => {
-    const PROXIMITY_THRESHOLD = 0.00045; // ~50m at Australian latitudes
     for (const mdb of metrics.multiDwellingBuildings) {
       const latDiff = Math.abs(building.center.latitude - mdb.latitude);
       const lngDiff = Math.abs(building.center.longitude - mdb.longitude);
-      if (latDiff < PROXIMITY_THRESHOLD && lngDiff < PROXIMITY_THRESHOLD) {
+      if (latDiff < BUILDING_PROXIMITY_THRESHOLD && lngDiff < BUILDING_PROXIMITY_THRESHOLD) {
+        return mdb;
+      }
+    }
+    return null;
+  }, [metrics.multiDwellingBuildings]);
+
+  /** Match a declared building to our coverage data by id first, proximity as fallback. */
+  const findDeclaredCoverage = useCallback((declared: DeclaredBuilding): MultiDwellingBuilding | null => {
+    for (const mdb of metrics.multiDwellingBuildings) {
+      if (mdb.declaredBuildingId === declared.id) return mdb;
+    }
+    for (const mdb of metrics.multiDwellingBuildings) {
+      const latDiff = Math.abs(declared.latitude - mdb.latitude);
+      const lngDiff = Math.abs(declared.longitude - mdb.longitude);
+      if (latDiff < BUILDING_PROXIMITY_THRESHOLD && lngDiff < BUILDING_PROXIMITY_THRESHOLD) {
         return mdb;
       }
     }
@@ -492,33 +497,80 @@ export default function MapScreen() {
 
   const getBuildingFillColor = useCallback((building: OSMBuilding): string => {
     const coverage = findBuildingCoverage(building);
+    // Declared buildings override OSM estimates when they overlap (more trustworthy).
+    const effectiveUnits = coverage?.estimatedUnits ?? building.estimatedUnits;
     if (!coverage) return 'rgba(124, 58, 237, 0.1)'; // light purple, unvisited
 
-    const percent = (coverage.totalUnitsVisited / building.estimatedUnits) * 100;
+    const percent = (coverage.totalUnitsVisited / Math.max(1, effectiveUnits)) * 100;
     if (percent >= 75) return 'rgba(34, 197, 94, 0.3)';  // green, well covered
     if (percent >= 25) return 'rgba(234, 179, 8, 0.3)';   // amber, partial
     return 'rgba(239, 68, 68, 0.2)';                       // red, barely touched
   }, [findBuildingCoverage]);
 
+  const getDeclaredBuildingFillColor = useCallback((declared: DeclaredBuilding): string => {
+    const coverage = findDeclaredCoverage(declared);
+    const visited = coverage?.totalUnitsVisited ?? 0;
+    if (visited === 0) return 'rgba(124, 58, 237, 0.1)';
+    const percent = (visited / Math.max(1, declared.estimated_units)) * 100;
+    if (percent >= 75) return 'rgba(34, 197, 94, 0.3)';
+    if (percent >= 25) return 'rgba(234, 179, 8, 0.3)';
+    return 'rgba(239, 68, 68, 0.2)';
+  }, [findDeclaredCoverage]);
+
+  // Declared buildings already covered by an OSM polygon get drawn as polygons (polygon wins visually).
+  // Only render declared-as-Circle when no OSM polygon overlaps.
+  const declaredBuildingsWithoutPolygons = useMemo(() => {
+    return declaredBuildings.filter(declared => {
+      for (const osm of osmBuildings) {
+        const latDiff = Math.abs(declared.latitude - osm.center.latitude);
+        const lngDiff = Math.abs(declared.longitude - osm.center.longitude);
+        if (latDiff < BUILDING_PROXIMITY_THRESHOLD && lngDiff < BUILDING_PROXIMITY_THRESHOLD) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [declaredBuildings, osmBuildings]);
+
   const handleBuildingPress = useCallback((building: OSMBuilding) => {
-    setSelectedBuilding(building);
+    setSelectedBuildingView({ kind: 'osm', building });
     setSelectedBuildingCoverage(findBuildingCoverage(building));
     setBuildingDialogVisible(true);
   }, [findBuildingCoverage]);
 
+  const handleDeclaredBuildingPress = useCallback((declared: DeclaredBuilding) => {
+    setSelectedBuildingView({ kind: 'declared', building: declared });
+    setSelectedBuildingCoverage(findDeclaredCoverage(declared));
+    setBuildingDialogVisible(true);
+  }, [findDeclaredCoverage]);
+
   const handleStartProspectingBuilding = useCallback(() => {
-    if (!selectedBuilding) return;
+    if (!selectedBuildingView) return;
     setBuildingDialogVisible(false);
-    router.push({
-      pathname: '/contact/new',
-      params: {
-        lat: selectedBuilding.center.latitude.toString(),
-        lng: selectedBuilding.center.longitude.toString(),
-        address: selectedBuilding.address || '',
-        quickNote: 'true',
-      },
-    });
-  }, [selectedBuilding, router]);
+    if (selectedBuildingView.kind === 'osm') {
+      const b = selectedBuildingView.building;
+      router.push({
+        pathname: '/contact/new',
+        params: {
+          lat: b.center.latitude.toString(),
+          lng: b.center.longitude.toString(),
+          address: b.address || '',
+          quickNote: 'true',
+        },
+      });
+    } else {
+      const b = selectedBuildingView.building;
+      router.push({
+        pathname: '/contact/new',
+        params: {
+          lat: b.latitude.toString(),
+          lng: b.longitude.toString(),
+          address: b.address,
+          quickNote: 'true',
+        },
+      });
+    }
+  }, [selectedBuildingView, router]);
 
   const handleSearchLocationSelect = useCallback((lat: number, lng: number, name: string) => {
     const newRegion = { latitude: lat, longitude: lng, latitudeDelta: 0.04, longitudeDelta: 0.04 };
@@ -658,6 +710,28 @@ export default function MapScreen() {
             fillColor={getBuildingFillColor(building)}
             tappable
             onPress={() => handleBuildingPress(building)}
+          />
+        ))}
+
+        {/* Declared buildings (buildings layer) — user-declared buildings without an OSM polygon overlap */}
+        {visibleLayers.buildings && declaredBuildingsWithoutPolygons.map((declared) => (
+          <Circle
+            key={`declared-${declared.id}`}
+            center={{ latitude: declared.latitude, longitude: declared.longitude }}
+            radius={25}
+            strokeColor="#7c3aed"
+            strokeWidth={2}
+            fillColor={getDeclaredBuildingFillColor(declared)}
+          />
+        ))}
+        {/* Invisible tap target markers for declared-building circles (Circle doesn't expose onPress reliably) */}
+        {visibleLayers.buildings && declaredBuildingsWithoutPolygons.map((declared) => (
+          <Marker
+            key={`declared-tap-${declared.id}`}
+            coordinate={{ latitude: declared.latitude, longitude: declared.longitude }}
+            onPress={() => handleDeclaredBuildingPress(declared)}
+            opacity={0}
+            anchor={{ x: 0.5, y: 0.5 }}
           />
         ))}
       </MapView>
@@ -900,114 +974,142 @@ export default function MapScreen() {
           onViewDetails={handleViewProperty}
         />
 
-        {/* Building detail dialog */}
+        {/* Building detail dialog — handles both OSM-derived polygons and user-declared buildings */}
         <Dialog visible={buildingDialogVisible} onDismiss={() => setBuildingDialogVisible(false)} style={styles.buildingDialog}>
           <Dialog.Title>
             <View style={styles.buildingDialogTitleRow}>
               <Icon name="office-building" size={20} color="#7c3aed" />
               <Text variant="titleMedium" style={styles.buildingDialogTitleText}>
-                {selectedBuilding?.name || selectedBuilding?.address || 'Building'}
+                {selectedBuildingView?.kind === 'osm'
+                  ? (selectedBuildingView.building.name || selectedBuildingView.building.address || 'Building')
+                  : selectedBuildingView?.kind === 'declared'
+                    ? (selectedBuildingView.building.address || 'Multi-dwelling building')
+                    : 'Building'}
               </Text>
             </View>
           </Dialog.Title>
           <Dialog.Content>
-            {selectedBuilding && (
-              <View>
-                {selectedBuilding.address && (
-                  <View style={styles.buildingDetailRow}>
-                    <Icon name="map-marker" size={16} color={theme.colors.onSurfaceVariant} />
-                    <Text variant="bodyMedium" style={styles.buildingDetailText}>
-                      {selectedBuilding.address}
-                    </Text>
-                  </View>
-                )}
+            {selectedBuildingView && (() => {
+              // Declared buildings win over OSM polygons for coverage/unit totals when both exist at same coords.
+              const isDeclared = selectedBuildingView.kind === 'declared';
+              const addressText = isDeclared
+                ? selectedBuildingView.building.address
+                : (selectedBuildingView.building.address || '');
+              const effectiveUnits = isDeclared
+                ? selectedBuildingView.building.estimated_units
+                : (selectedBuildingCoverage?.estimatedUnits ?? selectedBuildingView.building.estimatedUnits);
+              const coverage = selectedBuildingCoverage;
+              const coveragePercent = coverage
+                ? Math.min(100, Math.round((coverage.totalUnitsVisited / Math.max(1, effectiveUnits)) * 100))
+                : 0;
 
-                <View style={styles.buildingDetailRow}>
-                  <Icon name="door" size={16} color={theme.colors.onSurfaceVariant} />
-                  <Text variant="bodyMedium" style={styles.buildingDetailText}>
-                    Estimated units: {selectedBuilding.estimatedUnits}
-                  </Text>
-                </View>
-
-                {selectedBuilding.levels != null && (
-                  <View style={styles.buildingDetailRow}>
-                    <Icon name="stairs" size={16} color={theme.colors.onSurfaceVariant} />
-                    <Text variant="bodyMedium" style={styles.buildingDetailText}>
-                      Levels: {selectedBuilding.levels}
-                    </Text>
-                  </View>
-                )}
-
-                <View style={styles.buildingDetailRow}>
-                  <Icon name="home-variant" size={16} color={theme.colors.onSurfaceVariant} />
-                  <Text variant="bodyMedium" style={styles.buildingDetailText}>
-                    Type: {selectedBuilding.buildingType}
-                  </Text>
-                </View>
-
-                <View style={styles.buildingDivider} />
-
-                {selectedBuildingCoverage ? (
-                  <View>
+              return (
+                <View>
+                  {addressText ? (
                     <View style={styles.buildingDetailRow}>
-                      <Icon name="clipboard-check" size={16} color="#22c55e" />
+                      <Icon name="map-marker" size={16} color={theme.colors.onSurfaceVariant} />
                       <Text variant="bodyMedium" style={styles.buildingDetailText}>
-                        Units visited: {selectedBuildingCoverage.totalUnitsVisited} / {selectedBuilding.estimatedUnits}
+                        {addressText}
                       </Text>
                     </View>
+                  ) : null}
 
-                    <View style={styles.buildingCoverageBar}>
-                      <View
-                        style={[
-                          styles.buildingCoverageFill,
-                          {
-                            width: `${Math.min(100, Math.round((selectedBuildingCoverage.totalUnitsVisited / selectedBuilding.estimatedUnits) * 100))}%`,
-                            backgroundColor:
-                              (selectedBuildingCoverage.totalUnitsVisited / selectedBuilding.estimatedUnits) >= 0.75
-                                ? '#22c55e'
-                                : (selectedBuildingCoverage.totalUnitsVisited / selectedBuilding.estimatedUnits) >= 0.25
-                                  ? '#eab308'
-                                  : '#ef4444',
-                          },
-                        ]}
-                      />
-                    </View>
-
-                    <Text variant="labelSmall" style={[styles.buildingCoveragePercent, { color: theme.colors.onSurfaceVariant }]}>
-                      {Math.round((selectedBuildingCoverage.totalUnitsVisited / selectedBuilding.estimatedUnits) * 100)}% coverage
-                    </Text>
-
-                    {selectedBuildingCoverage.uniqueUnits.length > 0 && (
-                      <View style={styles.buildingUnitsVisited}>
-                        <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
-                          Units visited:
-                        </Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.buildingUnitChips}>
-                          {selectedBuildingCoverage.uniqueUnits.map(unit => (
-                            <Chip key={unit} compact mode="outlined" textStyle={{ fontSize: 11 }} style={styles.buildingUnitChip}>
-                              {unit}
-                            </Chip>
-                          ))}
-                        </ScrollView>
-                      </View>
-                    )}
-
-                    {selectedBuildingCoverage.lastVisited && (
-                      <Text variant="labelSmall" style={[styles.buildingLastVisited, { color: theme.colors.onSurfaceVariant }]}>
-                        Last visited: {new Date(selectedBuildingCoverage.lastVisited).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </Text>
-                    )}
-                  </View>
-                ) : (
                   <View style={styles.buildingDetailRow}>
-                    <Icon name="alert-circle-outline" size={16} color={theme.colors.onSurfaceVariant} />
-                    <Text variant="bodyMedium" style={[styles.buildingDetailText, { color: theme.colors.onSurfaceVariant }]}>
-                      Not yet visited
+                    <Icon name="door" size={16} color={theme.colors.onSurfaceVariant} />
+                    <Text variant="bodyMedium" style={styles.buildingDetailText}>
+                      {isDeclared ? 'Total units: ' : 'Estimated units: '}{effectiveUnits}
                     </Text>
                   </View>
-                )}
-              </View>
-            )}
+
+                  {!isDeclared && selectedBuildingView.building.levels != null && (
+                    <View style={styles.buildingDetailRow}>
+                      <Icon name="stairs" size={16} color={theme.colors.onSurfaceVariant} />
+                      <Text variant="bodyMedium" style={styles.buildingDetailText}>
+                        Levels: {selectedBuildingView.building.levels}
+                      </Text>
+                    </View>
+                  )}
+
+                  {!isDeclared && (
+                    <View style={styles.buildingDetailRow}>
+                      <Icon name="home-variant" size={16} color={theme.colors.onSurfaceVariant} />
+                      <Text variant="bodyMedium" style={styles.buildingDetailText}>
+                        Type: {selectedBuildingView.building.buildingType}
+                      </Text>
+                    </View>
+                  )}
+
+                  {isDeclared && (
+                    <View style={styles.buildingDetailRow}>
+                      <Icon name="account-check" size={16} color="#7c3aed" />
+                      <Text variant="bodyMedium" style={styles.buildingDetailText}>
+                        User-declared building
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={styles.buildingDivider} />
+
+                  {coverage ? (
+                    <View>
+                      <View style={styles.buildingDetailRow}>
+                        <Icon name="clipboard-check" size={16} color="#22c55e" />
+                        <Text variant="bodyMedium" style={styles.buildingDetailText}>
+                          Units visited: {coverage.totalUnitsVisited} / {effectiveUnits}
+                        </Text>
+                      </View>
+
+                      <View style={styles.buildingCoverageBar}>
+                        <View
+                          style={[
+                            styles.buildingCoverageFill,
+                            {
+                              width: `${coveragePercent}%`,
+                              backgroundColor:
+                                coveragePercent >= 75 ? '#22c55e'
+                                  : coveragePercent >= 25 ? '#eab308'
+                                    : '#ef4444',
+                            },
+                          ]}
+                        />
+                      </View>
+
+                      <Text variant="labelSmall" style={[styles.buildingCoveragePercent, { color: theme.colors.onSurfaceVariant }]}>
+                        {coveragePercent}% coverage
+                      </Text>
+
+                      {coverage.uniqueUnits.length > 0 && (
+                        <View style={styles.buildingUnitsVisited}>
+                          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
+                            Units visited:
+                          </Text>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.buildingUnitChips}>
+                            {coverage.uniqueUnits.map(unit => (
+                              <Chip key={unit} compact mode="outlined" textStyle={{ fontSize: 11 }} style={styles.buildingUnitChip}>
+                                {unit}
+                              </Chip>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
+
+                      {coverage.lastVisited && (
+                        <Text variant="labelSmall" style={[styles.buildingLastVisited, { color: theme.colors.onSurfaceVariant }]}>
+                          Last visited: {new Date(coverage.lastVisited).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </Text>
+                      )}
+                    </View>
+                  ) : (
+                    <View style={styles.buildingDetailRow}>
+                      <Icon name="alert-circle-outline" size={16} color={theme.colors.onSurfaceVariant} />
+                      <Text variant="bodyMedium" style={[styles.buildingDetailText, { color: theme.colors.onSurfaceVariant }]}>
+                        Not yet visited
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
           </Dialog.Content>
           <Dialog.Actions style={styles.dialogActions}>
             <Button onPress={() => setBuildingDialogVisible(false)}>Close</Button>
@@ -1023,56 +1125,34 @@ export default function MapScreen() {
             <Text variant="bodyMedium" style={{ marginBottom: 8 }}>
               {longPressDialog.address || 'Loading address...'}
             </Text>
-
-            {/* Multi-dwelling toggle */}
-            <View style={styles.multiDwellingToggleRow}>
-              <Icon name="office-building" size={18} color={theme.colors.onSurfaceVariant} />
-              <Text variant="bodyMedium" style={{ flex: 1, marginLeft: 8, color: theme.colors.onSurface }}>
-                Multi-dwelling
-              </Text>
-              <Switch
-                value={multiDwellingEnabled}
-                onValueChange={setMultiDwellingEnabled}
-                color={theme.colors.primary}
-              />
-            </View>
-
-            {multiDwellingEnabled && (
-              <View style={styles.multiDwellingInputs}>
-                <TextInput
-                  label="Starting unit"
-                  value={multiDwellingStartUnit}
-                  onChangeText={setMultiDwellingStartUnit}
-                  keyboardType="number-pad"
-                  mode="outlined"
-                  dense
-                  style={styles.multiDwellingInput}
-                />
-                <TextInput
-                  label="Number of units"
-                  value={multiDwellingCount}
-                  onChangeText={setMultiDwellingCount}
-                  keyboardType="number-pad"
-                  mode="outlined"
-                  dense
-                  style={styles.multiDwellingInput}
-                />
-              </View>
-            )}
           </Dialog.Content>
           <Dialog.Actions style={styles.dialogActions}>
             <Button onPress={dismissLongPressDialog}>Cancel</Button>
-            {multiDwellingEnabled && (
-              <Button icon="office-building" mode="contained" onPress={handleMultiDwellingCreate}>
-                Create {Math.min(parseInt(multiDwellingCount, 10) || 0, 100)} Units
-              </Button>
-            )}
-            {!multiDwellingEnabled && (
-              <Button icon="note-plus" onPress={() => handleLongPressAction(true)}>Quick Note</Button>
-            )}
-            {!multiDwellingEnabled && (
-              <Button icon="account-plus" mode="contained" onPress={() => handleLongPressAction(false)}>Contact</Button>
-            )}
+            <Button icon="note-plus" onPress={() => handleLongPressAction(true)}>Quick Note</Button>
+            <Button icon="account-plus" mode="contained" onPress={() => handleLongPressAction(false)}>Contact</Button>
+            <Button icon="office-building" onPress={handleLongPressMultiDwelling}>Multi-Dwelling</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog
+          visible={multiDwellingDialog.visible}
+          onDismiss={() => setMultiDwellingDialog(prev => ({ ...prev, visible: false }))}
+          key={`md-${multiDwellingDialog.latitude}-${multiDwellingDialog.longitude}`}
+        >
+          <Dialog.Title>Add Multi-Dwelling</Dialog.Title>
+          <Dialog.ScrollArea>
+            <ScrollView>
+              <MultiDwellingQuickAdd
+                collapsible={false}
+                initialAddress={multiDwellingDialog.address}
+                initialLatitude={multiDwellingDialog.latitude}
+                initialLongitude={multiDwellingDialog.longitude}
+                onCreated={() => setMultiDwellingDialog(prev => ({ ...prev, visible: false }))}
+              />
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => setMultiDwellingDialog(prev => ({ ...prev, visible: false }))}>Close</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -1299,22 +1379,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-
-  // Multi-dwelling
-  multiDwellingToggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    paddingVertical: 4,
-  },
-  multiDwellingInputs: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  multiDwellingInput: {
-    flex: 1,
-  },
 
   // FAB
   mainFab: {
