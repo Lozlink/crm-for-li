@@ -16,7 +16,7 @@ import {
 import type { Route } from '@realestate-crm/types';
 import type { TrackingSession } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { MultiDwellingQuickAdd } from '@realestate-crm/ui';
+import { BuildingActivityDialog } from '@realestate-crm/ui';
 import { TIER_COLORS } from '../../components/LeadScoreBadge';
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -83,6 +83,7 @@ export default function ProspectingScreen() {
   const [view, setView] = useState<ViewMode>('daily');
   const [refreshing, setRefreshing] = useState(false);
   const [isStartingTracking, setIsStartingTracking] = useState(false);
+  const [buildingDialogVisible, setBuildingDialogVisible] = useState(false);
 
   const fetchSessions = useTrackingStore(s => s.fetchSessions);
   const fetchAllAnnotations = useTrackingStore(s => s.fetchAllAnnotations);
@@ -954,6 +955,7 @@ function TerritoryView({
   suburbStatsLoading: boolean;
 }) {
   const theme = useTheme();
+  const [buildingDialogVisible, setBuildingDialogVisible] = useState(false);
 
   // 12-week trend bar chart
   const maxTrendValue = Math.max(...metrics.monthlyDoorsTrend.map(p => p.value), 1);
@@ -1144,7 +1146,36 @@ function TerritoryView({
       )}
 
       {/* Multi-Dwelling Quick Add */}
-      <MultiDwellingQuickAdd />
+      <Surface style={[styles.card, { backgroundColor: theme.colors.surface }]} elevation={1}>
+        <View style={styles.cardInner}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Icon name="office-building-marker" size={18} color={theme.colors.primary} />
+            <Text variant="titleSmall" style={{ fontWeight: '700', flex: 1 }}>
+              Quick Add Multi-Dwelling
+            </Text>
+          </View>
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
+            Declare a building and bulk-create unit contacts.
+          </Text>
+          <Button
+            mode="contained"
+            icon="office-building-plus"
+            onPress={() => setBuildingDialogVisible(true)}
+          >
+            Add multi-dwelling building
+          </Button>
+        </View>
+      </Surface>
+
+      <BuildingActivityDialog
+        visible={buildingDialogVisible}
+        onDismiss={() => setBuildingDialogVisible(false)}
+        initialAddress=""
+        initialLatitude={null}
+        initialLongitude={null}
+        sessionId={null}
+        initialMode="declare"
+      />
 
       {/* 12-Week Trend */}
       <Surface style={[styles.card, { backgroundColor: theme.colors.surface }]} elevation={1}>

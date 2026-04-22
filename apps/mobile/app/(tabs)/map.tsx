@@ -12,7 +12,7 @@ import type { MultiDwellingBuilding, NearbyContact } from '@realestate-crm/hooks
 import type { Contact, Property, ActivityWithContact, ContactRequirement, OSMBuilding, DeclaredBuilding } from '@realestate-crm/types';
 import { fetchSuburbByName, decodePolyline, fetchMultiDwellingBuildings } from '@realestate-crm/api';
 import type { SuburbBoundary } from '@realestate-crm/types';
-import { FilterSheet, ContactPreview, MapSearchBar, PropertyPreview, MultiDwellingQuickAdd } from '@realestate-crm/ui';
+import { FilterSheet, ContactPreview, MapSearchBar, PropertyPreview, BuildingActivityDialog } from '@realestate-crm/ui';
 import TerritoryBriefingCard from '../../components/TerritoryBriefingCard';
 import { TIER_COLORS } from '../../components/LeadScoreBadge';
 
@@ -1134,27 +1134,15 @@ export default function MapScreen() {
           </Dialog.Actions>
         </Dialog>
 
-        <Dialog
+        <BuildingActivityDialog
           visible={multiDwellingDialog.visible}
           onDismiss={() => setMultiDwellingDialog(prev => ({ ...prev, visible: false }))}
-          key={`md-${multiDwellingDialog.latitude}-${multiDwellingDialog.longitude}`}
-        >
-          <Dialog.Title>Add Multi-Dwelling</Dialog.Title>
-          <Dialog.ScrollArea>
-            <ScrollView>
-              <MultiDwellingQuickAdd
-                collapsible={false}
-                initialAddress={multiDwellingDialog.address}
-                initialLatitude={multiDwellingDialog.latitude}
-                initialLongitude={multiDwellingDialog.longitude}
-                onCreated={() => setMultiDwellingDialog(prev => ({ ...prev, visible: false }))}
-              />
-            </ScrollView>
-          </Dialog.ScrollArea>
-          <Dialog.Actions>
-            <Button onPress={() => setMultiDwellingDialog(prev => ({ ...prev, visible: false }))}>Close</Button>
-          </Dialog.Actions>
-        </Dialog>
+          initialAddress={multiDwellingDialog.address}
+          initialLatitude={multiDwellingDialog.latitude}
+          initialLongitude={multiDwellingDialog.longitude}
+          sessionId={null}
+          initialMode="declare"
+        />
       </Portal>
 
       <TerritoryBriefingCard

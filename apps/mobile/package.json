@@ -9,7 +9,7 @@
     "ios": "dotenvx run --env-file=.env -- expo run:ios",
     "build": "dotenvx run --env-file=.env -- expo export --platform ios --platform android",
     "build:dev": "NODE_OPTIONS=--no-experimental-strip-types eas build --profile development --platform all",
-    "build:preview": "NODE_OPTIONS=--no-experimental-strip-types eas build --profile preview --platform all",
+    "build:preview": "NODE_OPTIONS=--no-experimental-strip-types eas build --profile preview --platform android",
     "build:production": "NODE_OPTIONS=--no-experimental-strip-types eas build --profile production --platform all",
     "build:ios": "NODE_OPTIONS=--no-experimental-strip-types eas build --profile production --platform ios",
     "build:android": "NODE_OPTIONS=--no-experimental-strip-types eas build --profile production --platform android",

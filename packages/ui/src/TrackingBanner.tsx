@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Button, Dialog, Portal, Surface, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Dialog, Portal, Surface, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
@@ -14,6 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCRMStore, useTrackingStore } from '@realestate-crm/hooks';
 import type { Contact } from '@realestate-crm/types';
 import DropNoteDialog from './DropNoteDialog';
+import BuildingActivityDialog from './BuildingActivityDialog';
 
 /** Radius in meters for "nearby contacts" count */
 const NEARBY_RADIUS_M = 200;
@@ -62,15 +63,13 @@ export default function TrackingBanner() {
   const [elapsed, setElapsed] = useState('00:00');
   const [stopping, setStopping] = useState(false);
   const [noteDialogVisible, setNoteDialogVisible] = useState(false);
-  const [buildingDialogVisible, setBuildingDialogVisible] = useState(false);
-  const [buildingUnits, setBuildingUnits] = useState('4');
-  const [buildingAddress, setBuildingAddress] = useState('');
+  const [logUnitsDialogVisible, setLogUnitsDialogVisible] = useState(false);
+  const [nearbySheetVisible, setNearbySheetVisible] = useState(false);
   const [currentPosition, setCurrentPosition] = useState<{
     latitude: number;
     longitude: number;
   } | null>(null);
 
-  // Pulsing red dot animation
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -92,7 +91,6 @@ export default function TrackingBanner() {
     return () => pulse.stop();
   }, [pulseAnim]);
 
-  // Elapsed time timer
   useEffect(() => {
     if (!activeSession) return;
     setElapsed(formatElapsed(activeSession.started_at));
@@ -102,7 +100,6 @@ export default function TrackingBanner() {
     return () => clearInterval(interval);
   }, [activeSession]);
 
-  // Fetch current position periodically for nearby contacts
   useEffect(() => {
     if (!activeSession) return;
 
@@ -131,8 +128,6 @@ export default function TrackingBanner() {
       clearInterval(interval);
     };
   }, [activeSession]);
-
-  const [nearbySheetVisible, setNearbySheetVisible] = useState(false);
 
   const nearbyContacts = useMemo(() => {
     if (!currentPosition) return [];
@@ -186,31 +181,8 @@ export default function TrackingBanner() {
     router.push('/(tabs)/prospecting' as never);
   }, [router]);
 
-  const handleLogBuilding = useCallback(async () => {
-    if (!activeSession || !currentPosition) return;
-    const units = parseInt(buildingUnits, 10);
-    if (isNaN(units) || units < 1) return;
-
-    const address = buildingAddress.trim() || 'Unknown address';
-    const createAnnotation = useTrackingStore.getState().createAnnotation;
-
-    // Structured annotation format: parseable by scoring engine for persistent coverage tracking
-    // Format: 🏢 BUILDING_COVERAGE|address|units_visited|total_units
-    await createAnnotation({
-      session_id: activeSession.id,
-      latitude: currentPosition.latitude,
-      longitude: currentPosition.longitude,
-      note: `🏢 BUILDING_COVERAGE|${address}|${units}|${units}`,
-    });
-
-    setBuildingDialogVisible(false);
-    setBuildingUnits('4');
-    setBuildingAddress('');
-  }, [activeSession, currentPosition, buildingUnits, buildingAddress]);
-
   if (!activeSession) return null;
 
-  // Tab bar height ~49 + safe area bottom
   const bottomOffset = 49 + insets.bottom;
 
   return (
@@ -225,7 +197,6 @@ export default function TrackingBanner() {
         ]}
         elevation={3}
       >
-        {/* Collapsed row - always visible */}
         <TouchableOpacity
           style={styles.collapsedRow}
           onPress={handleToggleExpand}
@@ -272,7 +243,6 @@ export default function TrackingBanner() {
           </View>
         </TouchableOpacity>
 
-        {/* Expanded row - action buttons */}
         {expanded && (
           <View style={styles.expandedRow}>
             <TouchableOpacity
@@ -316,11 +286,11 @@ export default function TrackingBanner() {
 
             <TouchableOpacity
               style={[styles.expandedButton, { backgroundColor: theme.colors.surface }]}
-              onPress={() => setBuildingDialogVisible(true)}
+              onPress={() => setLogUnitsDialogVisible(true)}
               activeOpacity={0.7}
             >
               <Icon
-                name="office-building-outline"
+                name="office-building-marker"
                 size={20}
                 color={theme.colors.primary}
               />
@@ -329,7 +299,7 @@ export default function TrackingBanner() {
                 style={{ color: theme.colors.onSurface }}
                 numberOfLines={1}
               >
-                Log Building
+                Building
               </Text>
             </TouchableOpacity>
 
@@ -359,6 +329,16 @@ export default function TrackingBanner() {
         visible={noteDialogVisible}
         onDismiss={() => setNoteDialogVisible(false)}
         sessionId={activeSession.id}
+      />
+
+      <BuildingActivityDialog
+        visible={logUnitsDialogVisible}
+        onDismiss={() => setLogUnitsDialogVisible(false)}
+        initialAddress=""
+        initialLatitude={currentPosition?.latitude ?? null}
+        initialLongitude={currentPosition?.longitude ?? null}
+        sessionId={activeSession.id}
+        initialMode="log_visits"
       />
 
       <Portal>
@@ -397,35 +377,6 @@ export default function TrackingBanner() {
           </Dialog.ScrollArea>
           <Dialog.Actions>
             <Button onPress={() => setNearbySheetVisible(false)}>Close</Button>
-          </Dialog.Actions>
-        </Dialog>
-
-        {/* Building coverage dialog */}
-        <Dialog visible={buildingDialogVisible} onDismiss={() => setBuildingDialogVisible(false)}>
-          <Dialog.Title>Log Building Coverage</Dialog.Title>
-          <Dialog.Content>
-            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 16 }}>
-              Record how many units you knocked at this building. No contacts will be created.
-            </Text>
-            <TextInput
-              label="Address"
-              value={buildingAddress}
-              onChangeText={setBuildingAddress}
-              placeholder="e.g. 42 Smith Street"
-              mode="outlined"
-              style={{ marginBottom: 12 }}
-            />
-            <TextInput
-              label="Units knocked"
-              value={buildingUnits}
-              onChangeText={setBuildingUnits}
-              keyboardType="number-pad"
-              mode="outlined"
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setBuildingDialogVisible(false)}>Cancel</Button>
-            <Button mode="contained" onPress={handleLogBuilding}>Log</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

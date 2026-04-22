@@ -653,7 +653,7 @@ function computeMultiDwellingBuildings(
         lastVisited,
         latitude: declared.latitude,
         longitude: declared.longitude,
-        estimatedUnits: declared.estimated_units,
+        estimatedUnits: Math.max(declared.estimated_units, combinedUnits.size),
         source: 'both',
         declaredBuildingId: declared.id,
       });
@@ -665,7 +665,7 @@ function computeMultiDwellingBuildings(
         lastVisited: contactLastCreated,
         latitude: declared.latitude,
         longitude: declared.longitude,
-        estimatedUnits: declared.estimated_units,
+        estimatedUnits: Math.max(declared.estimated_units, contactUnits.size),
         source: 'declared',
         declaredBuildingId: declared.id,
       });
