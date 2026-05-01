@@ -26,11 +26,11 @@ android {
     abortOnError false
   }
 
-  publishing {
-    singleVariant('release') {
-      withSourcesJar()
-    }
-  }
+  // NOTE: do NOT add a `publishing { singleVariant('release') {...} }` block here.
+  // `useExpoPublishing()` (called above via applyKotlinExpoModulesCorePlugin) already
+  // configures the release variant for publishing. Declaring it again throws:
+  //   "Using singleVariant publishing DSL multiple times to publish variant 'release'
+  //    to component 'release' is not allowed."
 }
 
 dependencies {
