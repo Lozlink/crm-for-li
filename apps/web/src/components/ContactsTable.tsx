@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCRMStore, useSavedSearchStore } from '@realestate-crm/hooks';
+import { useCRMStore, useSavedSearchStore, useLeadScoringEngine } from '@realestate-crm/hooks';
 import { parseContactNameField } from '@realestate-crm/utils';
 import type { ParsedContactName } from '@realestate-crm/utils';
 import type {
@@ -11,10 +11,12 @@ import type {
   ContactSource,
   ContactType,
   ContactStatus,
+  LeadTier,
 } from '@realestate-crm/types';
 import ContactFormDialog from './ContactFormDialog';
 import CSVImport from './CSVImport';
 import TagManager from './TagManager';
+import LeadScoreBadge from './LeadScoreBadge';
 
 type SortField = 'name' | 'email' | 'address' | 'created_at' | 'source' | 'status' | 'contact_type' | 'last_contacted_at';
 type SortDir = 'asc' | 'desc';
@@ -49,6 +51,7 @@ export default function ContactsTable() {
   const deleteContact = useCRMStore((s) => s.deleteContact);
   const bulkDeleteContacts = useCRMStore((s) => s.bulkDeleteContacts);
   const updateContact = useCRMStore((s) => s.updateContact);
+  const { getScore, getTier } = useLeadScoringEngine();
   const router = useRouter();
 
   // Multi-select state
@@ -745,6 +748,9 @@ export default function ContactsTable() {
                 onSort={handleSort}
               />
               <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">
+                Score
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">
                 Tag
               </th>
               <SortHeader
@@ -763,7 +769,7 @@ export default function ContactsTable() {
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={11}
                   className="py-12 text-center text-sm text-gray-400"
                 >
                   {contacts.length === 0
@@ -772,25 +778,30 @@ export default function ContactsTable() {
                 </td>
               </tr>
             ) : (
-              filtered.map((contact) => (
-                <ContactRow
-                  key={contact.id}
-                  contact={contact}
-                  isSelected={selectedIds.has(contact.id)}
-                  onToggleSelect={() => toggleSelect(contact.id)}
-                  onEdit={() => {
-                    setEditingContact(contact);
-                    setShowForm(true);
-                  }}
-                  onDelete={() =>
-                    handleDelete(
-                      contact.id,
-                      `${contact.first_name || ''} ${contact.last_name || ''}`.trim()
-                    )
-                  }
-                  onClick={() => router.push(`/contacts/${contact.id}`)}
-                />
-              ))
+              filtered.map((contact) => {
+                const score = getScore(contact.id);
+                return (
+                  <ContactRow
+                    key={contact.id}
+                    contact={contact}
+                    score={score?.total ?? null}
+                    tier={getTier(contact.id)}
+                    isSelected={selectedIds.has(contact.id)}
+                    onToggleSelect={() => toggleSelect(contact.id)}
+                    onEdit={() => {
+                      setEditingContact(contact);
+                      setShowForm(true);
+                    }}
+                    onDelete={() =>
+                      handleDelete(
+                        contact.id,
+                        `${contact.first_name || ''} ${contact.last_name || ''}`.trim()
+                      )
+                    }
+                    onClick={() => router.push(`/contacts/${contact.id}`)}
+                  />
+                );
+              })
             )}
           </tbody>
         </table>
@@ -932,6 +943,8 @@ const TYPE_COLORS: Record<string, string> = {
 
 function ContactRow({
   contact,
+  score,
+  tier,
   isSelected,
   onToggleSelect,
   onEdit,
@@ -939,6 +952,8 @@ function ContactRow({
   onClick,
 }: {
   contact: Contact;
+  score: number | null;
+  tier: LeadTier;
   isSelected: boolean;
   onToggleSelect: () => void;
   onEdit: () => void;
@@ -1015,6 +1030,13 @@ function ContactRow({
           <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${STATUS_COLORS[contact.status] || 'bg-gray-100 text-gray-600'}`}>
             {contact.status}
           </span>
+        ) : (
+          <span className="text-sm text-gray-400">-</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        {score !== null ? (
+          <LeadScoreBadge score={score} tier={tier} />
         ) : (
           <span className="text-sm text-gray-400">-</span>
         )}

@@ -36,9 +36,10 @@ export type {
   ProspectingOutcome, GuidedStop,
 } from './entities';
 export type {
-  SmsCampaign, SmsMessage, SmsOptOut,
+  SmsCampaign, SmsMessage, SmsOptOut, SmsTemplate, SmsLabel,
   SmsCampaignStatus, SmsMessageStatus,
 } from './entities';
+export { SMS_LABEL_SEEDS } from './entities';
 
 // Map types
 export type { MapRegion, SavedSuburb, SuburbBoundary, OSMBuilding } from './map';

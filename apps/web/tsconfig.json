@@ -38,6 +38,12 @@
       ],
       "react-native-url-polyfill/auto": [
         "./src/shims/url-polyfill.ts"
+      ],
+      "caller-id": [
+        "./src/shims/caller-id-module.ts"
+      ],
+      "caller-id/src/CallerIdModule": [
+        "./src/shims/caller-id-module.ts"
       ]
     }
   },

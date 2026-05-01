@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+    Permissions required by the CallerIdModule native bridge:
+    - SEND_SMS:        sendDirectSms() uses SmsManager.sendTextMessage to send
+                       silently in-app (no native messaging app launch). Without
+                       this permission the JS will fall through to expo-sms which
+                       opens the system messaging app.
+    - READ_CALL_LOG:   getRecentCalls() reads from CallLog.Calls.
+    - READ_PHONE_STATE: paired with READ_CALL_LOG for some OEMs / older versions.
+    - POST_NOTIFICATIONS: enabled inside enableCallerId() via the runtime request
+                         flow; declared here so the runtime request can succeed.
+  -->
+  <uses-permission android:name="android.permission.SEND_SMS" />
+  <uses-permission android:name="android.permission.READ_CALL_LOG" />
+  <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+</manifest>

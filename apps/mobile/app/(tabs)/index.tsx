@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { useTheme, Text, Surface, ProgressBar } from 'react-native-paper';
 import { useRouter } from 'expo-router';
@@ -92,16 +92,24 @@ export default function TodayScreen() {
   const fetchSessions = useTrackingStore(s => s.fetchSessions);
   const startSession = useTrackingStore(s => s.startSession);
 
+  // Staleness guard: skip re-fetching on every focus if data is less than 30 s old.
+  // Pull-to-refresh resets the timer so manual overrides always go through.
+  const lastFetchAt = useRef<number>(0);
+
   // Pull-to-refresh
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = useCallback(async () => {
+    lastFetchAt.current = 0; // force re-fetch on next focus too
     setRefreshing(true);
     await Promise.all([fetchTasks(), fetchProperties(), fetchContacts(), fetchInspections(), fetchSessions()]);
+    lastFetchAt.current = Date.now();
     setRefreshing(false);
   }, [fetchTasks, fetchProperties, fetchContacts, fetchInspections, fetchSessions]);
 
   useFocusEffect(
     useCallback(() => {
+      if (Date.now() - lastFetchAt.current < 30_000) return;
+      lastFetchAt.current = Date.now();
       fetchTasks();
       fetchProperties();
       fetchContacts();

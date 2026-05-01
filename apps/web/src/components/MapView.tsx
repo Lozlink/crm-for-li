@@ -4,7 +4,7 @@ import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useCRMStore } from '@realestate-crm/hooks';
+import { useCRMStore, useDeclaredBuildingsStore } from '@realestate-crm/hooks';
 import { fetchSuburbByName } from '@realestate-crm/api';
 import type { Contact, SuburbBoundary } from '@realestate-crm/types';
 import type { GoogleMapHandle } from './GoogleMap';
@@ -22,7 +22,18 @@ export default function MapView() {
   const mapRegion = useCRMStore((s) => s.mapRegion);
   const setMapRegion = useCRMStore((s) => s.setMapRegion);
   const addActivity = useCRMStore((s) => s.addActivity);
+  const declaredBuildings = useDeclaredBuildingsStore((s) => s.declaredBuildings);
+  const upsertDeclaredBuilding = useDeclaredBuildingsStore((s) => s.upsertDeclaredBuilding);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [showBuildings, setShowBuildings] = useState(true);
+  const [declareBuildingDialog, setDeclareBuildingDialog] = useState<{
+    visible: boolean;
+    lat: number;
+    lng: number;
+    address: string;
+  }>({ visible: false, lat: 0, lng: 0, address: '' });
+  const [declareBuildingUnits, setDeclareBuildingUnits] = useState('');
+  const [declareBuildingSaving, setDeclareBuildingSaving] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [suburbBoundary, setSuburbBoundary] = useState<SuburbBoundary | null>(null);
   const [showContactForm, setShowContactForm] = useState(false);
@@ -240,6 +251,45 @@ export default function MapView() {
     setContextMenuCoords(null);
   };
 
+  const handleContextMenuDeclareBuilding = () => {
+    if (contextMenuCoords) {
+      setDeclareBuildingDialog({
+        visible: true,
+        lat: contextMenuCoords.lat,
+        lng: contextMenuCoords.lng,
+        address: contextMenuCoords.address,
+      });
+      setDeclareBuildingUnits('');
+    }
+    setContextMenuCoords(null);
+  };
+
+  const handleDeclareBuildingSubmit = useCallback(async () => {
+    const units = parseInt(declareBuildingUnits, 10);
+    if (!Number.isFinite(units) || units <= 0) return;
+    if (!declareBuildingDialog.address.trim()) return;
+    setDeclareBuildingSaving(true);
+    try {
+      await upsertDeclaredBuilding({
+        address: declareBuildingDialog.address.trim(),
+        latitude: declareBuildingDialog.lat,
+        longitude: declareBuildingDialog.lng,
+        estimatedUnits: units,
+      });
+      setDeclareBuildingDialog((prev) => ({ ...prev, visible: false }));
+      setPendingMarker(null);
+    } catch (err) {
+      console.error('Declare building error:', err);
+    } finally {
+      setDeclareBuildingSaving(false);
+    }
+  }, [declareBuildingUnits, declareBuildingDialog, upsertDeclaredBuilding]);
+
+  const dismissDeclareBuildingDialog = () => {
+    setDeclareBuildingDialog((prev) => ({ ...prev, visible: false }));
+    setPendingMarker(null);
+  };
+
   const dismissContextMenu = () => {
     setContextMenuCoords(null);
     setPendingMarker(null);
@@ -338,6 +388,22 @@ export default function MapView() {
             : `${totalMappedContacts} contacts with location`}
         </span>
         <div className="flex-1" />
+        <button
+          onClick={() => setShowBuildings((v) => !v)}
+          className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+            showBuildings
+              ? 'border-amber-500 bg-amber-50 text-amber-700'
+              : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+          }`}
+          title="Toggle declared building circles"
+        >
+          Buildings
+          {declaredBuildings.length > 0 && (
+            <span className={`ml-1 ${showBuildings ? 'opacity-80' : 'text-gray-400'}`}>
+              {declaredBuildings.length}
+            </span>
+          )}
+        </button>
         <div className="flex flex-wrap gap-1.5">
           {tags.map((tag) => {
             const count = tagContactCounts[tag.id] || 0;
@@ -390,6 +456,7 @@ export default function MapView() {
             suburbBoundary={suburbBoundary}
             userLocation={userLocation}
             pendingMarker={pendingMarker}
+            declaredBuildings={showBuildings ? declaredBuildings : []}
             onSelectContact={setSelectedContact}
             onRegionChange={handleRegionChange}
             onContextMenu={handleContextMenu}
@@ -485,6 +552,15 @@ export default function MapView() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                     </svg>
                     Quick Note
+                  </button>
+                  <button
+                    onClick={handleContextMenuDeclareBuilding}
+                    className="flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-600"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+                    </svg>
+                    Declare Building
                   </button>
                   <button
                     onClick={handleContextMenuNewContact}
@@ -620,6 +696,71 @@ export default function MapView() {
             setPendingMarker(null);
           }}
         />
+      )}
+
+      {/* Declare Building dialog */}
+      {declareBuildingDialog.visible && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
+          <div className="mx-4 w-full max-w-md rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Declare Building</h2>
+              <button
+                onClick={dismissDeclareBuildingDialog}
+                className="rounded p-1 text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              {declareBuildingDialog.address && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg bg-gray-50 p-3">
+                  <svg className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                  </svg>
+                  <p className="text-xs text-gray-600">{declareBuildingDialog.address}</p>
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Estimated total units
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={declareBuildingUnits}
+                  onChange={(e) => setDeclareBuildingUnits(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  placeholder="e.g. 24"
+                  autoFocus
+                />
+                <p className="mt-2 text-xs text-gray-400">
+                  Used as the coverage denominator (visited / total). Re-declaring with a higher
+                  number won&apos;t lose data; the larger value is kept.
+                </p>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={dismissDeclareBuildingDialog}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeclareBuildingSubmit}
+                  disabled={declareBuildingSaving || !declareBuildingUnits.trim()}
+                  className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
+                >
+                  {declareBuildingSaving ? 'Saving...' : 'Declare'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Quick Note dialog */}

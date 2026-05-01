@@ -42,10 +42,13 @@ function extractSuburb(address: string): string {
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
 const CONVERSION_STATUSES = new Set(['available', 'under_offer', 'exchanged', 'settled']);
 
-export function useStreetStats(): {
+export function useStreetStats(options?: { enabled?: boolean }): {
   streets: StreetStats[];
   getBriefing: (streetKey: string) => TerritoryBriefing | null;
 } {
+  // Default to enabled to preserve existing call-site behavior. Pass `enabled: false`
+  // (e.g. when the heatmap layer is off) to skip the O(n*m) compute below.
+  const enabled = options?.enabled !== false;
   const contacts = useCRMStore(state => state.contacts);
   const recentActivities = useCRMStore(state => state.activities);
   const soldRecords = useDataEnrichmentStore(state => state.soldRecords);
@@ -101,6 +104,9 @@ export function useStreetStats(): {
   }, [soldRecords]);
 
   const streets = useMemo(() => {
+    // Skip the O(n*m) compute when disabled (e.g. heatmap layer off).
+    if (!enabled) return [] as StreetStats[];
+
     // Group contacts by street
     const streetMap = new Map<string, {
       contacts: Contact[];
@@ -227,7 +233,7 @@ export function useStreetStats(): {
     stats.sort((a, b) => (b.opportunityScore ?? 0) - (a.opportunityScore ?? 0));
 
     return stats;
-  }, [contacts, recentActivities, recentSoldWithCoords, suburbStatsMap, suburbContactCounts, streetConversionMap]);
+  }, [enabled, contacts, recentActivities, recentSoldWithCoords, suburbStatsMap, suburbContactCounts, streetConversionMap]);
 
   const getBriefing = useCallback((streetKey: string): TerritoryBriefing | null => {
     // streetKey can be "StreetName|Suburb" or just suburb name

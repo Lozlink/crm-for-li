@@ -8,7 +8,9 @@
       "@realestate-crm/hooks": ["../../packages/hooks/src"],
       "@realestate-crm/utils": ["../../packages/utils/src"],
       "@realestate-crm/types": ["../../packages/types/src"],
-      "@realestate-crm/config": ["../../packages/config/src"]
+      "@realestate-crm/config": ["../../packages/config/src"],
+      "caller-id/src/CallerIdModule": ["../../modules/caller-id/src/CallerIdModule.ts"],
+      "caller-id": ["../../modules/caller-id/src/index.ts"]
     }
   }
 }

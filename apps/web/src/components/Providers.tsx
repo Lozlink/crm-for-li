@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useAuthStore, useCRMStore } from '@realestate-crm/hooks';
+import { useAuthStore, useCRMStore, useDeclaredBuildingsStore } from '@realestate-crm/hooks';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const initialize = useAuthStore((s) => s.initialize);
@@ -15,6 +15,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const fetchTags = useCRMStore((s) => s.fetchTags);
   const clearData = useCRMStore((s) => s.clearData);
 
+  const fetchDeclaredBuildings = useDeclaredBuildingsStore((s) => s.fetchDeclaredBuildings);
+  const clearDeclaredBuildings = useDeclaredBuildingsStore((s) => s.clearData);
+
   const [dataLoaded, setDataLoaded] = useState(false);
   const prevTeamIdRef = useRef<string | undefined>(undefined);
 
@@ -27,9 +30,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isLoading && !isAuthenticated && !isDemoMode) {
       clearData();
+      clearDeclaredBuildings();
       setDataLoaded(false);
     }
-  }, [isAuthenticated, isDemoMode, isLoading, clearData]);
+  }, [isAuthenticated, isDemoMode, isLoading, clearData, clearDeclaredBuildings]);
 
   // Load CRM data once auth + team are resolved
   useEffect(() => {
@@ -39,11 +43,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
         await hydrate();
         await fetchTags();
         await fetchContacts();
+        await fetchDeclaredBuildings();
         setDataLoaded(true);
       };
       loadData();
     }
-  }, [isDemoMode, isAuthenticated, activeTeam, dataLoaded, hydrate, fetchTags, fetchContacts]);
+  }, [isDemoMode, isAuthenticated, activeTeam, dataLoaded, hydrate, fetchTags, fetchContacts, fetchDeclaredBuildings]);
 
   // Reset data when active team changes
   useEffect(() => {

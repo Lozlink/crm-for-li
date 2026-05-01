@@ -17,9 +17,12 @@ try { CallerIdModule = require('caller-id').default; } catch { /* Expo Go / web 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { useCRMStore, useSavedSearchStore, useLeadScoringEngine } from '@realestate-crm/hooks';
+import { useCRMStore, useSavedSearchStore, useLeadScoringEngine, useSmsTemplateStore } from '@realestate-crm/hooks';
 import { ContactCard } from '@realestate-crm/ui';
 import type { Contact, ContactSource, ContactType, ContactStatus } from '@realestate-crm/types';
+
+const DEFAULT_BULK_SMS_MESSAGE =
+  'Hi {name}, just touching base. Would love to catch up when you have a moment.';
 
 const SOURCE_OPTIONS: { label: string; value: ContactSource }[] = [
   { label: 'Referral', value: 'referral' },
@@ -185,6 +188,22 @@ export default function ContactsScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Bulk SMS state
+  // Default seed for the bulk SMS message — used only when there's no preserved draft.
+  // Hoisted so the open + close handlers compare against the same value.
+
+  // SMS templates / labels (sibling entities — labels live in their own store slice)
+  const smsTemplates = useSmsTemplateStore((s) => s.templates);
+  const smsLabels = useSmsTemplateStore((s) => s.labels);
+  const fetchSmsAll = useSmsTemplateStore((s) => s.fetchAll);
+  const createSmsTemplate = useSmsTemplateStore((s) => s.createTemplate);
+
+  // Selected label filter (null = all). Save-as-template dialog state.
+  const [smsLabelFilter, setSmsLabelFilter] = useState<string | null>(null);
+  const [saveTemplateVisible, setSaveTemplateVisible] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState('');
+  const [saveTemplateLabelIds, setSaveTemplateLabelIds] = useState<Set<string>>(new Set());
+  const [saveTemplateBusy, setSaveTemplateBusy] = useState(false);
+
   const [bulkSmsModalVisible, setBulkSmsModalVisible] = useState(false);
   const [bulkSmsMessage, setBulkSmsMessage] = useState('');
   const [bulkSmsCurrentIndex, setBulkSmsCurrentIndex] = useState(0);
@@ -338,13 +357,62 @@ export default function ContactsScreen() {
 
   const handleOpenBulkSms = useCallback(() => {
     if (bulkSmsEligibleContacts.length === 0) return;
-    setBulkSmsMessage('Hi {name}, just touching base. Would love to catch up when you have a moment.');
+    // Only seed the default message when there's no draft to preserve — protects
+    // users who closed the modal mid-edit. (User feedback: "lol fk I lost my message".)
+    setBulkSmsMessage((curr) => (curr.trim() ? curr : DEFAULT_BULK_SMS_MESSAGE));
     setBulkSmsPhase('compose');
     setBulkSmsCurrentIndex(0);
     setBulkSmsSentCount(0);
     setBulkSmsSkippedCount(0);
+    setSmsLabelFilter(null);
     setBulkSmsModalVisible(true);
-  }, [bulkSmsEligibleContacts]);
+    // Lazy-fetch templates the first time the modal opens
+    if (smsTemplates.length === 0) {
+      fetchSmsAll();
+    }
+  }, [bulkSmsEligibleContacts, smsTemplates.length, fetchSmsAll]);
+
+  const filteredSmsTemplates = useMemo(() => {
+    if (!smsLabelFilter) return smsTemplates;
+    return smsTemplates.filter((t) => (t.labels || []).some((l) => l.id === smsLabelFilter));
+  }, [smsTemplates, smsLabelFilter]);
+
+  const handleApplyTemplate = useCallback((message: string) => {
+    setBulkSmsMessage(message);
+  }, []);
+
+  const handleOpenSaveTemplate = useCallback(() => {
+    if (!bulkSmsMessage.trim()) return;
+    setSaveTemplateName('');
+    setSaveTemplateLabelIds(new Set());
+    setSaveTemplateVisible(true);
+  }, [bulkSmsMessage]);
+
+  const handleSaveTemplate = useCallback(async () => {
+    if (!saveTemplateName.trim() || !bulkSmsMessage.trim()) return;
+    setSaveTemplateBusy(true);
+    try {
+      await createSmsTemplate({
+        name: saveTemplateName.trim(),
+        message: bulkSmsMessage,
+        labelIds: Array.from(saveTemplateLabelIds),
+      });
+      setSaveTemplateVisible(false);
+      setSaveTemplateName('');
+      setSaveTemplateLabelIds(new Set());
+    } finally {
+      setSaveTemplateBusy(false);
+    }
+  }, [saveTemplateName, bulkSmsMessage, saveTemplateLabelIds, createSmsTemplate]);
+
+  const toggleSaveLabelId = useCallback((id: string) => {
+    setSaveTemplateLabelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   // Auto-send ref: triggers sendSMSAsync automatically when index advances
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -467,10 +535,36 @@ export default function ContactsScreen() {
     };
   }, [bulkSmsPhase, bulkSmsCurrentIndex, currentBulkContact, handleSendCurrentContactSms]);
 
-  const handleCloseBulkSms = useCallback(() => {
+  const closeBulkSmsModalNow = useCallback((opts?: { clearDraft?: boolean }) => {
     setBulkSmsModalVisible(false);
+    if (opts?.clearDraft) setBulkSmsMessage('');
     exitSelectMode();
   }, [exitSelectMode]);
+
+  const handleCloseBulkSms = useCallback(() => {
+    // In compose phase with a non-trivial draft (user-edited away from the seed) — confirm.
+    // (User feedback: "lol fk I lost my message".)
+    const trimmed = bulkSmsMessage.trim();
+    const isDirty =
+      bulkSmsPhase === 'compose' &&
+      trimmed.length > 0 &&
+      trimmed !== DEFAULT_BULK_SMS_MESSAGE.trim();
+
+    if (!isDirty) {
+      closeBulkSmsModalNow();
+      return;
+    }
+
+    Alert.alert(
+      'Discard message?',
+      'Your drafted message will be lost.',
+      [
+        { text: 'Keep editing', style: 'cancel' },
+        { text: 'Save & close', onPress: () => closeBulkSmsModalNow() }, // preserves draft for next open
+        { text: 'Discard', style: 'destructive', onPress: () => closeBulkSmsModalNow({ clearDraft: true }) },
+      ],
+    );
+  }, [bulkSmsMessage, bulkSmsPhase, closeBulkSmsModalNow]);
 
   const handleContactPress = useCallback((contact: Contact) => {
     if (selectMode) {
@@ -941,6 +1035,59 @@ export default function ContactsScreen() {
         </Dialog>
       </Portal>
 
+      {/* Save SMS Template Dialog */}
+      <Portal>
+        <Dialog visible={saveTemplateVisible} onDismiss={() => setSaveTemplateVisible(false)}>
+          <Dialog.Title>Save as template</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Template name"
+              value={saveTemplateName}
+              onChangeText={setSaveTemplateName}
+              mode="outlined"
+              dense
+              autoFocus
+              placeholder="e.g. Open Home Saturday"
+            />
+            {smsLabels.length > 0 && (
+              <View style={{ marginTop: 12 }}>
+                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 6 }}>
+                  Labels (optional — select any that fit)
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {smsLabels.map((label) => {
+                    const selected = saveTemplateLabelIds.has(label.id);
+                    return (
+                      <Chip
+                        key={label.id}
+                        compact
+                        selected={selected}
+                        onPress={() => toggleSaveLabelId(label.id)}
+                        style={selected ? { backgroundColor: `${label.color}33` } : undefined}
+                        textStyle={selected ? { color: label.color } : undefined}
+                      >
+                        {label.name}
+                      </Chip>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setSaveTemplateVisible(false)}>Cancel</Button>
+            <Button
+              mode="contained"
+              onPress={handleSaveTemplate}
+              loading={saveTemplateBusy}
+              disabled={!saveTemplateName.trim() || saveTemplateBusy}
+            >
+              Save
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
       {/* Bulk SMS Modal */}
       <Portal>
         <Modal
@@ -1065,6 +1212,94 @@ export default function ContactsScreen() {
               </Surface>
             )}
 
+            {/* ── Templates + Labels (compose phase only) ── */}
+            {bulkSmsPhase === 'compose' && (
+              <View style={styles.templatesSection}>
+                {/* Labels row — labels live alongside templates as a sibling concept */}
+                {smsLabels.length > 0 && (
+                  <View style={styles.templatesHeaderRow}>
+                    <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginRight: 8 }}>
+                      Labels
+                    </Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.chipScrollContent}
+                    >
+                      <Chip
+                        compact
+                        selected={smsLabelFilter === null}
+                        onPress={() => setSmsLabelFilter(null)}
+                        style={styles.labelChip}
+                      >
+                        All
+                      </Chip>
+                      {smsLabels.map((label) => (
+                        <Chip
+                          key={label.id}
+                          compact
+                          selected={smsLabelFilter === label.id}
+                          onPress={() =>
+                            setSmsLabelFilter((curr) => (curr === label.id ? null : label.id))
+                          }
+                          style={[
+                            styles.labelChip,
+                            smsLabelFilter === label.id && { backgroundColor: `${label.color}33` },
+                          ]}
+                          textStyle={{
+                            color: smsLabelFilter === label.id ? label.color : undefined,
+                          }}
+                        >
+                          {label.name}
+                        </Chip>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {/* Templates row */}
+                <View style={styles.templatesHeaderRow}>
+                  <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginRight: 8 }}>
+                    Templates
+                  </Text>
+                  <View style={{ flex: 1 }} />
+                  <Button
+                    compact
+                    icon="plus"
+                    onPress={handleOpenSaveTemplate}
+                    disabled={!bulkSmsMessage.trim()}
+                  >
+                    Save current
+                  </Button>
+                </View>
+                {filteredSmsTemplates.length === 0 ? (
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, paddingVertical: 6 }}>
+                    {smsTemplates.length === 0
+                      ? 'No templates yet. Edit your message and tap "Save current" to make one.'
+                      : 'No templates with this label. Pick another or clear the filter.'}
+                  </Text>
+                ) : (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.chipScrollContent}
+                  >
+                    {filteredSmsTemplates.map((tmpl) => (
+                      <Chip
+                        key={tmpl.id}
+                        compact
+                        icon="message-text-outline"
+                        onPress={() => handleApplyTemplate(tmpl.message)}
+                        style={styles.templateChip}
+                      >
+                        {tmpl.name}
+                      </Chip>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            )}
+
             {/* ── Message template editor ── */}
             <View style={styles.messageSection}>
               <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 6 }}>
@@ -1122,6 +1357,30 @@ export default function ContactsScreen() {
               </View>
             )}
           </ScrollView>
+
+          {/* Sticky bottom Send action (compose phase only).
+              User feedback: "Hard to press send" — the header Send button gets hidden
+              behind the keyboard when editing a multiline message. This footer button
+              sits above the system keyboard via Modal's keyboard avoidance. */}
+          {bulkSmsPhase === 'compose' && (
+            <View
+              style={[
+                styles.bulkSmsFooter,
+                { borderTopColor: theme.colors.outlineVariant, backgroundColor: theme.colors.surface },
+              ]}
+            >
+              <Button
+                mode="contained"
+                icon="send"
+                onPress={handleStartBulkSmsSend}
+                disabled={bulkSmsEligibleContacts.length === 0 || !bulkSmsMessage.trim()}
+                style={{ flex: 1 }}
+                contentStyle={{ paddingVertical: 4 }}
+              >
+                Send to {bulkSmsEligibleContacts.length} recipient{bulkSmsEligibleContacts.length !== 1 ? 's' : ''}
+              </Button>
+            </View>
+          )}
         </Modal>
       </Portal>
     </View>
@@ -1287,6 +1546,34 @@ const styles = StyleSheet.create({
   },
   messageInput: {
     minHeight: 120,
+  },
+  templatesSection: {
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+  templatesHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  chipScrollContent: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingVertical: 4,
+    paddingRight: 8,
+  },
+  labelChip: {
+    marginRight: 6,
+  },
+  templateChip: {
+    marginRight: 6,
+  },
+  bulkSmsFooter: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   doneSummary: {
     flexDirection: 'row',

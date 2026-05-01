@@ -1,7 +1,11 @@
 import ExpoModulesCore
 import CallKit
 
-private let appGroupSuiteName = "group.com.realestate-crm.callerid"
+// Must match the App Group identifier added by `app.plugin.js`, which derives it
+// as `group.<mainBundleId>.callerid`. The current bundle id is com.realestate-geo.crm,
+// so the App Group is group.com.realestate-geo.crm.callerid. If the bundle id changes,
+// update this AND the matching value in CallDirectoryHandler.swift.
+private let appGroupSuiteName = "group.com.realestate-geo.crm.callerid"
 private let contactsKey = "callerid_contacts"
 
 public class CallerIdModule: Module {

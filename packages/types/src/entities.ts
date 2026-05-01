@@ -563,6 +563,48 @@ export interface SmsOptOut {
   team_id?: string;
 }
 
+/**
+ * SMS labels are sibling entities to templates — categorical context tags
+ * (e.g. "Open Home", "Follow-up", "Market Update") that templates can be
+ * tagged with via the sms_template_labels junction. Many-to-many.
+ */
+export interface SmsLabel {
+  id: string;
+  team_id: string | null;
+  name: string;
+  color: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SmsTemplate {
+  id: string;
+  team_id: string | null;
+  name: string;
+  message: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Resolved labels for this template, populated by the store via the junction. */
+  labels?: SmsLabel[];
+}
+
+/**
+ * Suggested seed labels surfaced by the UI as quick picks for a new team.
+ * Teams can rename, delete, or add their own — this is just the starter set.
+ */
+export const SMS_LABEL_SEEDS: { name: string; color: string }[] = [
+  { name: 'General', color: '#6366F1' },
+  { name: 'Open Home', color: '#F59E0B' },
+  { name: 'Follow-up', color: '#10B981' },
+  { name: 'Cold Outreach', color: '#3B82F6' },
+  { name: 'Market Update', color: '#8B5CF6' },
+  { name: 'Appointment', color: '#06B6D4' },
+  { name: 'Listing Update', color: '#EF4444' },
+  { name: 'Seasonal', color: '#EC4899' },
+];
+
 // --- Declared Buildings ---
 
 export interface DeclaredBuilding {

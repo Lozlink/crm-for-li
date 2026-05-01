@@ -155,6 +155,9 @@ export default function SettingsView() {
         </div>
       </section>
 
+      {/* Caller ID & Communications */}
+      <CallerIdSection contacts={contacts} />
+
       {/* Tags */}
       <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
         <h2 className="mb-4 text-sm font-semibold uppercase text-gray-500">
@@ -1336,5 +1339,42 @@ function TagRow({
         Delete
       </button>
     </div>
+  );
+}
+
+// --- Caller ID Section (read-only on web — recording is mobile-only) ---
+
+function CallerIdSection({ contacts }: { contacts: import('@realestate-crm/types').Contact[] }) {
+  const withPhone = contacts.filter((c) => c.phone && c.phone.trim().length > 0).length;
+  const dnc = contacts.filter((c) => c.do_not_contact).length;
+  const eligible = withPhone - dnc;
+
+  return (
+    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
+      <h2 className="mb-1 text-sm font-semibold uppercase text-gray-500">
+        Caller ID &amp; Communications
+      </h2>
+      <p className="mb-4 text-xs text-gray-500">
+        Mobile devices with the Real Estate CRM app installed can identify incoming calls from
+        these contacts. Enable Caller ID in the mobile app settings.
+      </p>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="text-center">
+          <p className="text-2xl font-bold text-gray-900">{withPhone}</p>
+          <p className="text-xs text-gray-500">With Phone</p>
+        </div>
+        <div className="text-center">
+          <p className="text-2xl font-bold text-gray-900">{eligible}</p>
+          <p className="text-xs text-gray-500">Caller ID Eligible</p>
+        </div>
+        <div className="text-center">
+          <p className="text-2xl font-bold text-gray-900">{dnc}</p>
+          <p className="text-xs text-gray-500">Do Not Contact</p>
+        </div>
+      </div>
+      <p className="mt-4 text-xs text-gray-400">
+        Caller ID is iOS / Android only — records and playbacks happen on the device.
+      </p>
+    </section>
   );
 }

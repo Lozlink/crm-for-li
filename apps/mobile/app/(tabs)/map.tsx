@@ -1,8 +1,9 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { StyleSheet, View, Dimensions, Linking, TouchableOpacity, ScrollView, LayoutAnimation } from 'react-native';
 import { FAB, Portal, useTheme, Chip, Surface, Text, Dialog, Button, Switch } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import ClusterMapView from 'react-native-map-clustering';
 import MapView, { Marker, Polygon, Circle, Polyline, PROVIDER_GOOGLE, LongPressEvent, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
@@ -83,12 +84,7 @@ export default function MapScreen() {
 
   const fetchRequirements = useBuyerMatchStore(s => s.fetchRequirements);
 
-  const { streets: streetStats, getBriefing } = useStreetStats();
-  const { getTier } = useLeadScoringEngine();
-
-  const [briefingVisible, setBriefingVisible] = useState(false);
-  const [activeBriefing, setActiveBriefing] = useState<ReturnType<typeof getBriefing>>(null);
-
+  // visibleLayers must be declared before useStreetStats so the enabled flag can reference it
   const [visibleLayers, setVisibleLayers] = useState<VisibleLayers>({
     contacts: false,
     properties: false,
@@ -96,6 +92,12 @@ export default function MapScreen() {
     buildings: false,
     stats: false,
   });
+
+  const { streets: streetStats, getBriefing } = useStreetStats({ enabled: visibleLayers.stats });
+  const { getTier } = useLeadScoringEngine();
+
+  const [briefingVisible, setBriefingVisible] = useState(false);
+  const [activeBriefing, setActiveBriefing] = useState<ReturnType<typeof getBriefing>>(null);
 
   const [layerSheetVisible, setLayerSheetVisible] = useState(false);
   const [filterVisible, setFilterVisible] = useState(false);
@@ -248,8 +250,22 @@ export default function MapScreen() {
   }, [visibleLayers]);
 
   const mappedContacts = useMemo(() => {
+    // Compute viewport bounds with a 100% buffer so contacts near the edge don't pop in when panning
+    const { latitude, longitude, latitudeDelta, longitudeDelta } = mapRegion;
+    const latBuffer = latitudeDelta; // 100% extra on each side
+    const lngBuffer = longitudeDelta;
+    const minLat = latitude - latitudeDelta / 2 - latBuffer;
+    const maxLat = latitude + latitudeDelta / 2 + latBuffer;
+    const minLng = longitude - longitudeDelta / 2 - lngBuffer;
+    const maxLng = longitude + longitudeDelta / 2 + lngBuffer;
+
     return contacts.filter(contact => {
       if (!contact.latitude || !contact.longitude) return false;
+      // Skip contacts outside the buffered viewport — ClusterMapView handles the rest
+      if (
+        contact.latitude < minLat || contact.latitude > maxLat ||
+        contact.longitude < minLng || contact.longitude > maxLng
+      ) return false;
       if (selectedTagIds.length > 0) {
         const contactTagIds = (contact.tags || []).map(t => t.id);
         const hasMatchingTag = contactTagIds.some(id => selectedTagIds.includes(id));
@@ -259,7 +275,7 @@ export default function MapScreen() {
       }
       return true;
     });
-  }, [contacts, selectedTagIds]);
+  }, [contacts, selectedTagIds, mapRegion]);
 
   const selectedTags = useMemo(() => {
     return tags.filter(t => selectedTagIds.includes(t.id));
@@ -605,8 +621,11 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
+      {/* ClusterMapView is a drop-in replacement for MapView — it clusters <Marker> children
+          while passing Polygon/Circle/Polyline through untouched as otherChildren.
+          The ref is forwarded to the underlying native MapView, so animateToRegion works. */}
+      <ClusterMapView
+        ref={mapRef as unknown as React.RefObject<InstanceType<typeof ClusterMapView>>}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
         initialRegion={mapRegion}
@@ -614,6 +633,9 @@ export default function MapScreen() {
         onLongPress={handleMapLongPress}
         showsUserLocation
         showsMyLocationButton={false}
+        clusterColor="#6366f1"
+        clusterTextColor="#ffffff"
+        radius={40}
       >
         {/* Contact markers */}
         {visibleLayers.contacts && mappedContacts
@@ -734,7 +756,7 @@ export default function MapScreen() {
             anchor={{ x: 0.5, y: 0.5 }}
           />
         ))}
-      </MapView>
+      </ClusterMapView>
 
       {/* ── Search bar ── */}
       <MapSearchBar onLocationSelect={handleSearchLocationSelect} />

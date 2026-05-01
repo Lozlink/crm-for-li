@@ -1,5 +1,84 @@
 # Changelog
 
+## [Unreleased] - 2026-05-01
+
+### Added — Web parity sprint (matches mobile capabilities)
+
+- **Lead score column in web ContactsTable** — new "Score" column between Status and Tag, consuming `useLeadScoringEngine.getScore/getTier`. Tailwind-based `LeadScoreBadge` (`apps/web/src/components/LeadScoreBadge.tsx`) — visual port of the React Native version with the same `TIER_COLORS` (hot=red, warm=amber, cold=indigo, dormant=gray).
+- **SMS Campaigns on web** — new `SmsCampaignsView` and tabbed `apps/web/src/app/campaigns/page.tsx` with Email / SMS toggle. Consumes `useSmsCampaignStore`. List/create/edit/delete + add-recipients dialog with opt-out + DNC filter, 160-char counter, merge fields. **NOTE: this deviates from the project's mobile-first convention** — SMS UI shipped on web before mobile. Mobile SMS UI is the higher-priority follow-up to restore the normal mobile→web ordering.
+- **Caller ID & Communications section on web Settings** — read-only stats (With Phone / Caller-ID Eligible / Do Not Contact). Caller ID recording is iOS/Android only (native module) so web shows the data + directs principals to install mobile app to enable it.
+- **Declared building circles on web map** — `GoogleMap` now accepts `declaredBuildings` and renders amber `google.maps.Circle` overlays sized by `estimated_units` (12-40m radius). Click → InfoWindow with address + unit count. New "Buildings" toggle in the map toolbar.
+- **"Declare Building" quick-add on web map** — right-click context menu adds a third action alongside Quick Note and New Contact. Opens a small dialog asking for total units, calls `upsertDeclaredBuilding` (which keeps the higher of existing vs new unit count, never downgrades).
+- **Web Providers hydrates declared buildings** — `apps/web/src/components/Providers.tsx` now calls `useDeclaredBuildingsStore.fetchDeclaredBuildings()` after `fetchContacts()`, mirroring mobile root layout. Clears on signout.
+
+### Added — Mobile performance sprint
+
+- **Map clustering** — `apps/mobile/app/(tabs)/map.tsx` now uses `ClusterMapView` from `react-native-map-clustering` (drop-in replacement for `MapView`). Markers cluster at zoom <14; Polygons / Circles / Polylines (declared buildings, OSM polygons, tracking polylines, heat circles) pass through unaffected. Cluster styling: indigo `#6366f1`, 40px radius.
+- **Viewport-bounds filter** — `mappedContacts` useMemo filters out contacts outside the visible region (with 100% buffer to avoid pop-in when panning), so off-screen Markers never render.
+- **Today dashboard 30s staleness guard** — `apps/mobile/app/(tabs)/index.tsx` uses a `useRef<number>` last-fetch timestamp; `useFocusEffect` skips re-fetch when last fetch was <30s ago. Pull-to-refresh resets the timer for manual override.
+- **`useStreetStats` enabled flag** — new `options?: { enabled?: boolean }` parameter (default true to preserve existing call sites). When false, the heavy `streets` useMemo early-returns `[]`, skipping the O(n*m) compute. Mobile map now passes `{ enabled: visibleLayers.stats }` so the heatmap layer toggle actually gates the work (it previously didn't, despite the boolean being passed positionally).
+
+### Fixed
+
+- **Web type-check pre-existing failure** — added `apps/web/src/shims/caller-id-module.ts` + tsconfig path mapping to satisfy the `import type { RecentCall } from 'caller-id/src/CallerIdModule'` in shared `useCallLogSync.ts`. Web type-check now passes.
+- **Mobile type-check pre-existing failure** — same caller-id resolution issue fixed via path mapping in `apps/mobile/tsconfig.json`. Mobile type-check now passes.
+
+### Added — SMS templates + labels (mobile)
+
+- **New `sms_templates` and `sms_labels` tables** (migration `026_sms_templates.sql`) plus a `sms_template_labels` junction. Templates and labels are sibling entities — labels are not a column on templates, they exist alongside via M2M, so a template can carry multiple labels and a label can apply to many templates. Both team-scoped via RLS.
+- **New `useSmsTemplateStore`** in `packages/hooks/src/useSmsTemplateStore.ts`: fetchAll (templates + labels + junction in parallel, then attaches labels per template in-memory), createTemplate (with optional `labelIds`), updateTemplate (replaces label set), deleteTemplate, plus full CRUD for labels, plus a `templatesByLabel(labelId)` helper. Demo-mode seeded with 3 templates and 8 labels (General, Open Home, Follow-up, Cold Outreach, Market Update, Appointment, Listing Update, Seasonal).
+- **Bulk SMS modal template picker** (`apps/mobile/app/(tabs)/contacts.tsx`): label filter chips + template chips appear above the message editor in compose phase. Tap a template to apply, tap a label to filter templates. "Save current" button opens a dialog to save the current draft as a new template with selectable labels.
+- **Root layout hydration**: `apps/mobile/app/_layout.tsx` now fetches templates + labels alongside contacts and declared buildings on auth, and clears them on signout.
+
+### Fixed — bulk SMS UX from real user feedback
+
+- **"Hard to press send"** (user complaint via screenshot): added a sticky bottom Send button to the bulk SMS modal in compose phase, separate from the keyboard-occluded header Send button. Always reachable while editing the message.
+- **"lol fk I lost my message"** (user complaint via screenshot): closing the bulk SMS modal mid-edit now triggers a 3-way Alert — "Keep editing" / "Save & close" (preserves draft for next open) / "Discard" (clears it). The seed message no longer overwrites a preserved draft when the modal is reopened.
+
+### Added — Mobile SMS campaigns screens (restores mobile-first ordering)
+
+- **Channel toggle in `apps/mobile/app/campaigns/index.tsx`**: SegmentedButtons (Email / SMS) at the top of the existing campaigns list. Each channel has its own status filter chips (SMS uses draft/sending/sent/failed; email keeps draft/scheduled/sending/sent). FAB routes to `/campaigns/new` or `/campaigns/sms/new` based on the active channel.
+- **New `apps/mobile/app/campaigns/sms/[id].tsx`** — SMS campaign detail/compose screen. Handles both `'new'` (creates a draft on first save, then transitions to edit mode) and existing campaign editing. Includes:
+  - Status chip + recipient/sent/failed counts.
+  - Template picker (label-filterable chip row, mirrors the bulk SMS modal pattern).
+  - Merge-field chips ({{first_name}}, {{last_name}}, {{property_address}}).
+  - Character counter (160-char SMS limit warning) + live preview replacing {{first_name}} with a contact's name.
+  - Recipient picker dialog (search-filtered, opt-out + DNC filtered server-side via `addRecipients`).
+  - "Save draft" / "Save changes" / "Send" / "Delete" actions, gated on draft status.
+  - Read-only mode for non-draft campaigns (prevents edits to in-flight or sent campaigns).
+- **Route registered** in `apps/mobile/app/_layout.tsx` SafeStack: `campaigns/sms/[id]` with title "SMS Campaign".
+
+This restores the mobile-first convention: SMS UI now exists on mobile too, where the field agents work. The web SMS UI from earlier this sprint becomes the principal/broker oversight view rather than the only surface.
+
+### Fixed — CallerIdModule fails to load on both iOS and Android (user-reported)
+
+- **Root cause**: the `modules/caller-id/` workspace was missing the build files Expo Modules autolinking needs to compile native code. Without them, `requireNativeModule('CallerId')` threw at runtime and the lazy `try/catch` swallowed it silently.
+- Created **`modules/caller-id/CallerId.podspec`** so iOS autolinking can build the Pod (with `exclude_files` for the `CallerIdExtension` subfolder so the App Extension target doesn't conflict).
+- Created **`modules/caller-id/android/build.gradle`** so Android autolinking can build the AAR (applies the standard `ExpoModulesCorePlugin.gradle`).
+- Created **`modules/caller-id/android/src/main/AndroidManifest.xml`** declaring SEND_SMS, READ_CALL_LOG, READ_PHONE_STATE, POST_NOTIFICATIONS — without SEND_SMS the Android `sendDirectSms` would fail even after the module loads.
+- **Bonus bug fixed**: the iOS App Group identifier was hard-coded to `group.com.realestate-crm.callerid` in both `CallerIdModule.swift` and `CallerIdExtension/CallDirectoryHandler.swift`, but `app.plugin.js` derives it from the bundle id as `group.<bundleId>.callerid` = `group.com.realestate-geo.crm.callerid` for the current app. Both Swift files now use the matching identifier so Caller ID directory persistence actually works.
+
+**Required to land this fix in the running app**: a fresh `eas build`, NOT an `eas update` / OTA. The fix touches native code (new podspec, build.gradle, AndroidManifest, modified Swift) which OTA can't deliver — `eas update` only pushes JavaScript bundles to existing native builds.
+
+- `pnpm mobile:build:preview` — rebuilds Android preview channel
+- `pnpm mobile:build:production` — rebuilds iOS + Android production
+
+You do NOT need to run `pod install` manually; the EAS build pipeline runs it server-side as part of the iOS build. Once the new builds are live in TestFlight / Play Console, normal `pnpm eas:update-preview` / `eas:update-production` OTA updates resume on top of them.
+
+Until a fresh `eas build` lands, bulk SMS on Android will continue to open the native messaging app.
+
+### Known issues (logged for follow-up)
+
+- **(none from this session — CallerIdModule diagnosis + fix shipped above pending rebuild.)**
+
+### Verified
+
+- `pnpm --filter web type-check` ✓
+- `pnpm --filter mobile type-check` ✓
+- `pnpm --filter web build` ✓ (18 routes compile)
+
+---
+
 ## [Unreleased] - 2026-04-14
 
 ### Changed

@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useImperativeHandle, forwardRef, useState } from 'react';
 import { Loader } from '@googlemaps/js-api-loader';
-import type { Contact, SuburbBoundary } from '@realestate-crm/types';
+import type { Contact, SuburbBoundary, DeclaredBuilding } from '@realestate-crm/types';
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -30,6 +30,7 @@ interface GoogleMapProps {
   suburbBoundary: SuburbBoundary | null;
   userLocation?: { lat: number; lng: number } | null;
   pendingMarker?: { lat: number; lng: number } | null;
+  declaredBuildings?: DeclaredBuilding[];
   onSelectContact: (contact: Contact) => void;
   onRegionChange?: (lat: number, lng: number, zoom: number) => void;
   onContextMenu?: (lat: number, lng: number) => void;
@@ -43,6 +44,7 @@ export default forwardRef<GoogleMapHandle, GoogleMapProps>(function GoogleMap(
     suburbBoundary,
     userLocation,
     pendingMarker,
+    declaredBuildings,
     onSelectContact,
     onRegionChange,
     onContextMenu,
@@ -57,6 +59,7 @@ export default forwardRef<GoogleMapHandle, GoogleMapProps>(function GoogleMap(
   const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const userMarkerRef = useRef<google.maps.Marker | null>(null);
   const pendingMarkerRef = useRef<google.maps.Marker | null>(null);
+  const declaredCirclesRef = useRef<google.maps.Circle[]>([]);
   const [mapReady, setMapReady] = useState(false);
 
   const onSelectRef = useRef(onSelectContact);
@@ -125,6 +128,8 @@ export default forwardRef<GoogleMapHandle, GoogleMapProps>(function GoogleMap(
       userMarkerRef.current = null;
       pendingMarkerRef.current?.setMap(null);
       pendingMarkerRef.current = null;
+      declaredCirclesRef.current.forEach((c) => c.setMap(null));
+      declaredCirclesRef.current = [];
       infoWindowRef.current = null;
       mapRef.current = null;
       setMapReady(false);
@@ -262,6 +267,53 @@ export default forwardRef<GoogleMapHandle, GoogleMapProps>(function GoogleMap(
       });
     }
   }, [mapReady, userLocation]);
+
+  // Sync declared building circles
+  // Mirrors the mobile map's <Circle> render for user-declared multi-dwelling buildings
+  // (see apps/mobile/app/(tabs)/map.tsx). Circle radius scales with estimated_units so
+  // larger buildings are visually obvious. Color matches mobile's amber theme.
+  useEffect(() => {
+    if (!mapReady) return;
+    const map = mapRef.current;
+    if (!map) return;
+
+    declaredCirclesRef.current.forEach((c) => c.setMap(null));
+    declaredCirclesRef.current = [];
+
+    if (!declaredBuildings || declaredBuildings.length === 0) return;
+
+    declaredBuildings.forEach((b) => {
+      // Radius scales 12m → 40m based on units (3..50). Caps at the bounds.
+      const units = Math.max(1, b.estimated_units);
+      const radius = Math.min(40, Math.max(12, 8 + units * 0.7));
+
+      const circle = new google.maps.Circle({
+        center: { lat: b.latitude, lng: b.longitude },
+        radius,
+        strokeColor: '#F59E0B',
+        strokeOpacity: 0.9,
+        strokeWeight: 2,
+        fillColor: '#F59E0B',
+        fillOpacity: 0.18,
+        map,
+        clickable: true,
+      });
+
+      circle.addListener('click', () => {
+        const iw = infoWindowRef.current;
+        if (!iw) return;
+        iw.setContent(
+          `<div style="font-size:13px"><strong>${b.address}</strong>` +
+            `<p style="margin:4px 0 0;color:#6b7280">Declared building • ${b.estimated_units} units</p>` +
+            `</div>`
+        );
+        iw.setPosition({ lat: b.latitude, lng: b.longitude });
+        iw.open(map);
+      });
+
+      declaredCirclesRef.current.push(circle);
+    });
+  }, [mapReady, declaredBuildings]);
 
   // Sync pending marker (orange pin for right-click)
   useEffect(() => {

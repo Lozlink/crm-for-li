@@ -21,6 +21,7 @@ export { useDuplicateCheck } from './useDuplicateCheck';
 export { useProspectingMetrics } from './useProspectingMetrics';
 export { useDataEnrichmentStore } from './useDataEnrichmentStore';
 export { useSmsCampaignStore } from './useSmsCampaignStore';
+export { useSmsTemplateStore } from './useSmsTemplateStore';
 export { useProspectingMatcher } from './useProspectingMatcher';
 export { useGuidedProspectingStore } from './useGuidedProspectingStore';
 export type { NearbyContact, ProspectingMatcherResult } from './useProspectingMatcher';

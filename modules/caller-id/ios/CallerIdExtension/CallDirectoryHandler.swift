@@ -8,7 +8,9 @@ private struct CallerIdEntry: Codable {
 }
 
 /// The App Group suite name shared with the main app.
-private let appGroupSuiteName = "group.com.realestate-crm.callerid"
+/// Must match CallerIdModule.swift and the App Group identifier added by app.plugin.js
+/// (group.<mainBundleId>.callerid where bundle id = com.realestate-geo.crm).
+private let appGroupSuiteName = "group.com.realestate-geo.crm.callerid"
 
 /// The UserDefaults key where contacts JSON is stored.
 private let contactsKey = "callerid_contacts"
