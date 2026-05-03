@@ -417,28 +417,24 @@ function withCallerIdXcodeProject(config) {
       'echo "Synced extension CFBundleVersion=$MAIN_BUILD CFBundleShortVersionString=$MAIN_SHORT from $MAIN_INFO"',
     ].join("\n");
 
-    const syncPhase = xcodeProject.addBuildPhase(
+    // xcode@3.0.1's addBuildPhase requires an options object as the 5th arg
+    // for PBXShellScriptBuildPhase; otherwise pbxShellScriptBuildPhaseObj
+    // crashes reading `.inputPaths` on undefined. The lib wraps shellScript
+    // in quotes and escapes embedded `"` itself, but does NOT escape
+    // newlines — so we still need to convert `\n` to literal `\n` in the
+    // serialized .pbxproj string.
+    xcodeProject.addBuildPhase(
       [],
       "PBXShellScriptBuildPhase",
       "Sync CFBundleVersion from parent app",
       targetUuid,
+      {
+        inputPaths: [],
+        outputPaths: [],
+        shellPath: "/bin/sh",
+        shellScript: syncVersionScript.replace(/\\/g, "\\\\").replace(/\n/g, "\\n"),
+      },
     );
-
-    if (syncPhase && syncPhase.buildPhase) {
-      syncPhase.buildPhase.shellPath = "/bin/sh";
-      // The xcode lib serializes shellScript verbatim — wrap in quotes and
-      // escape embedded quotes / newlines so the .pbxproj parses correctly.
-      syncPhase.buildPhase.shellScript =
-        '"' +
-        syncVersionScript
-          .replace(/\\/g, "\\\\")
-          .replace(/"/g, '\\"')
-          .replace(/\n/g, "\\n") +
-        '"';
-      // Run on every build (not just deployment) — the Info.plist needs
-      // syncing for every Archive, even non-Release configurations.
-      syncPhase.buildPhase.runOnlyForDeploymentPostprocessing = 0;
-    }
 
     return config;
   });
