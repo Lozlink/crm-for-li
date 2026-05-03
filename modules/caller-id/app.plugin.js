@@ -291,19 +291,11 @@ function withCallerIdXcodeProject(config) {
     const configList =
       xcodeProject.pbxXCConfigurationList()[configListId];
 
-    // Read the main app's deployment target, development team, and version
-    // info from its build configuration. The version values MUST mirror onto
-    // the extension or the App Store rejects the IPA with:
-    //   "The CFBundleVersion of an app extension ('1') must match that of its
-    //    containing parent app ('35')."
-    // We read them from the resolved Xcode project rather than the raw
-    // app.config.ts so we pick up whatever EAS auto-increment / external
-    // tooling ultimately applied to the main app.
+    // Read the main app's deployment target and development team.
+    // (Versioning is NOT done here — see the build-time script below for why.)
     const appTarget = xcodeProject.getFirstTarget();
     let deploymentTarget = "16.0";
     let developmentTeam = undefined;
-    let currentProjectVersion = "1";
-    let marketingVersion = "1.0";
 
     if (appTarget && appTarget.firstTarget) {
       const appConfigListId = appTarget.firstTarget.buildConfigurationList;
@@ -322,18 +314,6 @@ function withCallerIdXcodeProject(config) {
           if (appBuildConfig.buildSettings.DEVELOPMENT_TEAM) {
             developmentTeam =
               appBuildConfig.buildSettings.DEVELOPMENT_TEAM;
-          }
-          if (appBuildConfig.buildSettings.CURRENT_PROJECT_VERSION) {
-            // Strip surrounding quotes if the xcode lib added any —
-            // we re-quote on assignment below for safety.
-            currentProjectVersion = String(
-              appBuildConfig.buildSettings.CURRENT_PROJECT_VERSION,
-            ).replace(/^"|"$/g, "");
-          }
-          if (appBuildConfig.buildSettings.MARKETING_VERSION) {
-            marketingVersion = String(
-              appBuildConfig.buildSettings.MARKETING_VERSION,
-            ).replace(/^"|"$/g, "");
           }
         }
       }
@@ -365,11 +345,12 @@ function withCallerIdXcodeProject(config) {
           buildConfig.buildSettings.IPHONEOS_DEPLOYMENT_TARGET =
             deploymentTarget;
           buildConfig.buildSettings.GENERATE_INFOPLIST_FILE = "YES";
-          // Mirror the main app's versioning so CFBundleVersion /
-          // CFBundleShortVersionString match — required by the App Store.
-          buildConfig.buildSettings.CURRENT_PROJECT_VERSION =
-            currentProjectVersion;
-          buildConfig.buildSettings.MARKETING_VERSION = marketingVersion;
+          // Placeholder values — overwritten at build time by the Run Script
+          // build phase added below. We can't read EAS-incremented versions
+          // here because EAS auto-increment runs AFTER prebuild (when this
+          // plugin runs) but BEFORE xcodebuild.
+          buildConfig.buildSettings.CURRENT_PROJECT_VERSION = "1";
+          buildConfig.buildSettings.MARKETING_VERSION = "1.0";
           buildConfig.buildSettings.SKIP_INSTALL = "YES";
 
           if (developmentTeam) {
@@ -382,6 +363,82 @@ function withCallerIdXcodeProject(config) {
     // NOTE: addTarget() with type "app_extension" already calls
     // addTargetDependency() internally (see xcode@3.0.1 pbxProject.js
     // line 1547), so we do NOT need to add it again here.
+
+    // ------------------------------------------------------------------
+    // 7. Add a Run Script Build Phase that syncs CFBundleVersion +
+    //    CFBundleShortVersionString from the parent app's Info.plist.
+    //
+    // Why a build-time script rather than setting these at plugin time:
+    // EAS auto-increment runs AFTER `expo prebuild` (when this plugin
+    // executes) but BEFORE `xcodebuild`. So at plugin time the parent's
+    // CURRENT_PROJECT_VERSION still reads "1"; by the time xcodebuild
+    // starts, EAS has bumped it to e.g. "36" but only on the main target.
+    // The extension would ship with "1" and the App Store rejects:
+    //   "The CFBundleVersion of an app extension ('1') must match that
+    //    of its containing parent app ('36')."
+    //
+    // This script runs as part of the extension's build, reads the
+    // parent app's Info.plist (which by then has the EAS-bumped value),
+    // and rewrites the extension's generated Info.plist before signing.
+    // ------------------------------------------------------------------
+    const syncVersionScript = [
+      "#!/bin/sh",
+      "set -e",
+      "# Resolve the main app's Info.plist. Standard Expo layout puts it at",
+      "# $SRCROOT/$PROJECT_NAME/Info.plist; fall back to a search if that's",
+      "# wrong for any reason.",
+      'MAIN_INFO="${SRCROOT}/${PROJECT_NAME}/Info.plist"',
+      'if [ ! -f "$MAIN_INFO" ]; then',
+      '  MAIN_INFO=$(find "${SRCROOT}" -maxdepth 3 -name "Info.plist" \\',
+      '    ! -path "*Extension*" ! -path "*Pods*" ! -path "*build*" \\',
+      "    | head -1)",
+      "fi",
+      'if [ ! -f "$MAIN_INFO" ]; then',
+      '  echo "warning: Main app Info.plist not found; skipping CFBundleVersion sync"',
+      "  exit 0",
+      "fi",
+      'MAIN_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$MAIN_INFO" 2>/dev/null || echo "")',
+      'MAIN_SHORT=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$MAIN_INFO" 2>/dev/null || echo "")',
+      'if [ -z "$MAIN_BUILD" ]; then',
+      '  echo "warning: Could not read CFBundleVersion from $MAIN_INFO; skipping sync"',
+      "  exit 0",
+      "fi",
+      'EXT_INFO="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"',
+      'if [ ! -f "$EXT_INFO" ]; then',
+      '  echo "warning: Extension Info.plist not yet generated at $EXT_INFO; skipping sync"',
+      "  exit 0",
+      "fi",
+      '/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $MAIN_BUILD" "$EXT_INFO" \\',
+      '  || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $MAIN_BUILD" "$EXT_INFO"',
+      'if [ -n "$MAIN_SHORT" ]; then',
+      '  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MAIN_SHORT" "$EXT_INFO" \\',
+      '    || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $MAIN_SHORT" "$EXT_INFO"',
+      "fi",
+      'echo "Synced extension CFBundleVersion=$MAIN_BUILD CFBundleShortVersionString=$MAIN_SHORT from $MAIN_INFO"',
+    ].join("\n");
+
+    const syncPhase = xcodeProject.addBuildPhase(
+      [],
+      "PBXShellScriptBuildPhase",
+      "Sync CFBundleVersion from parent app",
+      targetUuid,
+    );
+
+    if (syncPhase && syncPhase.buildPhase) {
+      syncPhase.buildPhase.shellPath = "/bin/sh";
+      // The xcode lib serializes shellScript verbatim — wrap in quotes and
+      // escape embedded quotes / newlines so the .pbxproj parses correctly.
+      syncPhase.buildPhase.shellScript =
+        '"' +
+        syncVersionScript
+          .replace(/\\/g, "\\\\")
+          .replace(/"/g, '\\"')
+          .replace(/\n/g, "\\n") +
+        '"';
+      // Run on every build (not just deployment) — the Info.plist needs
+      // syncing for every Archive, even non-Release configurations.
+      syncPhase.buildPhase.runOnlyForDeploymentPostprocessing = 0;
+    }
 
     return config;
   });
