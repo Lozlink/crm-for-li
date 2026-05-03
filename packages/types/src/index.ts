@@ -32,6 +32,11 @@ export type {
 export type { SoldRecord, SuburbStats } from './entities';
 export type { DeclaredBuilding } from './entities';
 export type {
+  WhiteboardItem, WhiteboardItemType, WhiteboardItemContent,
+  WhiteboardStickyContent, WhiteboardChecklistContent, WhiteboardChecklistEntry,
+  WhiteboardPhotoContent,
+} from './entities';
+export type {
   LeadTier, LeadScoreBreakdown, TerritoryBriefing,
   ProspectingOutcome, GuidedStop,
 } from './entities';

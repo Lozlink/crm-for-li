@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore, useCallerIdSync, useCallLogSync, useTrackingStore } from '@realestate-crm/hooks';
-import { useCRMStore, useDeclaredBuildingsStore, useSmsTemplateStore } from '@realestate-crm/hooks';
+import { useCRMStore, useDeclaredBuildingsStore, useSmsTemplateStore, useWhiteboardStore } from '@realestate-crm/hooks';
 import { useAppUpdate } from '../hooks/useAppUpdate';
 import CallOutcomeModal from '../components/CallOutcomeModal';
 
@@ -39,6 +39,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const clearDeclaredBuildings = useDeclaredBuildingsStore(s => s.clearData);
   const fetchSmsTemplates = useSmsTemplateStore(s => s.fetchAll);
   const clearSmsTemplates = useSmsTemplateStore(s => s.clearData);
+  const fetchWhiteboardItems = useWhiteboardStore(s => s.fetchItems);
+  const clearWhiteboard = useWhiteboardStore(s => s.clearData);
 
   const [dataLoaded, setDataLoaded] = useState(false);
   const prevTeamIdRef = useRef<string | undefined>(activeTeam?.id);
@@ -49,6 +51,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       clearData();
       clearDeclaredBuildings();
       clearSmsTemplates();
+      clearWhiteboard();
       setDataLoaded(false);
     }
   }, [isAuthenticated, isDemoMode, isLoading]);
@@ -63,6 +66,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         await fetchContacts();
         await fetchDeclaredBuildings();
         await fetchSmsTemplates();
+        await fetchWhiteboardItems();
         setDataLoaded(true);
       };
       loadData();
@@ -144,6 +148,7 @@ function SafeStack({ theme }: { theme: typeof MD3DarkTheme }) {
       <Stack.Screen name="settings/custom-fields" options={{ title: 'Custom Fields' }} />
       <Stack.Screen name="tracking/[id]" options={{ title: 'Tracking Session' }} />
       <Stack.Screen name="prospecting" options={{ headerShown: false }} />
+      <Stack.Screen name="whiteboard" options={{ headerShown: false, contentStyle: { paddingBottom: 0 } }} />
     </Stack>
   );
 }

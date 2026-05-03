@@ -622,6 +622,53 @@ export interface DeclaredBuilding {
   updated_at: string;
 }
 
+// --- Whiteboard Items ---
+
+export type WhiteboardItemType = 'sticky' | 'checklist' | 'photo';
+
+export interface WhiteboardChecklistEntry {
+  id: string;
+  text: string;
+  checked: boolean;
+}
+
+export interface WhiteboardStickyContent {
+  text: string;
+}
+
+export interface WhiteboardChecklistContent {
+  title?: string;
+  items: WhiteboardChecklistEntry[];
+}
+
+export interface WhiteboardPhotoContent {
+  url: string;
+  caption?: string;
+  // Local URI used while upload is pending; cleared once `url` is finalized.
+  local_uri?: string;
+}
+
+export type WhiteboardItemContent =
+  | WhiteboardStickyContent
+  | WhiteboardChecklistContent
+  | WhiteboardPhotoContent;
+
+export interface WhiteboardItem {
+  id: string;
+  team_id: string | null;
+  type: WhiteboardItemType;
+  position_x: number;
+  position_y: number;
+  width: number;
+  height: number;
+  z_index: number;
+  content: WhiteboardItemContent;
+  color: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- Suburb Statistics (abs Census) ---
 
 export interface SuburbStats {
