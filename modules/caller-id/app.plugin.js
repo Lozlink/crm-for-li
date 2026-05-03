@@ -291,10 +291,19 @@ function withCallerIdXcodeProject(config) {
     const configList =
       xcodeProject.pbxXCConfigurationList()[configListId];
 
-    // Read the main app's deployment target and development team once.
+    // Read the main app's deployment target, development team, and version
+    // info from its build configuration. The version values MUST mirror onto
+    // the extension or the App Store rejects the IPA with:
+    //   "The CFBundleVersion of an app extension ('1') must match that of its
+    //    containing parent app ('35')."
+    // We read them from the resolved Xcode project rather than the raw
+    // app.config.ts so we pick up whatever EAS auto-increment / external
+    // tooling ultimately applied to the main app.
     const appTarget = xcodeProject.getFirstTarget();
     let deploymentTarget = "16.0";
     let developmentTeam = undefined;
+    let currentProjectVersion = "1";
+    let marketingVersion = "1.0";
 
     if (appTarget && appTarget.firstTarget) {
       const appConfigListId = appTarget.firstTarget.buildConfigurationList;
@@ -313,6 +322,18 @@ function withCallerIdXcodeProject(config) {
           if (appBuildConfig.buildSettings.DEVELOPMENT_TEAM) {
             developmentTeam =
               appBuildConfig.buildSettings.DEVELOPMENT_TEAM;
+          }
+          if (appBuildConfig.buildSettings.CURRENT_PROJECT_VERSION) {
+            // Strip surrounding quotes if the xcode lib added any —
+            // we re-quote on assignment below for safety.
+            currentProjectVersion = String(
+              appBuildConfig.buildSettings.CURRENT_PROJECT_VERSION,
+            ).replace(/^"|"$/g, "");
+          }
+          if (appBuildConfig.buildSettings.MARKETING_VERSION) {
+            marketingVersion = String(
+              appBuildConfig.buildSettings.MARKETING_VERSION,
+            ).replace(/^"|"$/g, "");
           }
         }
       }
@@ -344,8 +365,11 @@ function withCallerIdXcodeProject(config) {
           buildConfig.buildSettings.IPHONEOS_DEPLOYMENT_TARGET =
             deploymentTarget;
           buildConfig.buildSettings.GENERATE_INFOPLIST_FILE = "YES";
-          buildConfig.buildSettings.CURRENT_PROJECT_VERSION = "1";
-          buildConfig.buildSettings.MARKETING_VERSION = "1.0";
+          // Mirror the main app's versioning so CFBundleVersion /
+          // CFBundleShortVersionString match — required by the App Store.
+          buildConfig.buildSettings.CURRENT_PROJECT_VERSION =
+            currentProjectVersion;
+          buildConfig.buildSettings.MARKETING_VERSION = marketingVersion;
           buildConfig.buildSettings.SKIP_INSTALL = "YES";
 
           if (developmentTeam) {

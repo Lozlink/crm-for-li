@@ -106,13 +106,16 @@ public class CallerIdModule: Module {
 
 // MARK: - Exceptions
 
-private class ContactsPersistenceException: Exception {
+// `final` is required so Swift 6 can synthesize Sendable conformance —
+// ExpoModulesCore's `Exception` is Sendable, and a non-final subclass
+// can't be cast to Sendable without `@unchecked`.
+private final class ContactsPersistenceException: Exception {
   override var reason: String {
     "Failed to access App Group UserDefaults with suite name '\(appGroupSuiteName)'. Ensure the App Group is configured in your entitlements."
   }
 }
 
-private class ContactsSerializationException: Exception {
+private final class ContactsSerializationException: Exception {
   override var reason: String {
     "Failed to serialize contacts data to JSON string."
   }
