@@ -1,8 +1,9 @@
 import { useMemo, useEffect, useRef, useCallback, useState } from 'react';
 import type { LeadScoreBreakdown, LeadTier, Contact, SoldRecord } from '@realestate-crm/types';
-import { haversineDistance } from '@realestate-crm/utils';
+import { haversineDistance, normalizeAddress } from '@realestate-crm/utils';
 import { useCRMStore } from './useCRMStore';
 import { useDataEnrichmentStore } from './useDataEnrichmentStore';
+import { useDeclaredBuildingsStore } from './useDeclaredBuildingsStore';
 import { usePropertyStore } from './usePropertyStore';
 import { useTrackingStore } from './useTrackingStore';
 
@@ -24,10 +25,14 @@ function extractSuburb(address: string): string {
   return suburbPart.replace(/\s+(NSW|VIC|QLD|SA|WA|TAS|NT|ACT)\s+\d{4}$/i, '').trim() || 'Unknown';
 }
 
+// Thresholds preserve the original 25%/50%/75%-of-max percentile cutoffs after the
+// building-coverage bonus widened the score range from 0-100 to 0-108. Without rescaling,
+// a +8 bonus alone could push a borderline contact a full tier up — the bonus is meant to
+// be a momentum bias, not a tier kicker. 27/54/81 = round(108 * 0.25/0.5/0.75).
 function computeTier(total: number): LeadTier {
-  if (total >= 75) return 'hot';
-  if (total >= 50) return 'warm';
-  if (total >= 25) return 'cold';
+  if (total >= 81) return 'hot';
+  if (total >= 54) return 'warm';
+  if (total >= 27) return 'cold';
   return 'dormant';
 }
 
@@ -38,6 +43,24 @@ function makeSoldGridKey(lat: number, lng: number): string {
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const CONVERSION_STATUSES = new Set(['available', 'under_offer', 'exchanged', 'settled']);
+
+// Declared-building coverage signal — see LeadScoreBreakdown for rationale.
+// "In-progress pipeline" bonus: contacts in buildings the agent has started but not finished
+// get a small priority bump (finishing the building has high marginal ROI — already on-site,
+// momentum, and rapport with neighbours). Trapezoidal so we don't reward declaring without
+// canvassing (ratio≈0) or already-finished buildings (ratio≈1).
+const BUILDING_COVERAGE_MAX = 8;
+const COVERAGE_RAMP_LOW = 0.05;
+const COVERAGE_RAMP_HIGH = 0.95;
+
+function buildingCoverageBonus(visited: number, estimated: number): number {
+  if (estimated <= 0 || visited <= 0) return 0;
+  const ratio = visited / estimated;
+  if (ratio >= 1) return 0; // building is done — no bump
+  if (ratio < COVERAGE_RAMP_LOW) return BUILDING_COVERAGE_MAX * (ratio / COVERAGE_RAMP_LOW);
+  if (ratio > COVERAGE_RAMP_HIGH) return BUILDING_COVERAGE_MAX * ((1 - ratio) / (1 - COVERAGE_RAMP_HIGH));
+  return BUILDING_COVERAGE_MAX;
+}
 
 export function useLeadScoringEngine(): {
   scores: Map<string, LeadScoreBreakdown>;
@@ -51,6 +74,7 @@ export function useLeadScoringEngine(): {
   const soldRecords = useDataEnrichmentStore(s => s.soldRecords);
   const suburbStats = useDataEnrichmentStore(s => s.suburbStats);
   const properties = usePropertyStore(s => s.properties);
+  const declaredBuildings = useDeclaredBuildingsStore(s => s.declaredBuildings);
   const activeSession = useTrackingStore(s => s.activeSession);
 
   const [isComputing, setIsComputing] = useState(false);
@@ -110,6 +134,52 @@ export function useLeadScoringEngine(): {
     }
     return map;
   }, [properties]);
+
+  // Pre-build declared-building coverage: normalizedAddress -> { estimatedUnits, visitedUnits }.
+  // visitedUnits = distinct unit_numbers among contacts at the same normalized address. Falling
+  // back to the contact count when no unit_numbers are present keeps the signal alive for
+  // buildings where the agent hasn't been recording unit numbers (still strictly bounded by
+  // estimatedUnits via the coverage formula).
+  const buildingCoverageMap = useMemo(() => {
+    if (declaredBuildings.length === 0) return new Map<string, { estimatedUnits: number; visitedUnits: number }>();
+
+    // Group contacts by normalized address.
+    const contactsByAddr = new Map<string, { units: Set<string>; total: number }>();
+    for (const c of contacts) {
+      if (!c.address) continue;
+      const key = normalizeAddress(c.address);
+      if (!key) continue;
+      const bucket = contactsByAddr.get(key);
+      const unit = c.unit_number?.trim();
+      if (bucket) {
+        bucket.total += 1;
+        if (unit) bucket.units.add(unit);
+      } else {
+        contactsByAddr.set(key, {
+          units: unit ? new Set([unit]) : new Set(),
+          total: 1,
+        });
+      }
+    }
+
+    const map = new Map<string, { estimatedUnits: number; visitedUnits: number }>();
+    for (const b of declaredBuildings) {
+      const key = normalizeAddress(b.address);
+      if (!key) continue;
+      const bucket = contactsByAddr.get(key);
+      const visited = bucket
+        ? (bucket.units.size > 0 ? bucket.units.size : bucket.total)
+        : 0;
+      // If the same address is declared twice (shouldn't happen — store de-dupes — but be safe),
+      // keep the larger estimate so the ratio never overshoots.
+      const existing = map.get(key);
+      const estimated = existing
+        ? Math.max(existing.estimatedUnits, b.estimated_units)
+        : b.estimated_units;
+      map.set(key, { estimatedUnits: estimated, visitedUnits: visited });
+    }
+    return map;
+  }, [declaredBuildings, contacts]);
 
   // Pre-build suburb stats lookup and per-suburb contact counts
   const { suburbStatsMap, suburbContactCounts } = useMemo(() => {
@@ -199,7 +269,19 @@ export function useLeadScoringEngine(): {
       }
       const penetration = 10 * (1 - Math.min(1, penetrationPct / 10));
 
-      const total = Math.round(staleness + salesMomentum + engagement + streetConversion + penetration);
+      // 6. Building Coverage (0-8) — momentum bonus for in-progress declared buildings
+      let buildingCoverage = 0;
+      if (contact.address && buildingCoverageMap.size > 0) {
+        const key = normalizeAddress(contact.address);
+        if (key) {
+          const cov = buildingCoverageMap.get(key);
+          if (cov) buildingCoverage = buildingCoverageBonus(cov.visitedUnits, cov.estimatedUnits);
+        }
+      }
+
+      const total = Math.round(
+        staleness + salesMomentum + engagement + streetConversion + penetration + buildingCoverage,
+      );
 
       result.set(contact.id, {
         contactId: contact.id,
@@ -211,13 +293,14 @@ export function useLeadScoringEngine(): {
           engagement: Math.round(engagement * 10) / 10,
           streetConversion: Math.round(streetConversion * 10) / 10,
           penetration: Math.round(penetration * 10) / 10,
+          buildingCoverage: Math.round(buildingCoverage * 10) / 10,
         },
         lastComputedAt: computedAt,
       });
     }
 
     return result;
-  }, [contacts, activityMap, soldGrid, streetConversions, suburbStatsMap, suburbContactCounts]);
+  }, [contacts, activityMap, soldGrid, streetConversions, suburbStatsMap, suburbContactCounts, buildingCoverageMap]);
 
   // Write-back: batch update contacts whose lead_score has changed
   const writeScoredContacts = useCallback(async () => {

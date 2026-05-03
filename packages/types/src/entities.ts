@@ -142,14 +142,17 @@ export type LeadTier = 'hot' | 'warm' | 'cold' | 'dormant';
 
 export interface LeadScoreBreakdown {
   contactId: string;
-  total: number; // 0-100
+  total: number; // 0-108 (core 100 + up to 8 from declared-building coverage)
   tier: LeadTier;
   components: {
-    staleness: number;      // 0-25
-    salesMomentum: number;  // 0-25
-    engagement: number;     // 0-25
+    staleness: number;        // 0-25
+    salesMomentum: number;    // 0-25
+    engagement: number;       // 0-25
     streetConversion: number; // 0-15
-    penetration: number;    // 0-10
+    penetration: number;      // 0-10
+    buildingCoverage: number; // 0-8 — bump for contacts in declared buildings the agent
+                              // has started canvassing but not finished. Trapezoidal:
+                              // full 8 when coverage_ratio ∈ [0.05, 0.95], 0 at the edges.
   };
   lastComputedAt: string;
 }

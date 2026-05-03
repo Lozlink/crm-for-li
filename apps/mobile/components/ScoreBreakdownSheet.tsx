@@ -15,6 +15,7 @@ const COMPONENTS: { key: keyof LeadScoreBreakdown['components']; label: string; 
   { key: 'engagement', label: 'Engagement', max: 25 },
   { key: 'streetConversion', label: 'Street Success', max: 15 },
   { key: 'penetration', label: 'Opportunity', max: 10 },
+  { key: 'buildingCoverage', label: 'Building Momentum', max: 8 },
 ];
 
 export default function ScoreBreakdownSheet({ visible, onDismiss, breakdown }: ScoreBreakdownSheetProps) {

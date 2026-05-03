@@ -713,12 +713,19 @@ export default function MapScreen() {
           />
         ))}
         {visibleLayers.stats && streetStats.map((stat) => (
+          // cluster={false} opts this invisible tap target out of clustering — otherwise
+          // react-native-map-clustering would merge nearby tap markers into bubbles and
+          // break stat-circle tap detection (it duck-types Markers by `coordinate` prop).
+          // `cluster` is read by the clustering wrapper but isn't in react-native-maps'
+          // type alias (MapMarkerProps is `type`, not `interface`, so unaugmentable).
           <Marker
             key={`stat-tap-${stat.streetName}-${stat.suburb}`}
             coordinate={{ latitude: stat.averageLatitude, longitude: stat.averageLongitude }}
             onPress={() => handleStatCirclePress(`${stat.streetName}|${stat.suburb}`)}
             opacity={0}
             anchor={{ x: 0.5, y: 0.5 }}
+            // @ts-expect-error react-native-map-clustering reads this prop via duck typing
+            cluster={false}
           />
         ))}
 
@@ -747,6 +754,8 @@ export default function MapScreen() {
           />
         ))}
         {/* Invisible tap target markers for declared-building circles (Circle doesn't expose onPress reliably) */}
+        {/* cluster={false} keeps each tap target individually addressable — otherwise the
+            clustering library would merge them and tap targets would silently disappear. */}
         {visibleLayers.buildings && declaredBuildingsWithoutPolygons.map((declared) => (
           <Marker
             key={`declared-tap-${declared.id}`}
@@ -754,6 +763,8 @@ export default function MapScreen() {
             onPress={() => handleDeclaredBuildingPress(declared)}
             opacity={0}
             anchor={{ x: 0.5, y: 0.5 }}
+            // @ts-expect-error react-native-map-clustering reads this prop via duck typing
+            cluster={false}
           />
         ))}
       </ClusterMapView>
