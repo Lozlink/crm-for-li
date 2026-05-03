@@ -1,7 +1,8 @@
 {
   "platforms": ["ios", "android"],
   "ios": {
-    "modules": ["CallerIdModule"]
+    "modules": ["CallerIdModule"],
+    "podspecPath": "CallerId.podspec"
   },
   "android": {
     "modules": ["expo.modules.callerid.CallerIdModule"]
