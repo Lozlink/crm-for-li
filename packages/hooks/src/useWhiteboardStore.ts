@@ -15,6 +15,8 @@ interface CreateItemInput {
   height?: number;
   content: WhiteboardItemContent;
   color?: string | null;
+  /** Live-bound widgets (contact / property) populate this with the linked entity id. */
+  ref_id?: string | null;
 }
 
 interface UpdateItemPatch {
@@ -25,6 +27,7 @@ interface UpdateItemPatch {
   z_index?: number;
   content?: WhiteboardItemContent;
   color?: string | null;
+  ref_id?: string | null;
 }
 
 interface WhiteboardState {
@@ -121,6 +124,7 @@ export const useWhiteboardStore = create<WhiteboardState>()((set, get) => ({
         z_index: nextZ,
         content: input.content,
         color: input.color ?? null,
+        ref_id: input.ref_id ?? null,
         created_by: userId,
         created_at: nowIso,
         updated_at: nowIso,
@@ -140,6 +144,7 @@ export const useWhiteboardStore = create<WhiteboardState>()((set, get) => ({
         z_index: baseRow.z_index,
         content: baseRow.content,
         color: baseRow.color,
+        ref_id: baseRow.ref_id,
       };
       if (teamId) insertData.team_id = teamId;
       if (userId) insertData.created_by = userId;
@@ -204,6 +209,7 @@ export const useWhiteboardStore = create<WhiteboardState>()((set, get) => ({
       if (patch.z_index !== undefined) updatePayload.z_index = patch.z_index;
       if (patch.content !== undefined) updatePayload.content = patch.content;
       if (patch.color !== undefined) updatePayload.color = patch.color;
+      if (patch.ref_id !== undefined) updatePayload.ref_id = patch.ref_id;
 
       const { data, error } = await supabase
         .from('whiteboard_items')

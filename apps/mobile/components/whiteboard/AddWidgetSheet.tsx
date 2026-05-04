@@ -29,10 +29,10 @@ const CELLS: CellSpec[] = [
   { type: 'sticky', icon: 'note-text-outline', label: 'Quick note' },
   { type: 'checklist', icon: 'format-list-checkbox', label: 'To-do' },
   { type: 'photo', icon: 'image-outline', label: 'Photo' },
-  { type: null, icon: 'account-card-outline', label: 'Contact' },
-  { type: null, icon: 'home-outline', label: 'Property' },
-  { type: null, icon: 'map-marker-outline', label: 'Map' },
-  { type: null, icon: 'bullseye-arrow', label: 'Goal' },
+  { type: 'goal', icon: 'bullseye-arrow', label: 'Goal' },
+  { type: 'map', icon: 'map-marker-outline', label: 'Map pin' },
+  { type: 'contact', icon: 'account-card-outline', label: 'Contact' },
+  { type: 'property', icon: 'home-outline', label: 'Property' },
 ];
 
 /**

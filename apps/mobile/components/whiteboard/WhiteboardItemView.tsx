@@ -25,6 +25,12 @@ const snap = (v: number) => Math.round(v / GRID) * GRID;
 import { StickyNote } from './StickyNote';
 import { ChecklistCard } from './ChecklistCard';
 import { PhotoCard } from './PhotoCard';
+import { SuggestionCard } from './SuggestionCard';
+import { GoalCard } from './GoalCard';
+import { MapCard } from './MapCard';
+import { ContactCard } from './ContactCard';
+import { PropertyCard } from './PropertyCard';
+import type { WhiteboardSuggestionItem } from './types';
 
 interface Props {
   item: WhiteboardItem;
@@ -84,8 +90,9 @@ export function WhiteboardItemView({
 
   const handleSingleTap = () => {
     if (mode === 'edit') {
-      // Sticky uses inline TextInput — let the input capture focus, no dialog.
-      if (item.type !== 'sticky') {
+      // Sticky: inline TextInput captures focus — no dialog needed.
+      // Suggestion: has its own footer CTA for navigation — no editor.
+      if (item.type !== 'sticky' && item.type !== 'suggestion') {
         onRequestEdit(item.id);
       }
     } else {
@@ -193,6 +200,15 @@ export function WhiteboardItemView({
           />
         )}
         {item.type === 'photo' && <PhotoCard item={item} editable={isEdit} />}
+
+        {/* Suggestion card — read-only; added from IntelligenceSidebar. DESIGN.md §12. */}
+        {item.type === 'suggestion' && (
+          <SuggestionCard item={item as WhiteboardSuggestionItem} />
+        )}
+        {item.type === 'goal' && <GoalCard item={item} />}
+        {item.type === 'map' && <MapCard item={item} />}
+        {item.type === 'contact' && <ContactCard item={item} />}
+        {item.type === 'property' && <PropertyCard item={item} />}
 
         {/* Edit-mode delete affordance (× button, top-right). DESIGN.md §4. */}
         {isEdit && (

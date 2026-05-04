@@ -624,7 +624,15 @@ export interface DeclaredBuilding {
 
 // --- Whiteboard Items ---
 
-export type WhiteboardItemType = 'sticky' | 'checklist' | 'photo';
+export type WhiteboardItemType =
+  | 'sticky'
+  | 'checklist'
+  | 'photo'
+  | 'contact'
+  | 'property'
+  | 'map'
+  | 'goal'
+  | 'suggestion';
 
 export interface WhiteboardChecklistEntry {
   id: string;
@@ -648,10 +656,73 @@ export interface WhiteboardPhotoContent {
   local_uri?: string;
 }
 
+// Phase 2 — live-bound widgets. These store a snapshot for offline rendering
+// plus a ref_id at the row level so the renderer can re-fetch the live entity.
+
+export interface WhiteboardContactContent {
+  contactId: string;
+  /** Snapshot for offline rendering — refreshed each time the live entity is read. */
+  snapshotName?: string;
+  snapshotScore?: number;
+}
+
+export interface WhiteboardPropertyContent {
+  propertyId: string;
+  snapshotAddress?: string;
+}
+
+export interface WhiteboardMapContent {
+  viewport: { lat: number; lng: number; zoom: number };
+  /** Optional overlays to render on the embedded thumbnail. */
+  overlays?: ('buildings' | 'tracking' | 'sold')[];
+}
+
+export type WhiteboardGoalMetric = 'commission' | 'listings' | 'leads' | 'calls';
+export type WhiteboardGoalPeriod = 'month' | 'quarter';
+
+export interface WhiteboardGoalContent {
+  metric: WhiteboardGoalMetric;
+  target: number;
+  period: WhiteboardGoalPeriod;
+  /** ISO timestamp; renderer derives "days remaining". */
+  deadlineIso?: string;
+  /** Optional cached current value — renderer can override by querying activities. */
+  current?: number;
+}
+
+/**
+ * Suggestion content stored on a board (Intelligence-derived).
+ *
+ * Field names align with the SmartSuggestion shape in
+ * `@realestate-crm/hooks/useSmartSuggestions`. The `body` field is the
+ * UI-friendly label for what the hook calls `subtitle` — projection happens
+ * at "Add to board" time in the whiteboard route.
+ */
+export type WhiteboardSuggestionKind =
+  | 'hot_prospects'
+  | 'coverage_gap'
+  | 'today_play'
+  | 'route';
+
+export interface WhiteboardSuggestionContent {
+  kind: WhiteboardSuggestionKind;
+  title: string;
+  body: string;
+  /** Links back to the originating SmartSuggestion.id for dedup guard. */
+  suggestion_id?: string;
+  /** Free-form payload preserving the original SmartSuggestion.payload for deep links. */
+  payload?: Record<string, unknown>;
+}
+
 export type WhiteboardItemContent =
   | WhiteboardStickyContent
   | WhiteboardChecklistContent
-  | WhiteboardPhotoContent;
+  | WhiteboardPhotoContent
+  | WhiteboardContactContent
+  | WhiteboardPropertyContent
+  | WhiteboardMapContent
+  | WhiteboardGoalContent
+  | WhiteboardSuggestionContent;
 
 export interface WhiteboardItem {
   id: string;
@@ -664,6 +735,8 @@ export interface WhiteboardItem {
   z_index: number;
   content: WhiteboardItemContent;
   color: string | null;
+  /** Live-bound widgets (contact / property) populate this with the linked entity id. */
+  ref_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

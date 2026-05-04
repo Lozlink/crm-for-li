@@ -62,3 +62,51 @@ export const STICKY_PLACEHOLDER_COLOR = 'rgba(26,26,26,0.4)';
 
 /** Widget delete button color. */
 export const WIDGET_DELETE_COLOR = '#EF4444';
+
+// ── Intelligence layer: suggestion kind color tokens ──────────────────────────
+//
+// Four kinds matching SmartSuggestion.kind from useSmartSuggestions and the
+// canonical WhiteboardSuggestionKind in @realestate-crm/types. Deliberately
+// distinct from the sticky palette — agents immediately recognise "these cards
+// came from the Intelligence layer, not from me."
+//
+// Copy rule: NO "AI" in label strings. See DESIGN.md §12.
+
+export type SuggestionKind = 'hot_prospects' | 'coverage_gap' | 'today_play' | 'route';
+
+export interface SuggestionKindDef {
+  kind: SuggestionKind;
+  /** Short label — real-estate-agent voice. No "AI" language. */
+  label: string;
+  /** Left-stripe / tinted-bg accent in light mode. */
+  light: string;
+  /** Left-stripe / tinted-bg accent in dark mode. */
+  dark: string;
+  /** MaterialCommunityIcons icon name for the card header and sidebar list. */
+  icon: string;
+}
+
+/**
+ * Canonical kind color + icon table.
+ * Colors are spec-mandated (DESIGN.md §12.1): same accent value used in both
+ * light and dark since these are accent stripes/chips, not full backgrounds.
+ */
+export const SUGGESTION_KIND_DEFS: SuggestionKindDef[] = [
+  { kind: 'hot_prospects', label: 'Hot prospects',    light: '#EF4444', dark: '#EF4444', icon: 'fire' },
+  { kind: 'coverage_gap',  label: 'Coverage gap',     light: '#F59E0B', dark: '#F59E0B', icon: 'map-marker-alert-outline' },
+  { kind: 'today_play',    label: "Today's play",     light: '#10B981', dark: '#10B981', icon: 'calendar-today' },
+  { kind: 'route',         label: 'Door-knock route', light: '#6366F1', dark: '#6366F1', icon: 'map-marker-path' },
+];
+
+/** Returns the accent color for the current color scheme. */
+export function suggestionKindColorForScheme(
+  def: SuggestionKindDef,
+  colorScheme: 'light' | 'dark' | null | undefined,
+): string {
+  return colorScheme === 'dark' ? def.dark : def.light;
+}
+
+/** Returns the SuggestionKindDef for the given kind, falling back to hot_prospects. */
+export function getSuggestionKindDef(kind: SuggestionKind): SuggestionKindDef {
+  return SUGGESTION_KIND_DEFS.find((d) => d.kind === kind) ?? SUGGESTION_KIND_DEFS[0];
+}

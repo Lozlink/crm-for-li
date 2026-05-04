@@ -28,16 +28,24 @@ export function ItemContextMenu({
   const colorScheme = useColorScheme();
   if (!item) return null;
 
-  const labelByType = {
+  // Phase 2 widget types fall back to a generic title — the long-press
+  // context menu is meaningful for any widget but only sticky has the
+  // colour-picker affordance below.
+  const labelByType: Partial<Record<typeof item.type, string>> = {
     sticky: 'Sticky note',
     checklist: 'Checklist',
     photo: 'Photo',
-  } as const;
+    contact: 'Contact card',
+    property: 'Property card',
+    map: 'Map snippet',
+    goal: 'Goal',
+    suggestion: 'Suggestion',
+  };
 
   return (
     <Portal>
       <Dialog visible={!!item} onDismiss={onDismiss}>
-        <Dialog.Title>{labelByType[item.type]}</Dialog.Title>
+        <Dialog.Title>{labelByType[item.type] ?? 'Item'}</Dialog.Title>
         <Dialog.Content>
           <Button
             icon="arrange-bring-to-front"

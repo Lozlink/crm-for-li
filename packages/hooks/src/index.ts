@@ -31,3 +31,5 @@ export type {
   StaleStreet, WeeklyTrendPoint, ProspectingStreak, InspectionMetrics,
   RecommendedArea, MultiDwellingBuilding, TeamMemberMetrics, CallConnectMetrics,
 } from './useProspectingMetrics';
+export { useSmartSuggestions } from './useSmartSuggestions';
+export type { SmartSuggestion, SmartSuggestionKind } from './useSmartSuggestions';

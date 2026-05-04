@@ -1,14 +1,19 @@
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Snackbar, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSharedValue } from 'react-native-reanimated';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
 import type {
   WhiteboardChecklistContent,
+  WhiteboardContactContent,
+  WhiteboardGoalContent,
   WhiteboardItem,
   WhiteboardItemType,
+  WhiteboardMapContent,
   WhiteboardPhotoContent,
+  WhiteboardPropertyContent,
   WhiteboardStickyContent,
 } from '@realestate-crm/types';
 import { WhiteboardCanvas } from '../components/whiteboard/WhiteboardCanvas';
@@ -16,11 +21,15 @@ import { WhiteboardToolbar } from '../components/whiteboard/WhiteboardToolbar';
 import { EditItemSheet } from '../components/whiteboard/EditItemSheet';
 import { ItemContextMenu } from '../components/whiteboard/ItemContextMenu';
 import { AddWidgetSheet } from '../components/whiteboard/AddWidgetSheet';
+import { IntelligenceSidebar } from '../components/whiteboard/IntelligenceSidebar';
 import {
   CHECKLIST_DEFAULT_SIZE,
   ITEM_DEFAULT_SIZE,
   PHOTO_DEFAULT_SIZE,
+  SUGGESTION_CARD_DEFAULT_SIZE,
+  type SmartSuggestion,
   type WhiteboardMode,
+  type WhiteboardSuggestionContent,
 } from '../components/whiteboard/types';
 import { DEFAULT_STICKY_COLOR_DEF, stickyColorKey } from '../components/whiteboard/whiteboardColors';
 
@@ -47,10 +56,18 @@ export default function WhiteboardScreen() {
   const deleteItem = useWhiteboardStore((s) => s.deleteItem);
   const bringToFront = useWhiteboardStore((s) => s.bringToFront);
 
+  // Camera shared values lifted up from WhiteboardCanvas — placementForNew
+  // reads these to compute viewport-center world coords (canvas v2).
+  const cameraX = useSharedValue(0);
+  const cameraY = useSharedValue(0);
+  const cameraScale = useSharedValue(1);
+  const { width: screenW, height: screenH } = useWindowDimensions();
+
   const [mode, setMode] = useState<WhiteboardMode>('move');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [contextId, setContextId] = useState<string | null>(null);
   const [addSheetVisible, setAddSheetVisible] = useState(false);
+  const [intelligenceSidebarVisible, setIntelligenceSidebarVisible] = useState(false);
   const [snackbar, setSnackbar] = useState<string | null>(null);
 
   const editingItem = useMemo<WhiteboardItem | null>(
@@ -63,19 +80,28 @@ export default function WhiteboardScreen() {
   );
 
   // --- Add -----------------------------------------------------------------
-  // Phase 1 placement: stagger new items in a small spiral so they don't
-  // pile up on the same pixel. Future polish (designer): drop at viewport
-  // center based on camera offset.
-  const placementForNew = useCallback(() => {
-    const n = items.length;
-    const baseX = 40;
-    const baseY = 80;
-    const spread = 28;
-    return {
-      x: baseX + (n % 6) * spread,
-      y: baseY + n * spread,
-    };
-  }, [items.length]);
+  // Canvas v2: drop new items at the visible viewport center, accounting for
+  // camera offset and zoom.  World coords from screen coords:
+  //   worldX = (screenX - cameraX) / scale
+  // For the visible viewport center we then subtract half the widget size so
+  // the *card* sits centered (rather than its top-left landing on center).
+  // Small jitter avoids perfect stacking when adding many widgets in a row.
+  const placementForNew = useCallback(
+    (widgetWidth = 200, widgetHeight = 160) => {
+      const sx = cameraX.value ?? 0;
+      const sy = cameraY.value ?? 0;
+      const sc = cameraScale.value || 1;
+      const visibleH = screenH - 80;  // headroom for bottom toolbar
+      const worldCenterX = (screenW / 2 - sx) / sc;
+      const worldCenterY = (visibleH / 2 - sy) / sc;
+      const jitter = (items.length % 4) * 12;
+      return {
+        x: Math.round(worldCenterX - widgetWidth / 2 + jitter),
+        y: Math.round(worldCenterY - widgetHeight / 2 + jitter),
+      };
+    },
+    [cameraX, cameraY, cameraScale, screenW, screenH, items.length],
+  );
 
   const handleAddItem = useCallback(
     async (type: WhiteboardItemType) => {
@@ -137,9 +163,113 @@ export default function WhiteboardScreen() {
         } else {
           setEditingId(created.id);
         }
+        return;
+      }
+
+      if (type === 'goal') {
+        // Sensible default — agents most commonly track monthly commission.
+        const goalContent: WhiteboardGoalContent = {
+          metric: 'commission',
+          target: 5000,
+          period: 'month',
+          current: 0,
+        };
+        const created = await createItem({
+          type: 'goal',
+          position_x: x,
+          position_y: y,
+          width: 200,
+          height: 140,
+          content: goalContent,
+        });
+        if (!created) setSnackbar('Could not add goal. Check your connection.');
+        return;
+      }
+
+      if (type === 'map') {
+        // Drop a pin at a sensible default. Agents can re-position via context
+        // menu later (or via a future picker). Sydney CBD coords used as a
+        // safe Australian default.
+        const mapContent: WhiteboardMapContent = {
+          viewport: { lat: -33.8688, lng: 151.2093, zoom: 13 },
+        };
+        const created = await createItem({
+          type: 'map',
+          position_x: x,
+          position_y: y,
+          width: 180,
+          height: 160,
+          content: mapContent,
+        });
+        if (!created) setSnackbar('Could not add map pin. Check your connection.');
+        return;
+      }
+
+      if (type === 'contact') {
+        // Empty card — opens editor immediately so user picks a contact.
+        const contactContent: WhiteboardContactContent = { contactId: '' };
+        const created = await createItem({
+          type: 'contact',
+          position_x: x,
+          position_y: y,
+          width: 220,
+          height: 110,
+          content: contactContent,
+        });
+        if (!created) setSnackbar('Could not add contact card. Check your connection.');
+        else setEditingId(created.id);
+        return;
+      }
+
+      if (type === 'property') {
+        const propertyContent: WhiteboardPropertyContent = { propertyId: '' };
+        const created = await createItem({
+          type: 'property',
+          position_x: x,
+          position_y: y,
+          width: 220,
+          height: 130,
+          content: propertyContent,
+        });
+        if (!created) setSnackbar('Could not add property card. Check your connection.');
+        else setEditingId(created.id);
+        return;
       }
     },
     [createItem, mode, placementForNew],
+  );
+
+  // --- Intelligence sidebar: add suggestion to board ----------------------
+  // Projects a live SmartSuggestion (from useSmartSuggestions) into a persisted
+  // WhiteboardItem of type 'suggestion'. The hook's `subtitle` becomes the
+  // on-board card's `body`; the original payload is preserved for deep links.
+  const handleAddSuggestionToBoard = useCallback(
+    async (suggestion: SmartSuggestion) => {
+      // Pass card dimensions so viewport-center placement accounts for actual size
+      const { x, y } = placementForNew(SUGGESTION_CARD_DEFAULT_SIZE.width, SUGGESTION_CARD_DEFAULT_SIZE.height);
+      const content: WhiteboardSuggestionContent = {
+        kind: suggestion.kind,
+        title: suggestion.title,
+        body: suggestion.subtitle ?? '',
+        suggestion_id: suggestion.id,
+        payload: suggestion.payload,
+      };
+      const created = await createItem({
+        type: 'suggestion',
+        position_x: x,
+        position_y: y,
+        width: SUGGESTION_CARD_DEFAULT_SIZE.width,
+        height: SUGGESTION_CARD_DEFAULT_SIZE.height,
+        content,
+      });
+      if (!created) {
+        setSnackbar('Could not add to board. Check your connection.');
+      } else {
+        // Close the sidebar after a successful add so the agent sees the card land.
+        setIntelligenceSidebarVisible(false);
+      }
+    },
+    [createItem, placementForNew],
   );
 
   // --- Edit ---------------------------------------------------------------
@@ -206,6 +336,9 @@ export default function WhiteboardScreen() {
         <WhiteboardCanvas
           items={items}
           mode={mode}
+          cameraX={cameraX}
+          cameraY={cameraY}
+          cameraScale={cameraScale}
           onRequestEdit={(id) => setEditingId(id)}
           onRequestContext={(id) => setContextId(id)}
           onToggleChecklistEntry={handleToggleChecklistEntry}
@@ -217,6 +350,7 @@ export default function WhiteboardScreen() {
         mode={mode}
         onModeChange={setMode}
         onRequestAdd={() => setAddSheetVisible(true)}
+        onRequestSuggestions={() => setIntelligenceSidebarVisible(true)}
         onClose={handleClose}
       />
 
@@ -240,6 +374,15 @@ export default function WhiteboardScreen() {
         onDelete={handleDelete}
         onBringToFront={handleBringToFront}
         onChangeColor={handleChangeColor}
+      />
+
+      {/* Intelligence sidebar — always mounted so slide animation fires cleanly.
+          Owns its own useSmartSuggestions call; whiteboard.tsx only wires visibility
+          + the "add to board" handler (which owns placement logic). */}
+      <IntelligenceSidebar
+        visible={intelligenceSidebarVisible}
+        onDismiss={() => setIntelligenceSidebarVisible(false)}
+        onAddToBoard={handleAddSuggestionToBoard}
       />
 
       <Snackbar

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useAuthStore, useCRMStore, useDeclaredBuildingsStore } from '@realestate-crm/hooks';
+import { useAuthStore, useCRMStore, useDeclaredBuildingsStore, useWhiteboardStore } from '@realestate-crm/hooks';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const initialize = useAuthStore((s) => s.initialize);
@@ -18,6 +18,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const fetchDeclaredBuildings = useDeclaredBuildingsStore((s) => s.fetchDeclaredBuildings);
   const clearDeclaredBuildings = useDeclaredBuildingsStore((s) => s.clearData);
 
+  const fetchWhiteboardItems = useWhiteboardStore((s) => s.fetchItems);
+  const clearWhiteboardItems = useWhiteboardStore((s) => s.clearData);
+
   const [dataLoaded, setDataLoaded] = useState(false);
   const prevTeamIdRef = useRef<string | undefined>(undefined);
 
@@ -31,9 +34,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
     if (!isLoading && !isAuthenticated && !isDemoMode) {
       clearData();
       clearDeclaredBuildings();
+      clearWhiteboardItems();
       setDataLoaded(false);
     }
-  }, [isAuthenticated, isDemoMode, isLoading, clearData, clearDeclaredBuildings]);
+  }, [isAuthenticated, isDemoMode, isLoading, clearData, clearDeclaredBuildings, clearWhiteboardItems]);
 
   // Load CRM data once auth + team are resolved
   useEffect(() => {
@@ -44,11 +48,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
         await fetchTags();
         await fetchContacts();
         await fetchDeclaredBuildings();
+        await fetchWhiteboardItems();
         setDataLoaded(true);
       };
       loadData();
     }
-  }, [isDemoMode, isAuthenticated, activeTeam, dataLoaded, hydrate, fetchTags, fetchContacts, fetchDeclaredBuildings]);
+  }, [isDemoMode, isAuthenticated, activeTeam, dataLoaded, hydrate, fetchTags, fetchContacts, fetchDeclaredBuildings, fetchWhiteboardItems]);
 
   // Reset data when active team changes
   useEffect(() => {

@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { href: '/tracking', label: 'Tracking', icon: TrackingIcon, group: 'operations' },
   { href: '/campaigns', label: 'Campaigns', icon: CampaignsIcon, group: 'grow' },
   { href: '/notes', label: 'Notes', icon: NotesIcon, group: 'grow' },
+  { href: '/whiteboard', label: 'Whiteboard', icon: WhiteboardIcon, group: 'grow' },
   { href: '/reports', label: 'Reports', icon: ReportsIcon, group: 'grow' },
   { href: '/settings', label: 'Settings', icon: SettingsIcon, group: 'system' },
 ];
@@ -453,6 +454,14 @@ function TrackingIcon({ className }: { className?: string }) {
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+    </svg>
+  );
+}
+
+function WhiteboardIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
     </svg>
   );
 }

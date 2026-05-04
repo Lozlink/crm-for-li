@@ -35,6 +35,9 @@ export type {
   WhiteboardItem, WhiteboardItemType, WhiteboardItemContent,
   WhiteboardStickyContent, WhiteboardChecklistContent, WhiteboardChecklistEntry,
   WhiteboardPhotoContent,
+  WhiteboardContactContent, WhiteboardPropertyContent, WhiteboardMapContent,
+  WhiteboardGoalContent, WhiteboardGoalMetric, WhiteboardGoalPeriod,
+  WhiteboardSuggestionContent, WhiteboardSuggestionKind,
 } from './entities';
 export type {
   LeadTier, LeadScoreBreakdown, TerritoryBriefing,

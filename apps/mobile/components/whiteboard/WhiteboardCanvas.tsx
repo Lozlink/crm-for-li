@@ -1,6 +1,6 @@
 import { useColorScheme, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import type { WhiteboardItem } from '@realestate-crm/types';
 import type { WhiteboardMode } from './types';
 import { CANVAS_BG, CANVAS_DOT_COLOR } from './whiteboardColors';
@@ -19,6 +19,10 @@ const DOT_ROWS = 60;
 interface Props {
   items: WhiteboardItem[];
   mode: WhiteboardMode;
+  /** Camera shared values lifted up so whiteboard.tsx can read viewport for placement. */
+  cameraX: SharedValue<number>;
+  cameraY: SharedValue<number>;
+  cameraScale: SharedValue<number>;
   onRequestEdit: (id: string) => void;
   onRequestContext: (id: string) => void;
   onToggleChecklistEntry: (itemId: string, entryId: string) => void;
@@ -32,13 +36,22 @@ interface Props {
  * - Warm canvas bg: light #F5F0E8 / dark #1E1C1A — feels like cork board, not CRM.
  * - Dot grid (Edit mode only): 2pt dots on 16pt grid, viewport-fixed overlay.
  *
- * Gesture rules:
+ * Gesture rules (canvas v2):
  * - Two-finger pan always moves the camera (works in both modes).
- * - Single-finger pan is forwarded to items in Move mode.
+ * - Two-finger pinch zooms 0.4-2.0x (works in both modes).
+ * - Single-finger pan moves the camera in Move mode ONLY when the touch
+ *   doesn't land on an item. Items have their own GestureDetector inside
+ *   WhiteboardItemView (with minDistance:4) — RNGH propagation gives child
+ *   gestures precedence, so the canvas only fires for empty-space touches.
+ * - In Edit mode the single-finger canvas pan is disabled so inputs and
+ *   tap targets inside widgets receive their touches cleanly.
  */
 export function WhiteboardCanvas({
   items,
   mode,
+  cameraX,
+  cameraY,
+  cameraScale,
   onRequestEdit,
   onRequestContext,
   onToggleChecklistEntry,
@@ -48,12 +61,11 @@ export function WhiteboardCanvas({
   const canvasBg = colorScheme === 'dark' ? CANVAS_BG.dark : CANVAS_BG.light;
   const dotColor = colorScheme === 'dark' ? CANVAS_DOT_COLOR.dark : CANVAS_DOT_COLOR.light;
 
-  const cameraX = useSharedValue(0);
-  const cameraY = useSharedValue(0);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
+  const startScale = useSharedValue(1);
 
-  // Two-finger pan = camera. Single-finger is reserved for item drag / tap.
+  // Two-finger camera pan — works in both modes.
   const cameraPan = Gesture.Pan()
     .minPointers(2)
     .maxPointers(2)
@@ -66,15 +78,49 @@ export function WhiteboardCanvas({
       cameraY.value = startY.value + e.translationY;
     });
 
+  // Pinch zoom — DESIGN.md canvas v2. Clamped to [0.4, 2.0] to keep widgets readable.
+  const cameraPinch = Gesture.Pinch()
+    .onStart(() => {
+      startScale.value = cameraScale.value;
+    })
+    .onUpdate((e) => {
+      const next = startScale.value * e.scale;
+      cameraScale.value = Math.max(0.4, Math.min(2.0, next));
+    });
+
+  // Single-finger canvas pan — Move mode only. Item gestures (with
+  // minDistance:4) take precedence for touches landing on a widget; this only
+  // fires for touches on empty world space. Higher minDistance than items so
+  // a brief tap on an item doesn't accidentally trigger a canvas pan.
+  const movePan = Gesture.Pan()
+    .enabled(mode === 'move')
+    .minPointers(1)
+    .maxPointers(1)
+    .minDistance(8)
+    .onStart(() => {
+      startX.value = cameraX.value;
+      startY.value = cameraY.value;
+    })
+    .onUpdate((e) => {
+      cameraX.value = startX.value + e.translationX;
+      cameraY.value = startY.value + e.translationY;
+    });
+
+  // All three compose simultaneously — pan + pinch can fire together with
+  // two fingers, single-finger move pan with one. Items still win for touches
+  // on widgets via RNGH child-gesture precedence.
+  const cameraGestures = Gesture.Simultaneous(cameraPan, cameraPinch, movePan);
+
   const cameraStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: cameraX.value },
       { translateY: cameraY.value },
+      { scale: cameraScale.value },
     ],
   }));
 
   return (
-    <GestureDetector gesture={cameraPan}>
+    <GestureDetector gesture={cameraGestures}>
       <View style={[styles.viewport, { backgroundColor: canvasBg }]}>
         {/* Dot grid — Edit mode only, fixed to viewport */}
         {mode === 'edit' && <DotGrid dotColor={dotColor} />}

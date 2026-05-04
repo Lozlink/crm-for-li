@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Button,
   Dialog,
@@ -8,19 +8,39 @@ import {
   TextInput,
   Text,
   Checkbox,
+  Chip,
   useTheme,
 } from 'react-native-paper';
 import type {
   WhiteboardChecklistContent,
   WhiteboardChecklistEntry,
+  WhiteboardContactContent,
+  WhiteboardGoalContent,
+  WhiteboardGoalMetric,
+  WhiteboardGoalPeriod,
   WhiteboardItem,
+  WhiteboardMapContent,
   WhiteboardPhotoContent,
+  WhiteboardPropertyContent,
   WhiteboardStickyContent,
 } from '@realestate-crm/types';
 import { generateUUID } from '@realestate-crm/api';
+import { useCRMStore, usePropertyStore } from '@realestate-crm/hooks';
 import { STICKY_COLOR_DEFS, stickyColorKey } from './whiteboardColors';
 import { useColorScheme } from 'react-native';
 import { stickyColorForScheme } from './whiteboardColors';
+
+const GOAL_METRICS: { value: WhiteboardGoalMetric; label: string; icon: string }[] = [
+  { value: 'commission', label: 'Commission', icon: 'cash-multiple' },
+  { value: 'listings', label: 'Listings', icon: 'home-plus-outline' },
+  { value: 'leads', label: 'Leads', icon: 'account-plus-outline' },
+  { value: 'calls', label: 'Calls', icon: 'phone-outline' },
+];
+
+const GOAL_PERIODS: { value: WhiteboardGoalPeriod; label: string }[] = [
+  { value: 'month', label: 'This month' },
+  { value: 'quarter', label: 'This quarter' },
+];
 
 interface Props {
   item: WhiteboardItem | null;
@@ -52,6 +72,48 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
   const [photoUrl, setPhotoUrl] = useState('');
   const [photoCaption, setPhotoCaption] = useState('');
 
+  // Contact picker state
+  const [contactId, setContactId] = useState<string>('');
+  const [contactSearch, setContactSearch] = useState('');
+
+  // Property picker state
+  const [propertyId, setPropertyId] = useState<string>('');
+  const [propertySearch, setPropertySearch] = useState('');
+
+  // Goal state
+  const [goalMetric, setGoalMetric] = useState<WhiteboardGoalMetric>('commission');
+  const [goalTarget, setGoalTarget] = useState<string>('5000');
+  const [goalPeriod, setGoalPeriod] = useState<WhiteboardGoalPeriod>('month');
+
+  // Map state
+  const [mapLat, setMapLat] = useState<string>('-33.8688');
+  const [mapLng, setMapLng] = useState<string>('151.2093');
+  const [mapZoom, setMapZoom] = useState<string>('13');
+
+  // Live data for pickers — read at hook level so we don't break the rules.
+  const allContacts = useCRMStore((s) => s.contacts);
+  const allProperties = usePropertyStore((s) => s.properties);
+
+  const filteredContacts = useMemo(() => {
+    const q = contactSearch.trim().toLowerCase();
+    const list = allContacts.slice(0, 50); // bound for perf
+    if (!q) return list;
+    return allContacts.filter((c) => {
+      const name = `${c.first_name ?? ''} ${c.last_name ?? ''}`.toLowerCase();
+      const addr = (c.address ?? '').toLowerCase();
+      return name.includes(q) || addr.includes(q);
+    }).slice(0, 50);
+  }, [allContacts, contactSearch]);
+
+  const filteredProperties = useMemo(() => {
+    const q = propertySearch.trim().toLowerCase();
+    const list = allProperties.slice(0, 50);
+    if (!q) return list;
+    return allProperties.filter((p) => {
+      return p.address.toLowerCase().includes(q) || (p.suburb ?? '').toLowerCase().includes(q);
+    }).slice(0, 50);
+  }, [allProperties, propertySearch]);
+
   // Hydrate local state when item changes.
   useEffect(() => {
     if (!item) return;
@@ -68,6 +130,24 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
       const c = item.content as WhiteboardPhotoContent;
       setPhotoUrl(c?.url || '');
       setPhotoCaption(c?.caption || '');
+    } else if (item.type === 'contact') {
+      const c = item.content as WhiteboardContactContent;
+      setContactId(c?.contactId || '');
+      setContactSearch('');
+    } else if (item.type === 'property') {
+      const c = item.content as WhiteboardPropertyContent;
+      setPropertyId(c?.propertyId || '');
+      setPropertySearch('');
+    } else if (item.type === 'goal') {
+      const c = item.content as WhiteboardGoalContent;
+      setGoalMetric(c?.metric ?? 'commission');
+      setGoalTarget(String(c?.target ?? 5000));
+      setGoalPeriod(c?.period ?? 'month');
+    } else if (item.type === 'map') {
+      const c = item.content as WhiteboardMapContent;
+      setMapLat(String(c?.viewport?.lat ?? -33.8688));
+      setMapLng(String(c?.viewport?.lng ?? 151.2093));
+      setMapZoom(String(c?.viewport?.zoom ?? 13));
     }
   }, [item]);
 
@@ -94,6 +174,42 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
           caption: photoCaption.trim() || undefined,
         } as WhiteboardPhotoContent,
       });
+    } else if (item.type === 'contact') {
+      const c = allContacts.find((x) => x.id === contactId);
+      onSave(item.id, {
+        content: {
+          contactId,
+          snapshotName: c
+            ? [c.first_name, c.last_name].filter(Boolean).join(' ') || undefined
+            : undefined,
+        } as WhiteboardContactContent,
+      });
+    } else if (item.type === 'property') {
+      const p = allProperties.find((x) => x.id === propertyId);
+      onSave(item.id, {
+        content: {
+          propertyId,
+          snapshotAddress: p?.address,
+        } as WhiteboardPropertyContent,
+      });
+    } else if (item.type === 'goal') {
+      onSave(item.id, {
+        content: {
+          metric: goalMetric,
+          target: parseFloat(goalTarget) || 0,
+          period: goalPeriod,
+        } as WhiteboardGoalContent,
+      });
+    } else if (item.type === 'map') {
+      onSave(item.id, {
+        content: {
+          viewport: {
+            lat: parseFloat(mapLat) || 0,
+            lng: parseFloat(mapLng) || 0,
+            zoom: parseInt(mapZoom, 10) || 13,
+          },
+        } as WhiteboardMapContent,
+      });
     }
     onDismiss();
   };
@@ -119,16 +235,22 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
     setChecklistEntries((prev) => prev.filter((e) => e.id !== id));
   };
 
-  const titleByType = {
+  // Suggestion cards are read-only — they're snapshots from the Intelligence
+  // sidebar at the moment of "Add to board".
+  const titleByType: Partial<Record<typeof item.type, string>> = {
     sticky: 'Edit quick note',
     checklist: 'Edit to-do',
     photo: 'Edit photo',
-  } as const;
+    contact: 'Pick a contact',
+    property: 'Pick a property',
+    goal: 'Set your goal',
+    map: 'Set map pin',
+  };
 
   return (
     <Portal>
       <Dialog visible={!!item} onDismiss={onDismiss} style={styles.dialog}>
-        <Dialog.Title>{titleByType[item.type]}</Dialog.Title>
+        <Dialog.Title>{titleByType[item.type] ?? 'Edit'}</Dialog.Title>
 
         <Dialog.ScrollArea style={styles.scrollArea}>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
@@ -248,6 +370,176 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
                 />
               </View>
             )}
+
+            {item.type === 'contact' && (
+              <View>
+                <TextInput
+                  mode="outlined"
+                  label="Search contacts"
+                  value={contactSearch}
+                  onChangeText={setContactSearch}
+                  autoCapitalize="words"
+                />
+                <View style={styles.pickerList}>
+                  {filteredContacts.length === 0 && (
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, padding: 8 }}>
+                      No contacts match. Try a different search.
+                    </Text>
+                  )}
+                  {filteredContacts.map((c) => {
+                    const name = [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || 'Unnamed';
+                    const selected = c.id === contactId;
+                    return (
+                      <Pressable
+                        key={c.id}
+                        onPress={() => setContactId(c.id)}
+                        style={({ pressed }) => [
+                          styles.pickerRow,
+                          {
+                            backgroundColor: selected
+                              ? theme.colors.primaryContainer
+                              : pressed
+                                ? theme.colors.surfaceVariant
+                                : 'transparent',
+                          },
+                        ]}
+                      >
+                        <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
+                          {name}
+                        </Text>
+                        {!!c.address && (
+                          <Text
+                            variant="bodySmall"
+                            numberOfLines={1}
+                            style={{ color: theme.colors.onSurfaceVariant }}
+                          >
+                            {c.address}
+                          </Text>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {item.type === 'property' && (
+              <View>
+                <TextInput
+                  mode="outlined"
+                  label="Search properties"
+                  value={propertySearch}
+                  onChangeText={setPropertySearch}
+                />
+                <View style={styles.pickerList}>
+                  {filteredProperties.length === 0 && (
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, padding: 8 }}>
+                      No properties match. Try a different search.
+                    </Text>
+                  )}
+                  {filteredProperties.map((p) => {
+                    const selected = p.id === propertyId;
+                    return (
+                      <Pressable
+                        key={p.id}
+                        onPress={() => setPropertyId(p.id)}
+                        style={({ pressed }) => [
+                          styles.pickerRow,
+                          {
+                            backgroundColor: selected
+                              ? theme.colors.primaryContainer
+                              : pressed
+                                ? theme.colors.surfaceVariant
+                                : 'transparent',
+                          },
+                        ]}
+                      >
+                        <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
+                          {p.address}
+                        </Text>
+                        <Text
+                          variant="bodySmall"
+                          style={{ color: theme.colors.onSurfaceVariant }}
+                        >
+                          {p.suburb}{p.state ? `, ${p.state}` : ''}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {item.type === 'goal' && (
+              <View>
+                <Text variant="labelMedium" style={styles.swatchLabel}>Metric</Text>
+                <View style={styles.chipRow}>
+                  {GOAL_METRICS.map((m) => (
+                    <Chip
+                      key={m.value}
+                      icon={m.icon}
+                      selected={goalMetric === m.value}
+                      onPress={() => setGoalMetric(m.value)}
+                      compact
+                    >
+                      {m.label}
+                    </Chip>
+                  ))}
+                </View>
+                <TextInput
+                  mode="outlined"
+                  label={`Target${goalMetric === 'commission' ? ' ($)' : ''}`}
+                  value={goalTarget}
+                  onChangeText={setGoalTarget}
+                  keyboardType="numeric"
+                  style={{ marginTop: 12 }}
+                />
+                <Text variant="labelMedium" style={styles.swatchLabel}>Period</Text>
+                <View style={styles.chipRow}>
+                  {GOAL_PERIODS.map((p) => (
+                    <Chip
+                      key={p.value}
+                      selected={goalPeriod === p.value}
+                      onPress={() => setGoalPeriod(p.value)}
+                      compact
+                    >
+                      {p.label}
+                    </Chip>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {item.type === 'map' && (
+              <View>
+                <TextInput
+                  mode="outlined"
+                  label="Latitude"
+                  value={mapLat}
+                  onChangeText={setMapLat}
+                  keyboardType="numbers-and-punctuation"
+                />
+                <TextInput
+                  mode="outlined"
+                  label="Longitude"
+                  value={mapLng}
+                  onChangeText={setMapLng}
+                  keyboardType="numbers-and-punctuation"
+                  style={{ marginTop: 8 }}
+                />
+                <TextInput
+                  mode="outlined"
+                  label="Zoom"
+                  value={mapZoom}
+                  onChangeText={setMapZoom}
+                  keyboardType="number-pad"
+                  style={{ marginTop: 8 }}
+                />
+                <Text variant="bodySmall" style={styles.helper}>
+                  Tip: long-press the territory map to copy a pin's coordinates.
+                </Text>
+              </View>
+            )}
           </ScrollView>
         </Dialog.ScrollArea>
 
@@ -299,6 +591,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     gap: 4,
+  },
+  pickerList: {
+    marginTop: 8,
+    maxHeight: 280,
+  },
+  pickerRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
   },
   helper: {
     marginTop: 4,

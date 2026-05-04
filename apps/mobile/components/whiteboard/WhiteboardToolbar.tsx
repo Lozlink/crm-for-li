@@ -21,6 +21,12 @@ interface Props {
    * Disabled in Move mode (only meaningful when editing).
    */
   onRequestAdd: () => void;
+  /**
+   * Opens the IntelligenceSidebar (DESIGN.md §12).
+   * Always enabled — suggestions are available in both Move and Edit mode.
+   * Accessibility label: "Suggestions for your board" (NOT "AI suggestions").
+   */
+  onRequestSuggestions: () => void;
   onClose: () => void;
 }
 
@@ -41,7 +47,7 @@ const MODE_EASING = Easing.bezier(0.4, 0, 0.2, 1);
  * Design spec: DESIGN.md §2, §8.
  * Copy rules: "Add to your board", "Quick note", "To-do" — not "sticky"/"widget".
  */
-export function WhiteboardToolbar({ mode, onModeChange, onRequestAdd, onClose }: Props) {
+export function WhiteboardToolbar({ mode, onModeChange, onRequestAdd, onRequestSuggestions, onClose }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -146,6 +152,19 @@ export function WhiteboardToolbar({ mode, onModeChange, onRequestAdd, onClose }:
           onPress={onRequestAdd}
           accessibilityLabel="Add to your board"
           disabled={mode === 'move'}
+        />
+      </View>
+
+      {/* Intelligence trigger — opens IntelligenceSidebar. Always enabled.
+          Accessibility label: "Suggestions for your board" (no "AI" language — DESIGN.md §12). */}
+      <View style={styles.sideButton}>
+        <IconButton
+          icon="lightbulb-on-outline"
+          size={24}
+          iconColor={theme.colors.onSurfaceVariant}
+          onPress={onRequestSuggestions}
+          accessibilityLabel="Suggestions for your board"
+          accessibilityRole="button"
         />
       </View>
     </Surface>
