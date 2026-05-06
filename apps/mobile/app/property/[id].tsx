@@ -13,9 +13,10 @@ import {
   Dialog,
   ActivityIndicator,
   TextInput,
+  Snackbar,
 } from 'react-native-paper';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { usePropertyStore, useCRMStore, useBuyerMatchStore, useInspectionStore, useDataEnrichmentStore } from '@realestate-crm/hooks';
+import { usePropertyStore, useCRMStore, useBuyerMatchStore, useInspectionStore, useDataEnrichmentStore, useWhiteboardStore } from '@realestate-crm/hooks';
 import type {
   Property,
   PropertyStatus,
@@ -268,6 +269,9 @@ export default function PropertyDetailScreen() {
   const [inspectionDuration, setInspectionDuration] = useState('30');
   const [isScheduling, setIsScheduling] = useState(false);
 
+  const createWhiteboardItem = useWhiteboardStore((s) => s.createItem);
+  const [pinSnackbar, setPinSnackbar] = useState(false);
+
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [addContactDialogVisible, setAddContactDialogVisible] = useState(false);
@@ -487,6 +491,22 @@ export default function PropertyDetailScreen() {
                   startEditing();
                 }}
                 title="Edit"
+              />
+              <Menu.Item
+                leadingIcon="pin-outline"
+                onPress={() => {
+                  setMenuVisible(false);
+                  if (!property) return;
+                  createWhiteboardItem({
+                    type: 'property',
+                    position_x: 0,
+                    position_y: 0,
+                    content: { propertyId: property.id, snapshotAddress: property.address },
+                    ref_id: property.id,
+                  });
+                  setPinSnackbar(true);
+                }}
+                title="Pin to whiteboard"
               />
               <Menu.Item
                 leadingIcon="delete"
@@ -1282,6 +1302,15 @@ export default function PropertyDetailScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      <Snackbar
+        visible={pinSnackbar}
+        onDismiss={() => setPinSnackbar(false)}
+        duration={3500}
+        action={{ label: 'Open', onPress: () => router.push('/whiteboard') }}
+      >
+        Pinned to whiteboard
+      </Snackbar>
     </>
   );
 }

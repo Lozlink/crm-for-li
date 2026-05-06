@@ -53,6 +53,7 @@ export function SuggestionCard({ item }: Props) {
 
   const handleNavigate = () => {
     const target = buildNavTarget(kind, payload);
+    if (!target) return; // fail-soft: payload missing required fields
     router.push(target as never);
   };
 
@@ -134,20 +135,42 @@ export function SuggestionCard({ item }: Props) {
 
 /**
  * Derives the expo-router push target from the kind + persisted payload.
- * Routes mirror the team-lead deep-link spec (task #5 brief).
+ *
+ * Map deep-link param contract (consumed by /(tabs)/map.tsx):
+ *   ?lat=<latitude>  — map centers here
+ *   &lng=<longitude>
+ *   &zoom=<latitudeDelta>  — defaults to 0.01 (≈1km) when omitted
+ *   &layer=<layerKey>  — auto-enables the named VisibleLayers key on arrival
+ *
+ * Returns null when the payload is missing required fields so the caller can
+ * fail-soft (no navigation, optional snackbar).
  */
 function buildNavTarget(
   kind: WhiteboardSuggestionKind,
   payload: Record<string, unknown> | undefined,
-): string {
+): string | null {
   switch (kind) {
     case 'hot_prospects': {
       const ids = payload?.contactIds as string[] | undefined;
-      return ids?.[0] ? `/contact/${ids[0]}` : '/(tabs)/contacts';
+      if (ids?.[0]) return `/contact/${ids[0]}`;
+      // Fall back to contact list if no specific id persisted.
+      return '/(tabs)/contacts';
     }
-    case 'coverage_gap':
-      // payload has { buildingId, coverage, address } but no lat/lng — open map tab
-      return '/(tabs)/map';
+    case 'coverage_gap': {
+      // Payload: { buildingId, coverage, address, lat?, lng? }
+      // New suggestions carry lat/lng (B3 fix) so we can fly the map directly
+      // to the building. Older persisted suggestions lack the coords; those
+      // fall through to a layer-only nav so the user at least lands on the
+      // right view rather than getting nothing.
+      const lat = payload?.lat as number | undefined;
+      const lng = payload?.lng as number | undefined;
+      if (typeof lat === 'number' && typeof lng === 'number') {
+        // Tile-zoom 17 ≈ 0.0027° (~300m) — close enough to spot the building.
+        const delta = 360 / Math.pow(2, 17);
+        return `/(tabs)/map?lat=${lat}&lng=${lng}&zoom=${delta}&layer=buildings`;
+      }
+      return '/(tabs)/map?layer=buildings';
+    }
     case 'today_play': {
       const id = payload?.inspectionId as string | undefined;
       return id ? `/inspection/${id}` : '/(tabs)/prospecting';
@@ -155,9 +178,10 @@ function buildNavTarget(
     case 'route': {
       const lls = payload?.orderedLatLngs as { lat: number; lng: number }[] | undefined;
       if (lls?.[0]) {
-        return `/(tabs)/map?lat=${lls[0].lat}&lng=${lls[0].lng}&zoom=0.01&layer=contacts`;
+        // Zoom out a bit (0.05 ≈ 5km) to show several contacts at once.
+        return `/(tabs)/map?lat=${lls[0].lat}&lng=${lls[0].lng}&zoom=0.05&layer=contacts`;
       }
-      return '/(tabs)/map';
+      return null;
     }
   }
 }

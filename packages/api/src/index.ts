@@ -35,3 +35,7 @@ export type { DirectionsResult, DirectionsLeg } from './directions';
 // Email
 export { applyMergeFields } from './email';
 export type { SendEmailParams, SendBulkEmailParams } from './email';
+
+// Geocoding
+export { reverseGeocode } from './geocoding';
+export type { GeocodeResult } from './geocoding';

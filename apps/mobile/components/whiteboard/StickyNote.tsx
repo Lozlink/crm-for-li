@@ -1,4 +1,5 @@
 import { useColorScheme, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
 import type { WhiteboardItem, WhiteboardStickyContent } from '@realestate-crm/types';
 import {
   STICKY_COLOR_DEFS,
@@ -17,6 +18,48 @@ interface Props {
 }
 
 /**
+ * Buffered inline editor for the sticky text.
+ *
+ * Why a separate component: same cursor-jump-to-0 race as ChecklistEntryEditor
+ * (see EditItemSheet.tsx for full explanation). Local state breaks the race;
+ * we still commit every change so the canvas stays in sync.
+ */
+function StickyTextEditor({
+  initialText,
+  onCommit,
+}: {
+  initialText: string;
+  onCommit: (text: string) => void;
+}) {
+  const [text, setText] = useState(initialText);
+
+  useEffect(() => {
+    setText((curr) => (curr === initialText ? curr : initialText));
+  }, [initialText]);
+
+  return (
+    <TextInput
+      style={styles.textInput}
+      value={text}
+      onChangeText={(t) => {
+        setText(t);
+        onCommit(t);
+      }}
+      multiline
+      editable
+      placeholder="Quick note…"
+      placeholderTextColor={STICKY_PLACEHOLDER_COLOR}
+      textAlignVertical="top"
+      scrollEnabled={false}
+      autoCorrect={false}
+      autoCapitalize="sentences"
+      keyboardType="default"
+      returnKeyType="default"
+    />
+  );
+}
+
+/**
  * Sticky note body widget.
  *
  * Design tokens (see DESIGN.md §5):
@@ -29,7 +72,7 @@ interface Props {
 export function StickyNote({ item, editable = false, onChangeText }: Props) {
   const colorScheme = useColorScheme();
   const content = item.content as WhiteboardStickyContent | undefined;
-  const text = content?.text ?? '';
+  const initialText = content?.text ?? '';
 
   // Resolve the correct background for this sticky color in the current scheme.
   const storedColorKey = item.color ?? DEFAULT_STICKY_COLOR_DEF.light;
@@ -40,23 +83,24 @@ export function StickyNote({ item, editable = false, onChangeText }: Props) {
 
   return (
     <View style={[styles.root, { backgroundColor: bg }]}>
-      <TextInput
-        style={styles.textInput}
-        value={text}
-        onChangeText={onChangeText}
-        multiline
-        editable={editable}
-        placeholder="Quick note…"
-        placeholderTextColor={STICKY_PLACEHOLDER_COLOR}
-        textAlignVertical="top"
-        scrollEnabled={false}
-        // Suppress the system keyboard toolbar / autocorrect chrome on stickies.
-        autoCorrect={false}
-        autoCapitalize="sentences"
-        // Prevent the underlying canvas scroll from fighting the TextInput.
-        keyboardType="default"
-        returnKeyType="default"
-      />
+      {editable ? (
+        <StickyTextEditor initialText={initialText} onCommit={onChangeText ?? (() => {})} />
+      ) : (
+        <TextInput
+          style={styles.textInput}
+          value={initialText}
+          editable={false}
+          multiline
+          placeholder="Quick note…"
+          placeholderTextColor={STICKY_PLACEHOLDER_COLOR}
+          textAlignVertical="top"
+          scrollEnabled={false}
+          autoCorrect={false}
+          autoCapitalize="sentences"
+          keyboardType="default"
+          returnKeyType="default"
+        />
+      )}
     </View>
   );
 }

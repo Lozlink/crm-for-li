@@ -1,16 +1,19 @@
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Platform, StyleSheet, View, Vibration, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withTiming,
-  interpolateColor,
-  Easing,
+  withSpring,
 } from 'react-native-reanimated';
 import { TouchableRipple, IconButton, Surface, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useEffect } from 'react';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { WhiteboardMode } from './types';
+
+// Matches SPRING_LIFT/SPRING_DROP feel from WhiteboardItemView
+const SPRING_TOGGLE = { mass: 0.3, damping: 18, stiffness: 260 } as const;
+
+const PILL_HEIGHT = 36;
 
 interface Props {
   mode: WhiteboardMode;
@@ -30,15 +33,12 @@ interface Props {
   onClose: () => void;
 }
 
-// 200ms ease per DESIGN.md §2
-const MODE_DURATION = 200;
-const MODE_EASING = Easing.bezier(0.4, 0, 0.2, 1);
-
 /**
  * Bottom-anchored toolbar for the whiteboard.
  *
  * - Close (left): back to Hub.
- * - Animated Mode pill (center): Move / Edit — 200ms color transition.
+ * - Sliding segmented-control pill (center): Move / Edit toggle with spring
+ *   animation and a brief vibration on toggle.
  * - Add (right): opens the AddWidgetSheet (DESIGN.md §8).
  *
  * Honors Android nav bar safe-area inset (project gotcha — fullscreen routes
@@ -50,43 +50,61 @@ const MODE_EASING = Easing.bezier(0.4, 0, 0.2, 1);
 export function WhiteboardToolbar({ mode, onModeChange, onRequestAdd, onRequestSuggestions, onClose }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  // Tracks the last mode we actually animated to. `null` until the pill has
+  // measured itself (initial mount — snap, no haptic). Once non-null, an
+  // incoming `mode` that differs from this is a real user toggle and fires
+  // the spring + haptic. Keying off mode (not segmentWidth) avoids the prior
+  // race where a layout-only re-render was treated as a toggle and buzzed
+  // the device on every screen mount.
+  const prevModeRef = useRef<WhiteboardMode | null>(null);
+  const [segmentWidth, setSegmentWidth] = useState(0);
 
-  // 0 = Move, 1 = Edit
-  const progress = useSharedValue(mode === 'edit' ? 1 : 0);
+  const indicatorX = useSharedValue(0);
 
   useEffect(() => {
-    progress.value = withTiming(mode === 'edit' ? 1 : 0, {
-      duration: MODE_DURATION,
-      easing: MODE_EASING,
-    });
-  }, [mode]);
+    if (segmentWidth === 0) return;
+    const targetX = mode === 'edit' ? segmentWidth : 0;
+    if (prevModeRef.current === null) {
+      // First measurement — snap into place without animation or haptic.
+      indicatorX.value = targetX;
+      prevModeRef.current = mode;
+      return;
+    }
+    if (prevModeRef.current === mode) {
+      // Width changed (rotation, layout reflow) but mode didn't — re-pin
+      // silently. No haptic; nothing the user did.
+      indicatorX.value = targetX;
+      return;
+    }
+    // Real mode change.
+    indicatorX.value = withSpring(targetX, SPRING_TOGGLE);
+    // iOS Vibration.vibrate is a no-op for short pulses; gate to Android so
+    // we don't pretend we're providing feedback we aren't. iOS parity via
+    // expo-haptics is a known follow-up — no precedent for the dep yet.
+    if (Platform.OS === 'android') {
+      Vibration.vibrate(30);
+    }
+    prevModeRef.current = mode;
+  }, [mode, segmentWidth]);
 
-  const pillStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      progress.value,
-      [0, 1],
-      [theme.colors.surfaceVariant, theme.colors.primary],
-    ),
+  const handlePillLayout = (e: LayoutChangeEvent) => {
+    const half = e.nativeEvent.layout.width / 2;
+    setSegmentWidth(half);
+    // Don't touch prevModeRef here — the effect owns first-mount initialization.
+    // Pre-empting it caused the every-mount buzz this fix is replacing.
+  };
+
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: indicatorX.value }],
   }));
 
-  const moveTextStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(
-      progress.value,
-      [0, 1],
-      [theme.colors.onSurfaceVariant, theme.colors.onSurface + '66'],
-    ),
-  }));
+  // Text colors: active segment gets onPrimary, inactive gets onSurfaceVariant.
+  const moveIsActive = mode === 'move';
+  const editIsActive = mode === 'edit';
 
-  const editTextStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(
-      progress.value,
-      [0, 1],
-      [theme.colors.onSurface + '66', theme.colors.onPrimary],
-    ),
-  }));
-
-  const moveIconColor = mode === 'move' ? theme.colors.onSurfaceVariant : theme.colors.onSurface + '66';
-  const editIconColor = mode === 'edit' ? theme.colors.onPrimary : theme.colors.onSurface + '66';
+  const handleModeChange = (next: WhiteboardMode) => {
+    if (next !== mode) onModeChange(next);
+  };
 
   return (
     <Surface
@@ -108,40 +126,76 @@ export function WhiteboardToolbar({ mode, onModeChange, onRequestAdd, onRequestS
         style={styles.sideButton}
       />
 
-      {/* Animated mode pill */}
-      <Animated.View style={[styles.pill, pillStyle]}>
+      {/* Sliding segmented pill */}
+      <View
+        style={[
+          styles.pill,
+          { backgroundColor: theme.colors.surfaceVariant },
+        ]}
+        onLayout={handlePillLayout}
+      >
+        {/* Sliding indicator — sits behind the labels */}
+        <Animated.View
+          style={[
+            styles.indicator,
+            { backgroundColor: theme.colors.primary, width: segmentWidth || '50%' },
+            indicatorStyle,
+          ]}
+          pointerEvents="none"
+        />
+
+        {/* Move segment */}
         <TouchableRipple
-          onPress={() => onModeChange('move')}
+          onPress={() => handleModeChange('move')}
           borderless
           style={styles.pillHalf}
           accessibilityRole="button"
-          accessibilityLabel="Move mode"
-          accessibilityState={{ selected: mode === 'move' }}
+          accessibilityLabel="Switch to Move mode"
+          accessibilityState={{ selected: moveIsActive }}
         >
           <View style={styles.pillSegment}>
-            <Icon name="cursor-move" size={16} color={moveIconColor} />
-            <Animated.Text style={[styles.pillLabel, moveTextStyle]}>
+            <Icon
+              name="cursor-move"
+              size={15}
+              color={moveIsActive ? theme.colors.onPrimary : theme.colors.onSurfaceVariant}
+            />
+            <Animated.Text
+              style={[
+                styles.pillLabel,
+                { color: moveIsActive ? theme.colors.onPrimary : theme.colors.onSurfaceVariant },
+              ]}
+            >
               Move
             </Animated.Text>
           </View>
         </TouchableRipple>
 
+        {/* Edit segment */}
         <TouchableRipple
-          onPress={() => onModeChange('edit')}
+          onPress={() => handleModeChange('edit')}
           borderless
           style={styles.pillHalf}
           accessibilityRole="button"
-          accessibilityLabel="Edit mode"
-          accessibilityState={{ selected: mode === 'edit' }}
+          accessibilityLabel="Switch to Edit mode"
+          accessibilityState={{ selected: editIsActive }}
         >
           <View style={styles.pillSegment}>
-            <Icon name="pencil-outline" size={16} color={editIconColor} />
-            <Animated.Text style={[styles.pillLabel, editTextStyle]}>
+            <Icon
+              name="pencil-outline"
+              size={15}
+              color={editIsActive ? theme.colors.onPrimary : theme.colors.onSurfaceVariant}
+            />
+            <Animated.Text
+              style={[
+                styles.pillLabel,
+                { color: editIsActive ? theme.colors.onPrimary : theme.colors.onSurfaceVariant },
+              ]}
+            >
               Edit
             </Animated.Text>
           </View>
         </TouchableRipple>
-      </Animated.View>
+      </View>
 
       {/* Add — opens the AddWidgetSheet. Only meaningful in Edit mode. */}
       <View style={styles.sideButton}>
@@ -182,14 +236,19 @@ const styles = StyleSheet.create({
     width: 48,
     alignItems: 'center',
   },
-  // Pill container
   pill: {
-    flex: 1,
-    flexDirection: 'row',
-    height: 44,
-    borderRadius: 22,
+    height: PILL_HEIGHT,
+    borderRadius: PILL_HEIGHT / 2,
     overflow: 'hidden',
+    flexDirection: 'row',
     marginHorizontal: 8,
+    flex: 1,
+  },
+  indicator: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    borderRadius: PILL_HEIGHT / 2,
   },
   pillHalf: {
     flex: 1,
@@ -199,12 +258,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
     paddingHorizontal: 8,
   },
   pillLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
 });

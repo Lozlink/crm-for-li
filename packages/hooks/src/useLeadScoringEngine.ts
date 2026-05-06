@@ -1,9 +1,10 @@
 import { useMemo, useEffect, useRef, useCallback, useState } from 'react';
-import type { LeadScoreBreakdown, LeadTier, Contact, SoldRecord } from '@realestate-crm/types';
+import type { LeadScoreBreakdown, LeadTier, Contact, SoldRecord, InspectionAttendee } from '@realestate-crm/types';
 import { haversineDistance, normalizeAddress } from '@realestate-crm/utils';
 import { useCRMStore } from './useCRMStore';
 import { useDataEnrichmentStore } from './useDataEnrichmentStore';
 import { useDeclaredBuildingsStore } from './useDeclaredBuildingsStore';
+import { useInspectionStore } from './useInspectionStore';
 import { usePropertyStore } from './usePropertyStore';
 import { useTrackingStore } from './useTrackingStore';
 
@@ -41,7 +42,6 @@ function makeSoldGridKey(lat: number, lng: number): string {
 }
 
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const CONVERSION_STATUSES = new Set(['available', 'under_offer', 'exchanged', 'settled']);
 
 // Declared-building coverage signal — see LeadScoreBreakdown for rationale.
@@ -62,6 +62,25 @@ function buildingCoverageBonus(visited: number, estimated: number): number {
   return BUILDING_COVERAGE_MAX;
 }
 
+// Inspection attendance scoring constants.
+//
+// Rule: for each inspection_attendees row where contact_id matches, in the last 90 days:
+//   - Base bonus by interest_level: hot=+12, warm=+6, cold=+2, null/unset=+4
+//   - Recency multiplier: ≤14d → 1.0×, 15-45d → 0.6×, 46-90d → 0.3×, >90d → 0×
+//   - Cap total inspection-attendance bonus at +30 points per contact
+// Weights are intentionally smaller than engagement (0-25) and staleness (0-25) —
+// a single attendance is a strong signal but shouldn't dominate over sustained engagement.
+const INSPECTION_ATTENDANCE_CAP = 30;
+const INTEREST_LEVEL_BASE: Record<string, number> = { hot: 12, warm: 6, cold: 2 };
+const INTEREST_LEVEL_DEFAULT = 4;
+
+function inspectionRecencyMultiplier(daysAgo: number): number {
+  if (daysAgo <= 14) return 1.0;
+  if (daysAgo <= 45) return 0.6;
+  if (daysAgo <= 90) return 0.3;
+  return 0;
+}
+
 export function useLeadScoringEngine(): {
   scores: Map<string, LeadScoreBreakdown>;
   isComputing: boolean;
@@ -76,6 +95,11 @@ export function useLeadScoringEngine(): {
   const properties = usePropertyStore(s => s.properties);
   const declaredBuildings = useDeclaredBuildingsStore(s => s.declaredBuildings);
   const activeSession = useTrackingStore(s => s.activeSession);
+  // Flatten all attendees across all fetched inspections into a single list.
+  // useSmartSuggestions owns the fetchUpcoming() trigger; the engine reads whatever
+  // attendees the store has hydrated (inspections + upcomingInspections).
+  const inspections = useInspectionStore(s => s.inspections);
+  const upcomingInspections = useInspectionStore(s => s.upcomingInspections);
 
   const [isComputing, setIsComputing] = useState(false);
   const prevSessionRef = useRef(activeSession);
@@ -181,6 +205,27 @@ export function useLeadScoringEngine(): {
     return map;
   }, [declaredBuildings, contacts]);
 
+  // Pre-build inspection attendance index: contactId -> InspectionAttendee[].
+  // Built once per render from the union of loaded inspections (all + upcoming).
+  // Using a Map avoids O(n) filtering per contact inside the scoring loop.
+  const attendeeIndex = useMemo(() => {
+    const map = new Map<string, InspectionAttendee[]>();
+    const allInspections = [...inspections, ...upcomingInspections];
+    for (const insp of allInspections) {
+      if (!insp.attendees) continue;
+      for (const att of insp.attendees) {
+        if (!att.contact_id) continue;
+        const bucket = map.get(att.contact_id);
+        if (bucket) {
+          bucket.push(att);
+        } else {
+          map.set(att.contact_id, [att]);
+        }
+      }
+    }
+    return map;
+  }, [inspections, upcomingInspections]);
+
   // Pre-build suburb stats lookup and per-suburb contact counts
   const { suburbStatsMap, suburbContactCounts } = useMemo(() => {
     const statsMap = new Map<string, (typeof suburbStats)[number]>();
@@ -279,8 +324,27 @@ export function useLeadScoringEngine(): {
         }
       }
 
+      // 7. Inspection Attendance (0-30) — open-home attendance is a strong buying-intent signal.
+      // Base points by interest_level × recency multiplier, capped at INSPECTION_ATTENDANCE_CAP.
+      let inspectionAttendance = 0;
+      const attendances = attendeeIndex.get(contact.id);
+      if (attendances) {
+        let raw = 0;
+        for (const att of attendances) {
+          if (!att.created_at) continue;
+          const daysAgo = (now - new Date(att.created_at).getTime()) / (1000 * 60 * 60 * 24);
+          const multiplier = inspectionRecencyMultiplier(daysAgo);
+          if (multiplier === 0) continue;
+          const base = att.interest_level
+            ? (INTEREST_LEVEL_BASE[att.interest_level] ?? INTEREST_LEVEL_DEFAULT)
+            : INTEREST_LEVEL_DEFAULT;
+          raw += base * multiplier;
+        }
+        inspectionAttendance = Math.min(raw, INSPECTION_ATTENDANCE_CAP);
+      }
+
       const total = Math.round(
-        staleness + salesMomentum + engagement + streetConversion + penetration + buildingCoverage,
+        staleness + salesMomentum + engagement + streetConversion + penetration + buildingCoverage + inspectionAttendance,
       );
 
       result.set(contact.id, {
@@ -294,13 +358,14 @@ export function useLeadScoringEngine(): {
           streetConversion: Math.round(streetConversion * 10) / 10,
           penetration: Math.round(penetration * 10) / 10,
           buildingCoverage: Math.round(buildingCoverage * 10) / 10,
+          inspectionAttendance: Math.round(inspectionAttendance * 10) / 10,
         },
         lastComputedAt: computedAt,
       });
     }
 
     return result;
-  }, [contacts, activityMap, soldGrid, streetConversions, suburbStatsMap, suburbContactCounts, buildingCoverageMap]);
+  }, [contacts, activityMap, soldGrid, streetConversions, suburbStatsMap, suburbContactCounts, buildingCoverageMap, attendeeIndex]);
 
   // Write-back: batch update contacts whose lead_score has changed
   const writeScoredContacts = useCallback(async () => {

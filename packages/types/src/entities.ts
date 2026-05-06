@@ -142,17 +142,18 @@ export type LeadTier = 'hot' | 'warm' | 'cold' | 'dormant';
 
 export interface LeadScoreBreakdown {
   contactId: string;
-  total: number; // 0-108 (core 100 + up to 8 from declared-building coverage)
+  total: number; // 0-138 (core 100 + up to 8 building coverage + up to 30 inspection attendance)
   tier: LeadTier;
   components: {
-    staleness: number;        // 0-25
-    salesMomentum: number;    // 0-25
-    engagement: number;       // 0-25
-    streetConversion: number; // 0-15
-    penetration: number;      // 0-10
-    buildingCoverage: number; // 0-8 — bump for contacts in declared buildings the agent
-                              // has started canvassing but not finished. Trapezoidal:
-                              // full 8 when coverage_ratio ∈ [0.05, 0.95], 0 at the edges.
+    staleness: number;              // 0-25
+    salesMomentum: number;          // 0-25
+    engagement: number;             // 0-25
+    streetConversion: number;       // 0-15
+    penetration: number;            // 0-10
+    buildingCoverage: number;       // 0-8 — bump for contacts in declared buildings the agent
+                                    // has started canvassing but not finished. Trapezoidal:
+                                    // full 8 when coverage_ratio ∈ [0.05, 0.95], 0 at the edges.
+    inspectionAttendance: number;   // 0-30 — open-home attendance signal; see useLeadScoringEngine
   };
   lastComputedAt: string;
 }
@@ -375,7 +376,11 @@ export interface InspectionAttendee {
   created_at?: string;
   // Joined
   contact?: Contact;
-  // Set by auto-match logic when attendee data suggests a possible contact match
+  /**
+   * Transient — only set on the `addAttendee` return value; never persisted to the database.
+   * True when the attendee has contact info (phone/email) but no exact CRM match was found,
+   * prompting the UI to offer a "did you mean?" contact-link flow.
+   */
   suggestedContactMatch?: boolean;
 }
 
@@ -675,6 +680,9 @@ export interface WhiteboardMapContent {
   viewport: { lat: number; lng: number; zoom: number };
   /** Optional overlays to render on the embedded thumbnail. */
   overlays?: ('buildings' | 'tracking' | 'sold')[];
+  /** Resolved via OSM Nominatim reverse-geocode; cached on the row after first lookup. */
+  address?: string;
+  suburb?: string;
 }
 
 export type WhiteboardGoalMetric = 'commission' | 'listings' | 'leads' | 'calls';

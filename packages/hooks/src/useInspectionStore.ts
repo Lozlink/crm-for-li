@@ -281,6 +281,7 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
   },
 
   createInspection: async (inspection) => {
+    set({ isLoading: true, error: null });
     try {
       const { isDemo, teamId, userId } = getTeamContext();
       if (isDemo) return null;
@@ -309,10 +310,13 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
       const message = err instanceof Error ? err.message : 'Failed to create inspection';
       set({ error: message });
       return null;
+    } finally {
+      set({ isLoading: false });
     }
   },
 
   updateInspection: async (id, updates) => {
+    set({ isLoading: true, error: null });
     try {
       const { isDemo } = getTeamContext();
       if (isDemo) return;
@@ -328,6 +332,8 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to update inspection';
       set({ error: message });
+    } finally {
+      set({ isLoading: false });
     }
   },
 
@@ -344,6 +350,7 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
   },
 
   addAttendee: async (inspectionId, attendee, resolvedContactId) => {
+    set({ isLoading: true, error: null });
     try {
       const { isDemo } = getTeamContext();
       if (isDemo) return null;
@@ -413,10 +420,13 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
       const message = err instanceof Error ? err.message : 'Failed to add attendee';
       set({ error: message });
       return null;
+    } finally {
+      set({ isLoading: false });
     }
   },
 
   updateAttendee: async (attendeeId, updates) => {
+    set({ isLoading: true, error: null });
     try {
       const { isDemo } = getTeamContext();
       if (isDemo) return;
@@ -430,10 +440,13 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to update attendee';
       set({ error: message });
+    } finally {
+      set({ isLoading: false });
     }
   },
 
   removeAttendee: async (attendeeId) => {
+    set({ isLoading: true, error: null });
     try {
       const { isDemo } = getTeamContext();
       if (isDemo) return;
@@ -445,10 +458,13 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to remove attendee';
       set({ error: message });
+    } finally {
+      set({ isLoading: false });
     }
   },
 
   linkAttendeeToContact: async (attendeeId, contactId) => {
+    set({ isLoading: true, error: null });
     try {
       const { isDemo } = getTeamContext();
       if (isDemo) {
@@ -475,6 +491,8 @@ export const useInspectionStore = create<InspectionState>()((set, get) => ({
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to link attendee to contact';
       set({ error: message });
+    } finally {
+      set({ isLoading: false });
     }
   },
 

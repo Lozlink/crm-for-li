@@ -14,10 +14,11 @@ import {
   ActivityIndicator,
   TextInput,
   SegmentedButtons,
+  Snackbar,
 } from 'react-native-paper';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useCRMStore, useEmailCampaignStore, useBuyerMatchStore, usePropertyStore, useInspectionStore, useCustomFieldStore, useLeadScoringEngine } from '@realestate-crm/hooks';
+import { useCRMStore, useEmailCampaignStore, useBuyerMatchStore, usePropertyStore, useInspectionStore, useCustomFieldStore, useLeadScoringEngine, useWhiteboardStore } from '@realestate-crm/hooks';
 import { geocodeAddress } from '@realestate-crm/utils';
 import type {
   Contact, ContactFormData, ContactSource, ContactType as CType,
@@ -237,6 +238,10 @@ export default function ContactDetailScreen() {
   // Inspection store
   const inspections = useInspectionStore(state => state.inspections);
   const fetchInspections = useInspectionStore(state => state.fetchInspections);
+
+  // Whiteboard pin
+  const createWhiteboardItem = useWhiteboardStore((s) => s.createItem);
+  const [pinSnackbar, setPinSnackbar] = useState(false);
 
   // Contact state
   const [contact, setContact] = useState<Contact | null>(null);
@@ -552,6 +557,24 @@ export default function ContactDetailScreen() {
                 leadingIcon="account-details"
                 onPress={handleOpenEditEnrichment}
                 title="Edit Details"
+              />
+              <Menu.Item
+                leadingIcon="pin-outline"
+                onPress={() => {
+                  setMenuVisible(false);
+                  if (!contact) return;
+                  const name = [contact.first_name, contact.last_name]
+                    .filter(Boolean).join(' ').trim();
+                  createWhiteboardItem({
+                    type: 'contact',
+                    position_x: 0,
+                    position_y: 0,
+                    content: { contactId: contact.id, snapshotName: name || undefined },
+                    ref_id: contact.id,
+                  });
+                  setPinSnackbar(true);
+                }}
+                title="Pin to whiteboard"
               />
               <Menu.Item
                 leadingIcon="delete"
@@ -1608,6 +1631,15 @@ export default function ContactDetailScreen() {
         onDismiss={() => setScoreSheetVisible(false)}
         breakdown={scoreBreakdown}
       />
+
+      <Snackbar
+        visible={pinSnackbar}
+        onDismiss={() => setPinSnackbar(false)}
+        duration={3500}
+        action={{ label: 'Open', onPress: () => router.push('/whiteboard') }}
+      >
+        Pinned to whiteboard
+      </Snackbar>
     </>
   );
 }

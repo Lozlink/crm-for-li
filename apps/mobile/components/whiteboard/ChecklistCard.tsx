@@ -1,5 +1,5 @@
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, useTheme, Button } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { WhiteboardItem, WhiteboardChecklistContent } from '@realestate-crm/types';
 
@@ -10,6 +10,11 @@ interface Props {
    * Only wired up in Move mode tap-handling layer, not during drag.
    */
   onToggle?: (entryId: string) => void;
+  /**
+   * Called when the user taps the "Done" affordance on a fully-checked list.
+   * Only wired in Move mode — parent handles deletion + confirmation.
+   */
+  onComplete?: () => void;
 }
 
 /**
@@ -21,11 +26,12 @@ interface Props {
  * - 44pt row height (touch-target requirement — agents one-handing on doorsteps)
  * - Checkbox 22pt, primary color when checked
  */
-export function ChecklistCard({ item, onToggle }: Props) {
+export function ChecklistCard({ item, onToggle, onComplete }: Props) {
   const theme = useTheme();
   const content = item.content as WhiteboardChecklistContent | undefined;
   const entries = content?.items ?? [];
   const title = (content?.title ?? '').trim();
+  const allDone = entries.length > 0 && entries.every((e) => e.checked);
 
   return (
     <View
@@ -92,6 +98,22 @@ export function ChecklistCard({ item, onToggle }: Props) {
           </Text>
         )}
       </View>
+
+      {/* "Done" affordance — only shown when all items are checked and parent wires onComplete */}
+      {allDone && !!onComplete && (
+        <Button
+          mode="contained-tonal"
+          compact
+          icon="check-circle-outline"
+          onPress={onComplete}
+          style={styles.doneButton}
+          contentStyle={styles.doneButtonContent}
+          labelStyle={styles.doneButtonLabel}
+          accessibilityLabel="All done — remove this list"
+        >
+          Done — remove?
+        </Button>
+      )}
     </View>
   );
 }
@@ -133,5 +155,17 @@ const styles = StyleSheet.create({
   },
   entryText: {
     flex: 1,
+  },
+  doneButton: {
+    marginTop: 8,
+    borderRadius: 8,
+    alignSelf: 'center',
+  },
+  doneButtonContent: {
+    height: 32,
+  },
+  doneButtonLabel: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

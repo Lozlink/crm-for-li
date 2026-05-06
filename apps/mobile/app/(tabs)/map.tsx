@@ -22,6 +22,18 @@ const { width, height } = Dimensions.get('window');
 const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.googleMapsApiKey ||
   process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
+/**
+ * Deep-link param contract — producers should push to '/(tabs)/map' with:
+ *   ?lat=<latitude>         — map centers here (required for focus)
+ *   &lng=<longitude>        — map centers here (required for focus)
+ *   &zoom=<latitudeDelta>   — camera zoom expressed as latitudeDelta (default 0.005 ≈ 500m)
+ *   &layer=<layerKey>       — auto-enables the named VisibleLayers key (contacts|properties|
+ *                             fieldActivity|buildings|stats). Comma-separated not supported yet.
+ *
+ * Producers: MapCard (whiteboard), SuggestionCard (route + coverage_gap kinds).
+ * Handled in the useFocusEffect below.
+ */
+
 interface VisibleLayers {
   contacts: boolean;
   properties: boolean;

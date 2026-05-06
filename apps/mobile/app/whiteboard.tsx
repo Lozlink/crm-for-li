@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Snackbar, useTheme } from 'react-native-paper';
+import { Snackbar, useTheme, Dialog, Button, Portal } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSharedValue } from 'react-native-reanimated';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
@@ -69,6 +69,8 @@ export default function WhiteboardScreen() {
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [intelligenceSidebarVisible, setIntelligenceSidebarVisible] = useState(false);
   const [snackbar, setSnackbar] = useState<string | null>(null);
+  // Pending checklist completion — holds the item id until user confirms removal.
+  const [completeConfirmId, setCompleteConfirmId] = useState<string | null>(null);
 
   const editingItem = useMemo<WhiteboardItem | null>(
     () => items.find((it) => it.id === editingId) ?? null,
@@ -297,6 +299,21 @@ export default function WhiteboardScreen() {
     [items, updateItem],
   );
 
+  // --- Checklist "Done" affordance ----------------------------------------
+  const handleCompleteChecklist = useCallback(
+    (id: string) => {
+      setCompleteConfirmId(id);
+    },
+    [],
+  );
+
+  const handleConfirmComplete = useCallback(() => {
+    if (completeConfirmId) {
+      void deleteItem(completeConfirmId);
+      setCompleteConfirmId(null);
+    }
+  }, [completeConfirmId, deleteItem]);
+
   // --- Context menu actions -----------------------------------------------
   const handleDelete = useCallback(
     (id: string) => {
@@ -343,6 +360,7 @@ export default function WhiteboardScreen() {
           onRequestContext={(id) => setContextId(id)}
           onToggleChecklistEntry={handleToggleChecklistEntry}
           onDelete={handleDelete}
+          onCompleteChecklist={handleCompleteChecklist}
         />
       </View>
 
@@ -384,6 +402,23 @@ export default function WhiteboardScreen() {
         onDismiss={() => setIntelligenceSidebarVisible(false)}
         onAddToBoard={handleAddSuggestionToBoard}
       />
+
+      {/* Checklist completion confirm dialog.
+          Hard-delete has no undo — Dialog gives one deliberate tap to confirm.
+          TODO: replace with Snackbar + Undo for a smoother UX (requires capturing
+          the deleted item's content/position for recreation). */}
+      <Portal>
+        <Dialog
+          visible={!!completeConfirmId}
+          onDismiss={() => setCompleteConfirmId(null)}
+        >
+          <Dialog.Title>Remove completed list?</Dialog.Title>
+          <Dialog.Actions>
+            <Button onPress={() => setCompleteConfirmId(null)}>Keep</Button>
+            <Button mode="contained" onPress={handleConfirmComplete}>Remove</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       <Snackbar
         visible={!!snackbar}

@@ -27,6 +27,7 @@ interface Props {
   onRequestContext: (id: string) => void;
   onToggleChecklistEntry: (itemId: string, entryId: string) => void;
   onDelete: (id: string) => void;
+  onCompleteChecklist?: (id: string) => void;
 }
 
 /**
@@ -56,6 +57,7 @@ export function WhiteboardCanvas({
   onRequestContext,
   onToggleChecklistEntry,
   onDelete,
+  onCompleteChecklist,
 }: Props) {
   const colorScheme = useColorScheme();
   const canvasBg = colorScheme === 'dark' ? CANVAS_BG.dark : CANVAS_BG.light;
@@ -136,6 +138,7 @@ export function WhiteboardCanvas({
               onRequestContext={onRequestContext}
               onToggleChecklistEntry={onToggleChecklistEntry}
               onDelete={onDelete}
+              onCompleteChecklist={onCompleteChecklist}
             />
           ))}
         </Animated.View>

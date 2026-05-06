@@ -50,6 +50,8 @@ interface Props {
   onToggleChecklistEntry: (itemId: string, entryId: string) => void;
   /** Delete an item. Wired to the × affordance in Edit mode. */
   onDelete: (id: string) => void;
+  /** Fired when the user taps "Done — remove?" on a fully-checked checklist (Move mode only). */
+  onCompleteChecklist?: (id: string) => void;
 }
 
 /**
@@ -68,6 +70,7 @@ export function WhiteboardItemView({
   onRequestContext,
   onToggleChecklistEntry,
   onDelete,
+  onCompleteChecklist,
 }: Props) {
   const theme = useTheme();
   const updateItemLocal = useWhiteboardStore(s => s.updateItemLocal);
@@ -204,6 +207,7 @@ export function WhiteboardItemView({
           <ChecklistCard
             item={item}
             onToggle={mode === 'move' ? (entryId) => onToggleChecklistEntry(item.id, entryId) : undefined}
+            onComplete={mode === 'move' && onCompleteChecklist ? () => onCompleteChecklist(item.id) : undefined}
           />
         )}
         {item.type === 'photo' && <PhotoCard item={item} editable={isEdit} />}

@@ -453,7 +453,7 @@ export default function TrackingSessionDetailScreen() {
   if (!session) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Session' }} />
+        <Stack.Screen options={{ title: 'Notes' }} />
         <View
           style={[
             styles.container,
@@ -479,7 +479,7 @@ export default function TrackingSessionDetailScreen() {
     <>
       <Stack.Screen
         options={{
-          title: 'Session Detail',
+          title: 'Notes',
           headerStyle: { backgroundColor: theme.colors.surface },
           headerTintColor: theme.colors.onSurface,
         }}

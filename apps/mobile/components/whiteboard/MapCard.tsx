@@ -1,33 +1,86 @@
+import { useEffect, useState } from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
+import { reverseGeocode } from '@realestate-crm/api';
+import { useWhiteboardStore } from '@realestate-crm/hooks';
 import type { WhiteboardItem, WhiteboardMapContent } from '@realestate-crm/types';
 
 interface Props {
   item: WhiteboardItem;
 }
 
-function formatCoord(n: number): string {
-  return n.toFixed(4);
-}
-
 /**
  * MapCard — a static "snippet" of the territory map, anchored to a viewport.
  *
- * Phase 2 ships as a tap-to-open shortcut (no live thumbnail rendering — we
- * deliberately avoid spawning multiple MapView instances on a board). Tapping
- * navigates to the main map route. Future polish: snapshot rendering via
- * react-native-maps `liteMode` or a server-rendered tile preview.
+ * Resolves a human-readable address via OSM Nominatim reverse-geocode on
+ * first render; writes the result back to the whiteboard row so subsequent
+ * renders skip the network call. Falls back to suburb, then raw coords.
+ *
+ * Tapping navigates to the map tab with focus + layer params so the view
+ * lands at the saved viewport (T#13).
+ *
+ * Deep-link param contract for /(tabs)/map:
+ *   ?lat=<latitude>&lng=<longitude>&zoom=<latitudeDelta>&layer=<layerKey>
+ *
+ * Note on zoom semantics: `viewport.zoom` is stored as a **tile-zoom integer**
+ * (Google/OSM convention, ~1-20) — that's what users mentally associate with
+ * "zoom level" and what the editor surfaces. The map screen, however, takes a
+ * `latitudeDelta` in degrees. We convert here so callers see a sensible zoom
+ * regardless of which units they think in. (Earlier revisions pushed the raw
+ * tile-zoom value as `?zoom=`, which the map screen interpreted as ~1450km
+ * latitudeDelta and showed the entire continent.)
  */
 export function MapCard({ item }: Props) {
   const theme = useTheme();
   const router = useRouter();
   const content = item.content as WhiteboardMapContent;
   const { lat, lng, zoom } = content.viewport;
+  const updateItem = useWhiteboardStore((s) => s.updateItem);
+
+  const [resolvedAddress, setResolvedAddress] = useState<string | null>(
+    content.address || null,
+  );
+  const [resolvedSuburb, setResolvedSuburb] = useState<string | null>(
+    content.suburb || null,
+  );
+
+  useEffect(() => {
+    // Already resolved — nothing to do.
+    if (content.address) return;
+
+    let cancelled = false;
+    reverseGeocode(lat, lng).then((result) => {
+      if (cancelled || !result) return;
+      setResolvedAddress(result.address);
+      setResolvedSuburb(result.suburb);
+      // Persist back so the next render skips the network call.
+      const updatedContent: WhiteboardMapContent = {
+        ...content,
+        address: result.address,
+        suburb: result.suburb,
+      };
+      updateItem(item.id, { content: updatedContent });
+    });
+    return () => { cancelled = true; };
+  }, [lat, lng]);
+
+  const displayLine1 = resolvedAddress || null;
+  const displayLine2 = resolvedSuburb || null;
+  const fallbackCoords = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
   const handlePress = () => {
-    router.push('/(tabs)/map');
+    // Convert stored tile-zoom integer (1-21) → latitudeDelta in degrees.
+    // delta = 360 / 2^z is technically the longitudeDelta-at-equator, but for
+    // our centering purpose it's adequate (the map screen also assigns it to
+    // longitudeDelta). At z=13 → ~0.044° ≈ 5km region; z=17 → ~300m.
+    // Clamp to a sane tile-zoom range; anything outside falls back to 13.
+    const tileZoom = zoom >= 1 && zoom <= 21 ? zoom : 13;
+    const delta = 360 / Math.pow(2, tileZoom);
+    router.push(
+      `/(tabs)/map?lat=${lat}&lng=${lng}&zoom=${delta}` as never,
+    );
   };
 
   return (
@@ -58,12 +111,32 @@ export function MapCard({ item }: Props) {
           color={theme.colors.primary}
           style={{ opacity: 0.55 }}
         />
-        <Text variant="bodySmall" style={[styles.coord, { color: theme.colors.onSurfaceVariant }]}>
-          {formatCoord(lat)}, {formatCoord(lng)}
-        </Text>
-        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.7 }}>
-          Zoom {zoom}
-        </Text>
+        {displayLine1 ? (
+          <Text
+            variant="bodySmall"
+            numberOfLines={1}
+            style={[styles.addressLine, { color: theme.colors.onSurface }]}
+          >
+            {displayLine1}
+          </Text>
+        ) : null}
+        {displayLine2 ? (
+          <Text
+            variant="bodySmall"
+            numberOfLines={1}
+            style={[styles.suburbLine, { color: theme.colors.onSurfaceVariant }]}
+          >
+            {displayLine2}
+          </Text>
+        ) : null}
+        {!displayLine1 && !displayLine2 ? (
+          <Text
+            variant="bodySmall"
+            style={[styles.coord, { color: theme.colors.onSurfaceVariant }]}
+          >
+            {content.address === undefined ? 'Resolving address...' : fallbackCoords}
+          </Text>
+        ) : null}
       </View>
 
       <Text variant="bodySmall" style={[styles.hint, { color: theme.colors.primary }]}>
@@ -98,6 +171,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
   },
+  addressLine: { fontWeight: '600', textAlign: 'center' },
+  suburbLine: { textAlign: 'center', opacity: 0.7 },
   coord: { fontWeight: '600' },
   hint: { textAlign: 'right', fontWeight: '600' },
 });

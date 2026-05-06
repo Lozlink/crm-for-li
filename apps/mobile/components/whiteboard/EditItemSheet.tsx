@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Button,
   Dialog,
@@ -10,7 +10,9 @@ import {
   Checkbox,
   Chip,
   useTheme,
+  ActivityIndicator,
 } from 'react-native-paper';
+import * as ImagePicker from 'expo-image-picker';
 import type {
   WhiteboardChecklistContent,
   WhiteboardChecklistEntry,
@@ -24,7 +26,7 @@ import type {
   WhiteboardPropertyContent,
   WhiteboardStickyContent,
 } from '@realestate-crm/types';
-import { generateUUID } from '@realestate-crm/api';
+import { generateUUID, isDemoMode, reverseGeocode, supabase } from '@realestate-crm/api';
 import { useCRMStore, usePropertyStore } from '@realestate-crm/hooks';
 import { STICKY_COLOR_DEFS, stickyColorKey } from './whiteboardColors';
 import { useColorScheme } from 'react-native';
@@ -41,6 +43,52 @@ const GOAL_PERIODS: { value: WhiteboardGoalPeriod; label: string }[] = [
   { value: 'month', label: 'This month' },
   { value: 'quarter', label: 'This quarter' },
 ];
+
+/**
+ * Per-entry editor for checklist rows.
+ *
+ * Why a separate component: when the TextInput's `value` is sourced directly
+ * from a parent array, every keystroke triggers a parent re-render that
+ * passes a new `value` prop to the input. On RN-Paper's `mode="flat" dense`
+ * wrapper this races the native cursor sync and resets the caret to position
+ * 0 — the user-visible symptom is "text writes backwards when prepending"
+ * because each typed char then lands at index 0 of the next render's value.
+ *
+ * Sourcing `value` from local state breaks that race: parent re-renders no
+ * longer change the input's `value` prop, so the cursor stays where the user
+ * puts it. We still commit on every change so Save sees the latest text
+ * without depending on blur-then-tap event ordering.
+ */
+function ChecklistEntryEditor({
+  initialText,
+  onCommit,
+}: {
+  initialText: string;
+  onCommit: (text: string) => void;
+}) {
+  const [text, setText] = useState(initialText);
+
+  // Re-hydrate when the parent's notion of initialText changes for an external
+  // reason (modal re-opens for a different entry, entry reordered, etc).
+  // The functional updater short-circuits the no-op case where the parent is
+  // just echoing back our own commit, avoiding a redundant render.
+  useEffect(() => {
+    setText((curr) => (curr === initialText ? curr : initialText));
+  }, [initialText]);
+
+  return (
+    <TextInput
+      mode="flat"
+      dense
+      style={styles.entryInput}
+      value={text}
+      onChangeText={(t) => {
+        setText(t);
+        onCommit(t);
+      }}
+    />
+  );
+}
 
 interface Props {
   item: WhiteboardItem | null;
@@ -71,6 +119,9 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
   // Photo local state
   const [photoUrl, setPhotoUrl] = useState('');
   const [photoCaption, setPhotoCaption] = useState('');
+  const [photoLocalUri, setPhotoLocalUri] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   // Contact picker state
   const [contactId, setContactId] = useState<string>('');
@@ -130,6 +181,9 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
       const c = item.content as WhiteboardPhotoContent;
       setPhotoUrl(c?.url || '');
       setPhotoCaption(c?.caption || '');
+      setPhotoLocalUri(null);
+      setPhotoUploading(false);
+      setPhotoError(null);
     } else if (item.type === 'contact') {
       const c = item.content as WhiteboardContactContent;
       setContactId(c?.contactId || '');
@@ -201,15 +255,20 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
         } as WhiteboardGoalContent,
       });
     } else if (item.type === 'map') {
-      onSave(item.id, {
-        content: {
-          viewport: {
-            lat: parseFloat(mapLat) || 0,
-            lng: parseFloat(mapLng) || 0,
-            zoom: parseInt(mapZoom, 10) || 13,
-          },
-        } as WhiteboardMapContent,
-      });
+      const lat = parseFloat(mapLat) || 0;
+      const lng = parseFloat(mapLng) || 0;
+      const zoom = parseInt(mapZoom, 10) || 13;
+      const prevContent = item.content as WhiteboardMapContent;
+      const coordsChanged =
+        prevContent.viewport.lat !== lat || prevContent.viewport.lng !== lng;
+      const mapContent: WhiteboardMapContent = {
+        ...prevContent,
+        viewport: { lat, lng, zoom },
+        // Clear cached address when coords change so MapCard re-resolves.
+        address: coordsChanged ? undefined : prevContent.address,
+        suburb: coordsChanged ? undefined : prevContent.suburb,
+      };
+      onSave(item.id, { content: mapContent });
     }
     onDismiss();
   };
@@ -233,6 +292,88 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
 
   const removeEntry = (id: string) => {
     setChecklistEntries((prev) => prev.filter((e) => e.id !== id));
+  };
+
+  // ── Photo picker helpers ──────────────────────────────────────────────────
+
+  const uploadPhoto = async (uri: string): Promise<string | null> => {
+    if (isDemoMode) {
+      // Demo mode: use a placeholder so the card renders without Supabase.
+      return `https://picsum.photos/seed/${Math.floor(Math.random() * 1000)}/400/300`;
+    }
+    try {
+      const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const path = `whiteboard-photos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const resp = await fetch(uri);
+      const blob = await resp.blob();
+      const { error } = await supabase.storage
+        .from('whiteboard-photos')
+        .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
+      if (error) {
+        console.error('Photo upload error:', error.message);
+        return null;
+      }
+      const { data } = supabase.storage.from('whiteboard-photos').getPublicUrl(path);
+      return data.publicUrl;
+    } catch (e) {
+      console.error('Photo upload failed:', e);
+      return null;
+    }
+  };
+
+  const pickFromCamera = async () => {
+    setPhotoError(null);
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      setPhotoError('Camera permission denied. Enable it in Settings to take photos.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsEditing: true,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const uri = result.assets[0].uri;
+    setPhotoLocalUri(uri);
+    setPhotoUploading(true);
+    const url = await uploadPhoto(uri);
+    setPhotoUploading(false);
+    if (url) {
+      setPhotoUrl(url);
+    } else {
+      // Upload failed silently — surface it. Clear the local preview so the
+      // user isn't tricked into thinking their photo is saved (the unsaved
+      // local URI looks identical to a saved remote URL on screen).
+      setPhotoLocalUri(null);
+      setPhotoError('Upload failed. Check your connection and try again.');
+    }
+  };
+
+  const pickFromLibrary = async () => {
+    setPhotoError(null);
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setPhotoError('Photo library permission denied. Enable it in Settings to choose photos.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsEditing: true,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const uri = result.assets[0].uri;
+    setPhotoLocalUri(uri);
+    setPhotoUploading(true);
+    const url = await uploadPhoto(uri);
+    setPhotoUploading(false);
+    if (url) {
+      setPhotoUrl(url);
+    } else {
+      setPhotoLocalUri(null);
+      setPhotoError('Upload failed. Check your connection and try again.');
+    }
   };
 
   // Suggestion cards are read-only — they're snapshots from the Intelligence
@@ -310,12 +451,9 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
                         status={entry.checked ? 'checked' : 'unchecked'}
                         onPress={() => toggleEntry(entry.id)}
                       />
-                      <TextInput
-                        mode="flat"
-                        dense
-                        style={styles.entryInput}
-                        value={entry.text}
-                        onChangeText={(t) => updateEntryText(entry.id, t)}
+                      <ChecklistEntryEditor
+                        initialText={entry.text}
+                        onCommit={(t) => updateEntryText(entry.id, t)}
                       />
                       <IconButton
                         icon="close"
@@ -350,17 +488,49 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
 
             {item.type === 'photo' && (
               <View>
-                <TextInput
-                  mode="outlined"
-                  label="Image URL"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  value={photoUrl}
-                  onChangeText={setPhotoUrl}
-                />
-                <Text variant="bodySmall" style={styles.helper}>
-                  Paste an image URL. Camera/library capture coming soon.
-                </Text>
+                <View style={styles.photoButtonRow}>
+                  <Button
+                    mode="outlined"
+                    icon="camera"
+                    onPress={pickFromCamera}
+                    style={styles.photoButton}
+                    disabled={photoUploading}
+                  >
+                    Take photo
+                  </Button>
+                  <Button
+                    mode="outlined"
+                    icon="image"
+                    onPress={pickFromLibrary}
+                    style={styles.photoButton}
+                    disabled={photoUploading}
+                  >
+                    Choose from library
+                  </Button>
+                </View>
+                {photoUploading && (
+                  <View style={styles.photoUploadingRow}>
+                    <ActivityIndicator size="small" />
+                    <Text variant="bodySmall" style={styles.photoUploadingText}>
+                      Uploading...
+                    </Text>
+                  </View>
+                )}
+                {photoError && !photoUploading && (
+                  <Text
+                    variant="bodySmall"
+                    style={[styles.photoUploadingText, { color: theme.colors.error, marginTop: 6 }]}
+                  >
+                    {photoError}
+                  </Text>
+                )}
+                {(photoLocalUri || photoUrl) && !photoUploading && (
+                  <Image
+                    source={{ uri: photoUrl || photoLocalUri! }}
+                    style={styles.photoPreview}
+                    resizeMode="cover"
+                  />
+                )}
                 <TextInput
                   mode="outlined"
                   label="Caption"
@@ -612,5 +782,27 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 8,
     opacity: 0.7,
+  },
+  photoButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  photoButton: {
+    flex: 1,
+  },
+  photoUploadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+  },
+  photoUploadingText: {
+    opacity: 0.7,
+  },
+  photoPreview: {
+    width: '100%',
+    height: 160,
+    borderRadius: 8,
+    marginTop: 10,
   },
 });

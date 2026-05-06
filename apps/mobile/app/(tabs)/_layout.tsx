@@ -133,15 +133,6 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="prospecting"
-          options={{
-            title: 'Prospecting',
-            tabBarIcon: ({ color, size }) => (
-              <Icon name="chart-timeline-variant" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
           name="map"
           options={{
             title: 'Map',
@@ -159,6 +150,18 @@ export default function TabLayout() {
             ),
           }}
         />
+        {/* Whiteboard tab — navigates to the fullscreen /whiteboard stack route
+            (header hidden, no tab bar shown inside) so it feels immersive. */}
+        <Tabs.Screen
+          name="whiteboard-tab"
+          options={{
+            title: 'Whiteboard',
+            href: '/whiteboard',
+            tabBarIcon: ({ color, size }) => (
+              <Icon name="sticker-text-outline" size={size} color={color} />
+            ),
+          }}
+        />
         <Tabs.Screen
           name="more"
           options={{
@@ -170,6 +173,12 @@ export default function TabLayout() {
         />
 
         {/* ─── Hidden tabs — accessible via More grid or deep links ─── */}
+        <Tabs.Screen
+          name="prospecting"
+          options={{ title: 'Prospecting', href: null,
+            tabBarIcon: ({ color, size }) => <Icon name="chart-timeline-variant" size={size} color={color} />,
+          }}
+        />
         <Tabs.Screen
           name="pipeline"
           options={{ title: 'Pipeline', href: null,

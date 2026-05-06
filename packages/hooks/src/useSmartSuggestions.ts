@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import type { Contact } from '@realestate-crm/types';
 import { haversineDistance, normalizeAddress } from '@realestate-crm/utils';
 import { useCRMStore } from './useCRMStore';
@@ -6,6 +6,7 @@ import { useLeadScoringEngine } from './useLeadScoringEngine';
 import { useDeclaredBuildingsStore } from './useDeclaredBuildingsStore';
 import { useTrackingStore } from './useTrackingStore';
 import { useInspectionStore } from './useInspectionStore';
+import { useAuthStore } from './useAuthStore';
 import { useProspectingMetrics } from './useProspectingMetrics';
 
 /**
@@ -114,13 +115,38 @@ export function useSmartSuggestions(): { suggestions: SmartSuggestion[]; isLoadi
   const declaredBuildings = useDeclaredBuildingsStore(s => s.declaredBuildings);
   const isBuildingsLoading = useDeclaredBuildingsStore(s => s.isLoading);
   const allAnnotations = useTrackingStore(s => s.allAnnotations);
+  const fetchUpcoming = useInspectionStore(s => s.fetchUpcoming);
+  const isInspectionLoading = useInspectionStore(s => s.isLoading);
   const upcomingInspections = useInspectionStore(s => s.upcomingInspections);
   // Subscribed for explicit dep tracking — the metrics hook already reads these stores
   // internally, but listing them here keeps future signal additions ergonomic.
   const metrics = useProspectingMetrics();
   void metrics;
 
-  const isLoading = isCRMLoading || isBuildingsLoading || isComputing;
+  // In-flight guard — prevents concurrent fetchUpcoming calls on rapid remounts.
+  const fetchInFlightRef = useRef(false);
+
+  useEffect(() => {
+    if (useAuthStore.getState().isDemoMode) return;
+
+    const doFetch = async () => {
+      if (fetchInFlightRef.current || useInspectionStore.getState().isLoading) return;
+      fetchInFlightRef.current = true;
+      try {
+        await fetchUpcoming();
+      } finally {
+        fetchInFlightRef.current = false;
+      }
+    };
+
+    doFetch();
+    const interval = setInterval(doFetch, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+    // fetchUpcoming is stable (Zustand selector), isDemoMode checked imperatively to avoid re-running on auth changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchUpcoming]);
+
+  const isLoading = isCRMLoading || isBuildingsLoading || isComputing || isInspectionLoading;
 
   const suggestions = useMemo<SmartSuggestion[]>(() => {
     const out: SmartSuggestion[] = [];
@@ -210,6 +236,11 @@ export function useSmartSuggestions(): { suggestions: SmartSuggestion[]; isLoadi
           buildingId: b.id,
           coverage: rounded,
           address: b.address,
+          // Carry coords so SuggestionCard can fly the map directly to the
+          // building rather than just enabling the layer and leaving the
+          // user to find it by hand.
+          lat: b.latitude,
+          lng: b.longitude,
         },
         score: rankScore,
       });
