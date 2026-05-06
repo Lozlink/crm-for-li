@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import Animated, {
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -150,13 +151,30 @@ export function OverviewSheet({
   const sheetHeight = screenH * SHEET_HEIGHT_FRACTION;
   const translateY = useSharedValue(sheetHeight);
 
-  // Animate in/out when `visible` changes.
-  // Using withTiming here (not a gesture callback), so no 'worklet' needed.
-  if (visible && translateY.value !== 0) {
-    translateY.value = withTiming(0, { duration: 250 });
-  } else if (!visible && translateY.value !== sheetHeight) {
-    translateY.value = withTiming(sheetHeight, { duration: 200 });
-  }
+  // Mount state tracks whether the sheet (and its scrim) should be in the tree
+  // at all. Drives the early-return at the bottom. We can't gate the early
+  // return on `translateY.value` because reading a SharedValue inside the
+  // render body doesn't subscribe React to its changes — the value updates on
+  // the UI thread but no re-render fires when the slide-out animation finishes,
+  // leaving the dark scrim stuck on screen blocking taps.
+  //
+  // Instead: flip mount=true when `visible` becomes true (so the slide-in can
+  // play), and flip mount=false in the slide-out animation's completion
+  // callback (so the scrim unmounts cleanly at the end of the animation).
+  const [mounted, setMounted] = useState(visible);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      translateY.value = withTiming(0, { duration: 250 });
+    } else {
+      translateY.value = withTiming(sheetHeight, { duration: 200 }, (finished) => {
+        if (finished) {
+          runOnJS(setMounted)(false);
+        }
+      });
+    }
+  }, [visible, sheetHeight, translateY]);
 
   const [search, setSearch] = useState('');
   const [activeFilters, setActiveFilters] = useState<Set<WhiteboardItemType>>(
@@ -246,7 +264,11 @@ export function OverviewSheet({
     transform: [{ translateY: translateY.value }],
   }));
 
-  if (!visible && translateY.value === sheetHeight) return null;
+  // Unmount only after the slide-out animation completes (see useEffect above).
+  // Gating on `mounted` (a real React state) instead of `translateY.value` is
+  // what makes the unmount actually fire — shared values aren't reactive in
+  // render. Without this, the scrim sticks around blocking taps.
+  if (!mounted) return null;
 
   const allTypes: WhiteboardItemType[] = [
     'sticky', 'checklist', 'photo', 'contact', 'property', 'map', 'goal', 'suggestion',
