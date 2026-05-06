@@ -5,6 +5,8 @@ import { Snackbar, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSharedValue } from 'react-native-reanimated';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
+import { CanvasViewControls, type WorldBounds } from '../components/shared/CanvasViewControls';
+import { Minimap } from '../components/whiteboard/Minimap';
 import type {
   WhiteboardChecklistContent,
   WhiteboardContactContent,
@@ -63,6 +65,19 @@ export default function WhiteboardScreen() {
   const cameraY = useSharedValue(0);
   const cameraScale = useSharedValue(1);
   const { width: screenW, height: screenH } = useWindowDimensions();
+
+  // Bounding box of all items — fed into CanvasViewControls for Fit All.
+  const worldBounds = useMemo<WorldBounds | null>(() => {
+    if (items.length === 0) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const it of items) {
+      minX = Math.min(minX, it.position_x);
+      minY = Math.min(minY, it.position_y);
+      maxX = Math.max(maxX, it.position_x + it.width);
+      maxY = Math.max(maxY, it.position_y + it.height);
+    }
+    return { minX, minY, maxX, maxY };
+  }, [items]);
 
   const [mode, setMode] = useState<WhiteboardMode>('move');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -380,6 +395,30 @@ export default function WhiteboardScreen() {
           onDelete={handleDelete}
           onCompleteChecklist={handleCompleteChecklist}
         />
+
+        {/* Minimap — bottom-right corner overlay */}
+        <View style={styles.minimapOverlay} pointerEvents="box-none">
+          <Minimap
+            items={items}
+            cameraX={cameraX}
+            cameraY={cameraY}
+            cameraScale={cameraScale}
+            viewportW={screenW}
+            viewportH={screenH}
+          />
+        </View>
+
+        {/* Zoom / fit / reset controls — bottom-left corner */}
+        <View style={styles.viewControlsOverlay} pointerEvents="box-none">
+          <CanvasViewControls
+            cameraX={cameraX}
+            cameraY={cameraY}
+            cameraScale={cameraScale}
+            worldBounds={worldBounds}
+            viewportW={screenW}
+            viewportH={screenH}
+          />
+        </View>
       </View>
 
       <WhiteboardToolbar
@@ -469,5 +508,15 @@ const styles = StyleSheet.create({
   },
   canvasArea: {
     flex: 1,
+  },
+  minimapOverlay: {
+    position: 'absolute',
+    bottom: 16,
+    right: 12,
+  },
+  viewControlsOverlay: {
+    position: 'absolute',
+    bottom: 16,
+    left: 12,
   },
 });

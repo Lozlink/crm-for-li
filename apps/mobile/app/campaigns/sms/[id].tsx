@@ -235,7 +235,7 @@ export default function SmsCampaignDetailScreen() {
     <>
       <Stack.Screen options={{ title: existing?.name || 'New SMS Campaign' }} />
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 120 }]}
         keyboardShouldPersistTaps="handled"
       >
@@ -543,7 +543,6 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e5e7eb',
     marginTop: 4,
   },
   actionRow: { flexDirection: 'row', gap: 8, marginTop: 16, alignItems: 'center' },

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
+  Pressable,
   StyleSheet,
   useColorScheme,
   useWindowDimensions,
@@ -254,7 +255,7 @@ export function OverviewSheet({
   return (
     <>
       {/* Scrim — tap to dismiss */}
-      <View style={styles.scrim} onTouchEnd={handleDismiss} pointerEvents="box-only" />
+      <Pressable style={styles.scrim} onPress={handleDismiss} />
 
       <Animated.View
         style={[
@@ -267,10 +268,15 @@ export function OverviewSheet({
           sheetStyle,
         ]}
       >
+        {/* Drag handle — visual affordance for swipe-to-dismiss */}
+        <View style={styles.dragHandleRow}>
+          <View style={[styles.dragHandle, { backgroundColor: theme.colors.onSurfaceVariant }]} />
+        </View>
+
         {/* Header */}
         <View style={styles.header}>
           <Text variant="titleMedium" style={{ flex: 1 }}>
-            Board overview
+            Board list
           </Text>
           <IconButton
             icon="close"
@@ -456,6 +462,17 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: -4 },
     elevation: 8,
+  },
+  dragHandleRow: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 2,
+  },
+  dragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    opacity: 0.3,
   },
   header: {
     flexDirection: 'row',

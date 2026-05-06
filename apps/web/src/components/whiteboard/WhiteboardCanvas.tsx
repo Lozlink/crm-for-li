@@ -5,6 +5,8 @@ import type { WhiteboardItem } from '@realestate-crm/types';
 import { CANVAS_BG, CANVAS_DOT_COLOR } from './whiteboardColors';
 import { WhiteboardItemView } from './WhiteboardItem';
 import { WhiteboardEmptyState } from './WhiteboardEmptyState';
+import { Minimap } from './Minimap';
+import { CanvasViewControls } from './CanvasViewControls';
 
 type WhiteboardMode = 'move' | 'edit';
 
@@ -32,6 +34,7 @@ interface Props {
 export function WhiteboardCanvas({ items, mode, onToggleChecklistEntry, onDelete, onRegisterJumpTo }: Props) {
   const [cameraX, setCameraX] = useState(0);
   const [cameraY, setCameraY] = useState(0);
+  const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 });
 
   // Refs for pan gesture — avoids setState on every pointer-move frame.
   const isPanning = useRef(false);
@@ -64,6 +67,19 @@ export function WhiteboardCanvas({ items, mode, onToggleChecklistEntry, onDelete
     onRegisterJumpTo?.(jumpToItem);
   // Only register once on mount — jumpToItem is stable (syncCamera is stable).
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Track container size for minimap viewport rect + fit-all math.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver((entries) => {
+      const { width, height } = entries[0]?.contentRect ?? {};
+      if (width && height) setViewportSize({ w: width, h: height });
+    });
+    obs.observe(el);
+    setViewportSize({ w: el.clientWidth, h: el.clientHeight });
+    return () => obs.disconnect();
   }, []);
 
   const handleCanvasPointerDown = useCallback(
@@ -153,6 +169,26 @@ export function WhiteboardCanvas({ items, mode, onToggleChecklistEntry, onDelete
 
       {/* Empty state — centered in viewport */}
       {items.length === 0 && <WhiteboardEmptyState />}
+
+      {/* ── Minimap overlay (top-right, avoids FAB at bottom-right) ── */}
+      <Minimap
+        items={items}
+        cameraX={cameraX}
+        cameraY={cameraY}
+        viewportW={viewportSize.w}
+        viewportH={viewportSize.h}
+        onSyncCamera={syncCamera}
+      />
+
+      {/* ── View controls (bottom-left) — Fit All + Reset ──────────── */}
+      <CanvasViewControls
+        cameraX={cameraX}
+        cameraY={cameraY}
+        items={items}
+        viewportW={viewportSize.w}
+        viewportH={viewportSize.h}
+        onSyncCamera={syncCamera}
+      />
     </div>
   );
 }

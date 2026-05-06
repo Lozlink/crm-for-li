@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
+import { File as FSFile } from 'expo-file-system';
 import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import type {
   WhiteboardChecklistContent,
@@ -319,18 +320,22 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
     }
     try {
       const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
       const path = `whiteboard-photos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const resp = await fetch(uri);
-      const blob = await resp.blob();
-      const { error } = await supabase.storage
+      // fetch().blob() returns 0 bytes for file:// URIs on iOS RN — use
+      // expo-file-system File.arrayBuffer() instead (canonical RN+Supabase pattern).
+      const fileBuffer = await new FSFile(uri).arrayBuffer();
+      const { data, error } = await supabase.storage
         .from('whiteboard-photos')
-        .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
+        .upload(path, fileBuffer, { contentType: mimeType, upsert: false });
       if (error) {
         console.error('Photo upload error:', error.message);
         return null;
       }
-      const { data } = supabase.storage.from('whiteboard-photos').getPublicUrl(path);
-      return data.publicUrl;
+      console.log('Photo uploaded:', data.path, data.id);
+      const { data: urlData } = supabase.storage.from('whiteboard-photos').getPublicUrl(path);
+      console.log('Photo public URL:', urlData.publicUrl);
+      return urlData.publicUrl;
     } catch (e) {
       console.error('Photo upload failed:', e);
       return null;

@@ -199,11 +199,11 @@ export default function WhiteboardView() {
                 ? 'border-blue-200 bg-blue-50 text-blue-700'
                 : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
             }`}
-            aria-label="Open board overview"
+            aria-label="Open board list"
             aria-pressed={overviewOpen}
           >
             <ListBulletIcon className="h-4 w-4" />
-            <span>Overview</span>
+            <span>List</span>
           </button>
 
           {/* Animated segmented-control pill — DESIGN.md §2 */}

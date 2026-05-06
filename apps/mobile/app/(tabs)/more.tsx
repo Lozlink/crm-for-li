@@ -19,6 +19,7 @@ const SECTIONS = [
       { label: 'Notes', icon: 'note-text-outline', route: '/(tabs)/notes', color: '#6366f1' },
       { label: 'Whiteboard', icon: 'draw', route: '/whiteboard', color: '#a855f7' },
       { label: 'Campaigns', icon: 'email-multiple-outline', route: '/campaigns/', color: '#ec4899' },
+      { label: 'Dialer', icon: 'dialpad', route: '/dialer', color: '#14b8a6' },
     ],
   },
   {

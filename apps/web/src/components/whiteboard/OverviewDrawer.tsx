@@ -205,11 +205,11 @@ export function OverviewDrawer({ items, onClose, onJumpTo }: Props) {
         {/* ── Header ─────────────────────────────────────────────────── */}
         <div className="shrink-0 border-b border-gray-100 px-4 pb-3 pt-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-bold text-gray-900">Overview</h2>
+            <h2 className="text-base font-bold text-gray-900">Board list</h2>
             <button
               onClick={onClose}
               className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
-              aria-label="Close overview"
+              aria-label="Close board list"
             >
               <XIcon />
             </button>

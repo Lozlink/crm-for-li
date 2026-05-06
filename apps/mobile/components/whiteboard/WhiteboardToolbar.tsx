@@ -223,7 +223,7 @@ export function WhiteboardToolbar({ mode, onModeChange, onRequestAdd, onRequestS
           size={24}
           iconColor={theme.colors.onSurfaceVariant}
           onPress={onRequestOverview}
-          accessibilityLabel="Board overview"
+          accessibilityLabel="List"
           accessibilityRole="button"
         />
       </View>

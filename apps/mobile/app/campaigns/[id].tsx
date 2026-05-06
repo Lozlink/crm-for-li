@@ -289,6 +289,6 @@ const styles = StyleSheet.create({
   recipientRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
   statsGrid: { flexDirection: 'row', justifyContent: 'space-around' },
   statItem: { alignItems: 'center' },
-  actionBar: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, padding: 16, borderTopWidth: 1, borderTopColor: '#e5e7eb' },
+  actionBar: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, padding: 16, borderTopWidth: StyleSheet.hairlineWidth },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 },
 });
