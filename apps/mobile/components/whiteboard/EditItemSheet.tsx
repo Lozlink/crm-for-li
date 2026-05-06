@@ -221,6 +221,23 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
     }
   }, [item]);
 
+  // Reverse-geocode the picker's current coords whenever they change. Centralized
+  // here so every input path (camera pan, marker drag, long-press) reliably
+  // resolves a fresh address — earlier inlined-handler versions skipped marker
+  // drag and persisted the stale default-coords address ("25 Martin Place").
+  // 600ms debounce so dragging across the map doesn't hammer Nominatim.
+  useEffect(() => {
+    if (!item || item.type !== 'map') return;
+    if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+    geocodeTimerRef.current = setTimeout(async () => {
+      const result = await reverseGeocode(mapRegion.latitude, mapRegion.longitude);
+      setMapPickedAddress(result?.address ?? null);
+    }, 600);
+    return () => {
+      if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+    };
+  }, [mapRegion.latitude, mapRegion.longitude, item]);
+
   if (!item) return null;
 
   const handleSave = () => {
@@ -319,25 +336,56 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
       return `https://picsum.photos/seed/${Math.floor(Math.random() * 1000)}/400/300`;
     }
     try {
-      const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const ext = (uri.split('.').pop()?.toLowerCase().split('?')[0] ?? 'jpg').slice(0, 4);
       const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
-      const path = `whiteboard-photos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      // fetch().blob() returns 0 bytes for file:// URIs on iOS RN — use
-      // expo-file-system File.arrayBuffer() instead (canonical RN+Supabase pattern).
+      // Path is RELATIVE to the bucket — don't prefix with the bucket name or
+      // files end up at `whiteboard-photos/whiteboard-photos/...` (a subfolder
+      // INSIDE the bucket), making the dashboard root look empty.
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+      // Diagnostic: surface URI scheme + byteLength to the UI so silent
+      // failures (0-byte buffers, content:// URIs that arrayBuffer can't read)
+      // are visible without needing Metro logs. Cleared on success.
+      setPhotoError(`Reading file (${uri.slice(0, 60)}...)`);
+
+      // expo-file-system v19 `new File(uri).arrayBuffer()` is the canonical
+      // RN+Supabase pattern — fetch(uri).blob() returns 0 bytes for file://
+      // URIs on iOS RN.
       const fileBuffer = await new FSFile(uri).arrayBuffer();
+      const byteCount = fileBuffer.byteLength;
+
+      if (byteCount === 0) {
+        setPhotoError(
+          `Photo read returned 0 bytes (uri scheme: ${uri.split(':')[0]}). ` +
+          `Try a different image or report this.`,
+        );
+        console.warn('Photo upload aborted — 0 byte buffer. URI:', uri);
+        return null;
+      }
+
+      setPhotoError(`Uploading ${byteCount.toLocaleString()} bytes…`);
+
       const { data, error } = await supabase.storage
         .from('whiteboard-photos')
         .upload(path, fileBuffer, { contentType: mimeType, upsert: false });
+
       if (error) {
-        console.error('Photo upload error:', error.message);
+        // Error message often references RLS / bucket-not-found / auth-missing.
+        setPhotoError(`Upload error: ${error.message}`);
+        console.error('Photo upload error:', error);
         return null;
       }
-      console.log('Photo uploaded:', data.path, data.id);
+
+      console.log('Photo uploaded:', data.path, data.id, `(${byteCount} bytes)`);
       const { data: urlData } = supabase.storage.from('whiteboard-photos').getPublicUrl(path);
       console.log('Photo public URL:', urlData.publicUrl);
+      // Clear the diagnostic on success so the UI returns to the normal state.
+      setPhotoError(null);
       return urlData.publicUrl;
     } catch (e) {
-      console.error('Photo upload failed:', e);
+      const msg = e instanceof Error ? e.message : String(e);
+      setPhotoError(`Photo upload threw: ${msg}`);
+      console.error('Photo upload threw:', e);
       return null;
     }
   };
@@ -710,15 +758,13 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
                     provider={PROVIDER_GOOGLE}
                     style={styles.mapPicker}
                     region={mapRegion}
-                    onRegionChangeComplete={(region) => {
-                      setMapRegion(region);
-                      // Debounce reverse-geocode to avoid hammering Nominatim on every drag.
-                      if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
-                      geocodeTimerRef.current = setTimeout(async () => {
-                        const result = await reverseGeocode(region.latitude, region.longitude);
-                        setMapPickedAddress(result?.address ?? null);
-                      }, 600);
-                    }}
+                    // Geocoding happens in a useEffect on [mapRegion.latitude,
+                    // mapRegion.longitude] so ALL input paths (camera pan, marker
+                    // drag, long-press) automatically resolve to a fresh address.
+                    // Earlier versions inlined the geocode here, which silently
+                    // skipped marker drags and persisted a stale "default coords"
+                    // address.
+                    onRegionChangeComplete={setMapRegion}
                     onLongPress={(e) => {
                       const { latitude, longitude } = e.nativeEvent.coordinate;
                       const next: Region = {

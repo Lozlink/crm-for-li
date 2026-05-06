@@ -98,12 +98,19 @@ export default function DialerScreen() {
 
   const handleCall = useCallback(async () => {
     const number = `tel:${digits}`;
-    const canOpen = await Linking.canOpenURL(number);
-    if (!canOpen) {
-      setSnackbar('Calls are not available on this device.');
-      return;
+    // Don't pre-check via Linking.canOpenURL. On iOS it requires `tel` to be
+    // in `LSApplicationQueriesSchemes` and returns false otherwise; on Android
+    // 11+ it requires an `<intent>` query in the manifest. Both can return
+    // false even though `openURL` would succeed — false-negative blocking the
+    // user from calling. Just try `openURL` and catch the error if it fails.
+    try {
+      await Linking.openURL(number);
+    } catch (e) {
+      setSnackbar('Could not open the dialer. Try again or use a contact.');
+      // Surface the underlying error in the dev console so we can diagnose
+      // genuine failures (no SIM, sandbox, etc.) without showing them to users.
+      if (__DEV__) console.warn('Linking.openURL(tel:) failed:', e);
     }
-    await Linking.openURL(number);
   }, [digits]);
 
   const callDisabled = digits.length < 3;

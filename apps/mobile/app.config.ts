@@ -26,6 +26,12 @@ export default {
       infoPlist: {
         NSContactsUsageDescription: "Allow $(PRODUCT_NAME) to access your contacts.",
         UIBackgroundModes: ["location"],
+        // iOS 9+ requires apps to declare which URL schemes they intend to
+        // query via Linking.canOpenURL. Without these, canOpenURL returns
+        // false even when openURL would succeed — common false negative on
+        // tel:/sms:/mailto: links. Listed here for any future code that uses
+        // canOpenURL; the dialer itself bypasses canOpenURL via try/catch.
+        LSApplicationQueriesSchemes: ["tel", "telprompt", "sms", "mailto"],
       },
       config: {
         googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
@@ -52,7 +58,17 @@ export default {
         "android.permission.CALL_PHONE",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
-      ]
+      ],
+      // Android 11+ (API 30) restricts which apps a third-party app can see.
+      // Without these <queries> declarations, Linking.canOpenURL returns false
+      // for tel:/sms:/mailto: even though openURL would actually launch the
+      // OS handler. The dialer bypasses canOpenURL, but listing the queries
+      // here unblocks any future code that does use it correctly.
+      queries: [
+        { intent: { action: "android.intent.action.DIAL" } },
+        { intent: { action: "android.intent.action.SENDTO", data: { scheme: "smsto" } } },
+        { intent: { action: "android.intent.action.SENDTO", data: { scheme: "mailto" } } },
+      ],
     },
     web: {
       favicon: "./assets/favicon.png",

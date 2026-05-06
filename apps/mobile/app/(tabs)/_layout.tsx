@@ -143,11 +143,11 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="contacts"
+          name="prospecting"
           options={{
-            title: 'Contacts',
+            title: 'Prospecting',
             tabBarIcon: ({ color, size }) => (
-              <Icon name="account-group" size={size} color={color} />
+              <Icon name="chart-timeline-variant" size={size} color={color} />
             ),
           }}
         />
@@ -175,9 +175,9 @@ export default function TabLayout() {
 
         {/* ─── Hidden tabs — accessible via More grid or deep links ─── */}
         <Tabs.Screen
-          name="prospecting"
-          options={{ title: 'Prospecting', href: null,
-            tabBarIcon: ({ color, size }) => <Icon name="chart-timeline-variant" size={size} color={color} />,
+          name="contacts"
+          options={{ title: 'Contacts', href: null,
+            tabBarIcon: ({ color, size }) => <Icon name="account-group" size={size} color={color} />,
           }}
         />
         <Tabs.Screen
