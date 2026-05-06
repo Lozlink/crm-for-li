@@ -1,4 +1,4 @@
-import { Platform, useColorScheme, StyleSheet, View } from 'react-native';
+import { Platform, useColorScheme, useWindowDimensions, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import type { WhiteboardItem } from '@realestate-crm/types';
@@ -6,6 +6,7 @@ import type { WhiteboardMode } from './types';
 import { CANVAS_BG, CANVAS_DOT_COLOR } from './whiteboardColors';
 import { WhiteboardItemView } from './WhiteboardItemView';
 import { WhiteboardEmptyState } from './WhiteboardEmptyState';
+import { WORLD_WIDTH, WORLD_HEIGHT, clampCameraTranslate } from './whiteboardWorld';
 
 // Dot grid constants (DESIGN.md §1)
 const DOT_SPACING = 16;    // pt between dots
@@ -62,12 +63,15 @@ export function WhiteboardCanvas({
   const colorScheme = useColorScheme();
   const canvasBg = colorScheme === 'dark' ? CANVAS_BG.dark : CANVAS_BG.light;
   const dotColor = colorScheme === 'dark' ? CANVAS_DOT_COLOR.dark : CANVAS_DOT_COLOR.light;
+  const { width: viewportW, height: viewportH } = useWindowDimensions();
 
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
   const startScale = useSharedValue(1);
 
-  // Two-finger camera pan — works in both modes.
+  // Two-finger camera pan — works in both modes. Clamps so the user can't
+  // pan past the world edges; without this the canvas felt boundless and
+  // items could vanish into empty space.
   const cameraPan = Gesture.Pan()
     .minPointers(2)
     .maxPointers(2)
@@ -76,8 +80,18 @@ export function WhiteboardCanvas({
       startY.value = cameraY.value;
     })
     .onUpdate((e) => {
-      cameraX.value = startX.value + e.translationX;
-      cameraY.value = startY.value + e.translationY;
+      cameraX.value = clampCameraTranslate(
+        startX.value + e.translationX,
+        viewportW,
+        WORLD_WIDTH,
+        cameraScale.value,
+      );
+      cameraY.value = clampCameraTranslate(
+        startY.value + e.translationY,
+        viewportH,
+        WORLD_HEIGHT,
+        cameraScale.value,
+      );
     });
 
   // Pinch zoom — DESIGN.md canvas v2. Clamped to [0.4, 2.0] to keep widgets readable.
@@ -109,8 +123,18 @@ export function WhiteboardCanvas({
       startY.value = cameraY.value;
     })
     .onUpdate((e) => {
-      cameraX.value = startX.value + e.translationX;
-      cameraY.value = startY.value + e.translationY;
+      cameraX.value = clampCameraTranslate(
+        startX.value + e.translationX,
+        viewportW,
+        WORLD_WIDTH,
+        cameraScale.value,
+      );
+      cameraY.value = clampCameraTranslate(
+        startY.value + e.translationY,
+        viewportH,
+        WORLD_HEIGHT,
+        cameraScale.value,
+      );
     });
 
   // All three compose simultaneously — pan + pinch can fire together with
@@ -190,8 +214,8 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     // Deliberately large so absolutely-positioned items stay visible when panning.
-    width: 6000,
-    height: 6000,
+    width: WORLD_WIDTH,
+    height: WORLD_HEIGHT,
   },
   dotRow: {
     flexDirection: 'row',

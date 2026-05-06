@@ -35,6 +35,7 @@ import {
   STICKY_COLOR_DEFS,
   stickyColorForScheme,
 } from './whiteboardColors';
+import { WORLD_WIDTH, WORLD_HEIGHT, clampCameraTranslate } from './whiteboardWorld';
 
 // ── Type display metadata ─────────────────────────────────────────────────────
 
@@ -248,14 +249,13 @@ export function OverviewSheet({
       const visibleH = screenH - 80;
       const cxWorld = item.position_x + item.width / 2;
       const cyWorld = item.position_y + item.height / 2;
-      cameraX.value = withTiming(
-        screenW / 2 - cxWorld * scale,
-        { duration: PAN_DURATION_MS },
-      );
-      cameraY.value = withTiming(
-        visibleH / 2 - cyWorld * scale,
-        { duration: PAN_DURATION_MS },
-      );
+      // Clamp so the resulting camera doesn't pan past the world bounds —
+      // matters when the item lives near the edge of the world and centering
+      // would push the camera into empty space.
+      const targetX = clampCameraTranslate(screenW / 2 - cxWorld * scale, screenW, WORLD_WIDTH, scale);
+      const targetY = clampCameraTranslate(visibleH / 2 - cyWorld * scale, visibleH, WORLD_HEIGHT, scale);
+      cameraX.value = withTiming(targetX, { duration: PAN_DURATION_MS });
+      cameraY.value = withTiming(targetY, { duration: PAN_DURATION_MS });
     },
     [handleDismiss, cameraX, cameraY, cameraScale, screenW, screenH],
   );

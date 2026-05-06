@@ -12,15 +12,16 @@ import {
   stickyColorForScheme,
   type SuggestionKind,
 } from './whiteboardColors';
-
-// World dimensions — must match WhiteboardCanvas world layer size.
-const WORLD_SIZE = 6000;
+import { WORLD_WIDTH, WORLD_HEIGHT, clampCameraTranslate } from './whiteboardWorld';
 
 // Minimap display size in points.
 const MINIMAP_W = 140;
 const MINIMAP_H = 100;
 
-const MINIMAP_SCALE = MINIMAP_W / WORLD_SIZE;
+// Minimap is drawn at (MINIMAP_W / WORLD_WIDTH) scale — the world is square so
+// the X scale also works for Y. If the world ever becomes non-square, derive
+// a separate Y scale from MINIMAP_H / WORLD_HEIGHT.
+const MINIMAP_SCALE = MINIMAP_W / WORLD_WIDTH;
 
 const PAN_DURATION_MS = 200;
 
@@ -80,9 +81,13 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
       const worldX = tapXInMinimap / MINIMAP_SCALE;
       const worldY = tapYInMinimap / MINIMAP_SCALE;
       const scale = cameraScale.value || 1;
-      // Correct algebra: cameraX = screenCenter - worldX * scale
-      cameraX.value = withTiming(viewportW / 2 - worldX * scale, { duration: PAN_DURATION_MS });
-      cameraY.value = withTiming(viewportH / 2 - worldY * scale, { duration: PAN_DURATION_MS });
+      // Correct algebra: cameraX = screenCenter - worldX * scale.
+      // Clamp so a tap near the minimap edges doesn't pan the camera past
+      // the world boundary into empty space.
+      const targetX = clampCameraTranslate(viewportW / 2 - worldX * scale, viewportW, WORLD_WIDTH, scale);
+      const targetY = clampCameraTranslate(viewportH / 2 - worldY * scale, viewportH, WORLD_HEIGHT, scale);
+      cameraX.value = withTiming(targetX, { duration: PAN_DURATION_MS });
+      cameraY.value = withTiming(targetY, { duration: PAN_DURATION_MS });
     },
     [cameraX, cameraY, cameraScale, viewportW, viewportH],
   );

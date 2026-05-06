@@ -12,6 +12,7 @@ import { useWhiteboardStore } from '@realestate-crm/hooks';
 import type { WhiteboardItem, WhiteboardStickyContent } from '@realestate-crm/types';
 import type { WhiteboardMode } from './types';
 import { WIDGET_DELETE_COLOR } from './whiteboardColors';
+import { WORLD_WIDTH, WORLD_HEIGHT, clampItemPosition } from './whiteboardWorld';
 
 // --- Spring configs (DESIGN.md §4) ---
 // Lift: responsive scale-up on drag start
@@ -149,8 +150,12 @@ export function WhiteboardItemView({
     })
     .onEnd(() => {
       // Snap to 16pt grid with spring bounce — brief overshoot = note "lands" (DESIGN.md §4)
-      const snappedX = snap(translateX.value);
-      const snappedY = snap(translateY.value);
+      // Then clamp inside the world bounds so the item can't be dragged past
+      // the canvas edges and lost (the camera is also clamped, so an off-world
+      // item would be unreachable). `item.width/height` keep the full body
+      // visible inside the world rather than letting the top-left poke past.
+      const snappedX = clampItemPosition(snap(translateX.value), item.width, WORLD_WIDTH);
+      const snappedY = clampItemPosition(snap(translateY.value), item.height, WORLD_HEIGHT);
       translateX.value = withSpring(snappedX, SPRING_DROP);
       translateY.value = withSpring(snappedY, SPRING_DROP);
       // Return to rest scale
