@@ -215,15 +215,26 @@ export function OverviewSheet({
       // Close the sheet immediately so the user sees the canvas animate.
       handleDismiss();
       // Pan the camera to center this item in the visible viewport.
-      // Formula mirrors placementForNew in whiteboard.tsx (inverted).
+      //
+      // World transform on the canvas is [translate, scale] (right-to-left:
+      // scale first, then translate). So a world point cx_w lands on screen at:
+      //   screen_x = camera_x + cx_w * scale
+      // Solving for the camera that puts cx_w at screen center:
+      //   camera_x = screen/2 - cx_w * scale
+      //
+      // (An earlier revision factored scale across the whole expression —
+      //  `(screen/2 - cx_w) * scale` — which only matches at scale=1. At
+      //  pinch-zoom 2x the item landed at the right edge instead of center.)
       const scale = cameraScale.value || 1;
       const visibleH = screenH - 80;
+      const cxWorld = item.position_x + item.width / 2;
+      const cyWorld = item.position_y + item.height / 2;
       cameraX.value = withTiming(
-        -(item.position_x - screenW / 2 + item.width / 2) * scale,
+        screenW / 2 - cxWorld * scale,
         { duration: PAN_DURATION_MS },
       );
       cameraY.value = withTiming(
-        -(item.position_y - visibleH / 2 + item.height / 2) * scale,
+        visibleH / 2 - cyWorld * scale,
         { duration: PAN_DURATION_MS },
       );
     },
