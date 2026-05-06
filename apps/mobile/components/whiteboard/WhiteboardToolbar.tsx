@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, View, Vibration, type LayoutChangeEvent } from 'react-native';
+// expo-haptics added for iOS light impact on mode toggle. Requires a native
+// rebuild — the user is already rebuilding for expo-image-picker, so this dep
+// rides along at no extra cost.
+import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -30,6 +34,8 @@ interface Props {
    * Accessibility label: "Suggestions for your board" (NOT "AI suggestions").
    */
   onRequestSuggestions: () => void;
+  /** Opens the OverviewSheet — a searchable list of all items on the board. */
+  onRequestOverview: () => void;
   onClose: () => void;
 }
 
@@ -47,7 +53,7 @@ interface Props {
  * Design spec: DESIGN.md §2, §8.
  * Copy rules: "Add to your board", "Quick note", "To-do" — not "sticky"/"widget".
  */
-export function WhiteboardToolbar({ mode, onModeChange, onRequestAdd, onRequestSuggestions, onClose }: Props) {
+export function WhiteboardToolbar({ mode, onModeChange, onRequestAdd, onRequestSuggestions, onRequestOverview, onClose }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   // Tracks the last mode we actually animated to. `null` until the pill has
@@ -78,11 +84,12 @@ export function WhiteboardToolbar({ mode, onModeChange, onRequestAdd, onRequestS
     }
     // Real mode change.
     indicatorX.value = withSpring(targetX, SPRING_TOGGLE);
-    // iOS Vibration.vibrate is a no-op for short pulses; gate to Android so
-    // we don't pretend we're providing feedback we aren't. iOS parity via
-    // expo-haptics is a known follow-up — no precedent for the dep yet.
+    // iOS Vibration.vibrate is a no-op for short pulses; use expo-haptics light
+    // impact instead. Android keeps the short Vibration.vibrate path.
     if (Platform.OS === 'android') {
       Vibration.vibrate(30);
+    } else if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     prevModeRef.current = mode;
   }, [mode, segmentWidth]);
@@ -206,6 +213,18 @@ export function WhiteboardToolbar({ mode, onModeChange, onRequestAdd, onRequestS
           onPress={onRequestAdd}
           accessibilityLabel="Add to your board"
           disabled={mode === 'move'}
+        />
+      </View>
+
+      {/* Overview — opens the OverviewSheet (searchable item list). */}
+      <View style={styles.sideButton}>
+        <IconButton
+          icon="format-list-bulleted-square"
+          size={24}
+          iconColor={theme.colors.onSurfaceVariant}
+          onPress={onRequestOverview}
+          accessibilityLabel="Board overview"
+          accessibilityRole="button"
         />
       </View>
 

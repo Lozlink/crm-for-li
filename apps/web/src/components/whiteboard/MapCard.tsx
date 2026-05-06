@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { reverseGeocode } from '@realestate-crm/api';
+import { reverseGeocode, buildMapDeepLink } from '@realestate-crm/api';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
 import type { WhiteboardItem, WhiteboardMapContent } from '@realestate-crm/types';
 
@@ -27,10 +27,10 @@ export function MapCard({ item }: Props) {
   const { lat, lng, zoom } = content.viewport;
 
   const geocodeFired = useRef(false);
+  const hasAddress = !!content.address;
 
   useEffect(() => {
-    if (geocodeFired.current) return;
-    if (content.address) return; // already resolved
+    if (geocodeFired.current || hasAddress) return;
 
     geocodeFired.current = true;
 
@@ -44,25 +44,12 @@ export function MapCard({ item }: Props) {
         } as WhiteboardMapContent,
       });
     });
-  }, [item.id, lat, lng, content, updateItem]);
+  }, [item.id, lat, lng, hasAddress, updateItem]);
 
   const handleClick = () => {
-    // ?zoom= contract: latitudeDelta in degrees (the cross-platform convention,
-    // matching mobile MapCard + SuggestionCard producers). The stored
-    // `viewport.zoom` is a tile-zoom integer (1–21, Google/OSM convention),
-    // so convert here: delta = 360 / 2^z. Clamps to a sane tile-zoom range
-    // so a corrupt stored value can't push a global-scale delta.
-    const tileZoom = zoom >= 1 && zoom <= 21 ? zoom : 13;
-    const delta = 360 / Math.pow(2, tileZoom);
-    const params = new URLSearchParams({
-      lat: String(lat),
-      lng: String(lng),
-      zoom: String(delta),
-    });
-    if (content.overlays?.length) {
-      params.set('layer', content.overlays[0]);
-    }
-    router.push(`/map?${params.toString()}`);
+    const layer = content.overlays?.[0] as Parameters<typeof buildMapDeepLink>[0]['layer'] | undefined;
+    const deepLink = buildMapDeepLink({ lat, lng, tileZoom: zoom, layer });
+    router.push(`/map${deepLink}`);
   };
 
   const addressLine = content.address ?? null;

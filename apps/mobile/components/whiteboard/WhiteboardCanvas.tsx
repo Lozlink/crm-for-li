@@ -1,4 +1,4 @@
-import { useColorScheme, StyleSheet, View } from 'react-native';
+import { Platform, useColorScheme, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import type { WhiteboardItem } from '@realestate-crm/types';
@@ -90,15 +90,20 @@ export function WhiteboardCanvas({
       cameraScale.value = Math.max(0.4, Math.min(2.0, next));
     });
 
-  // Single-finger canvas pan — Move mode only. Item gestures (with
-  // minDistance:4) take precedence for touches landing on a widget; this only
-  // fires for touches on empty world space. Higher minDistance than items so
-  // a brief tap on an item doesn't accidentally trigger a canvas pan.
+  // Single-finger canvas pan — Move mode only. Item gestures take precedence for
+  // touches landing on a widget; this only fires for touches on empty world
+  // space. Higher minDistance than items (iOS 8 vs item's 4) so a brief tap on
+  // an item doesn't accidentally trigger a canvas pan.
+  // Android bumped further (14pt) to match the item's raised 8pt threshold —
+  // keeping the ratio consistent avoids canvas pan winning over item taps on
+  // noisy Android touchscreens.
+  const CANVAS_PAN_MIN_DISTANCE = Platform.select({ android: 14, default: 8 });
+
   const movePan = Gesture.Pan()
     .enabled(mode === 'move')
     .minPointers(1)
     .maxPointers(1)
-    .minDistance(8)
+    .minDistance(CANVAS_PAN_MIN_DISTANCE)
     .onStart(() => {
       startX.value = cameraX.value;
       startY.value = cameraY.value;

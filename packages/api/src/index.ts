@@ -39,3 +39,7 @@ export type { SendEmailParams, SendBulkEmailParams } from './email';
 // Geocoding
 export { reverseGeocode } from './geocoding';
 export type { GeocodeResult } from './geocoding';
+
+// Map deep-link builder
+export { buildMapDeepLink } from './buildMapDeepLink';
+export type { MapDeepLinkInput } from './buildMapDeepLink';

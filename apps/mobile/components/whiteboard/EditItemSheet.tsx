@@ -736,10 +736,15 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
                     />
                   </MapView>
                 </View>
+                {/* Live zoom indicator — updates as the user pinches so they see
+                    exactly what tile-zoom will be persisted on Save. */}
+                <Text variant="bodySmall" style={[styles.helper, { marginTop: 6 }]}>
+                  Zoom: {Math.max(1, Math.min(21, Math.round(Math.log2(360 / mapRegion.latitudeDelta))))}
+                </Text>
                 {mapPickedAddress !== null && (
                   <Text
                     variant="bodySmall"
-                    style={[styles.helper, { marginTop: 6 }]}
+                    style={[styles.helper, { marginTop: 2 }]}
                     numberOfLines={2}
                   >
                     {mapPickedAddress}

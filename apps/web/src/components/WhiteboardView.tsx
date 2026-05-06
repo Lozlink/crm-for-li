@@ -14,6 +14,7 @@ import {
 } from './whiteboard/whiteboardColors';
 import { WhiteboardCanvas } from './whiteboard/WhiteboardCanvas';
 import { AddWidgetPanel } from './whiteboard/AddWidgetPanel';
+import { OverviewDrawer } from './whiteboard/OverviewDrawer';
 
 type WhiteboardMode = 'move' | 'edit';
 
@@ -35,8 +36,19 @@ interface UndoEntry {
 export default function WhiteboardView() {
   const [mode, setMode] = useState<WhiteboardMode>('move');
   const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const [overviewOpen, setOverviewOpen] = useState(false);
   // Snackbar state for completed-checklist undo
   const [undoEntry, setUndoEntry] = useState<UndoEntry | null>(null);
+
+  // Stable ref to WhiteboardCanvas's jumpTo callback — registered once on canvas mount.
+  const jumpToRef = useRef<((item: WhiteboardItem) => void) | null>(null);
+  const handleRegisterJumpTo = useCallback((fn: (item: WhiteboardItem) => void) => {
+    jumpToRef.current = fn;
+  }, []);
+
+  const handleJumpTo = useCallback((item: WhiteboardItem) => {
+    jumpToRef.current?.(item);
+  }, []);
 
   const items = useWhiteboardStore((s) => s.items);
   const isLoading = useWhiteboardStore((s) => s.isLoading);
@@ -178,8 +190,25 @@ export default function WhiteboardView() {
       <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
         <h1 className="text-lg font-semibold text-gray-900">Whiteboard</h1>
 
-        {/* Animated segmented-control pill — DESIGN.md §2 */}
-        <AnimatedModePill mode={mode} onToggle={toggleMode} />
+        <div className="flex items-center gap-2">
+          {/* Overview trigger — between Add and mode pill */}
+          <button
+            onClick={() => setOverviewOpen((v) => !v)}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${
+              overviewOpen
+                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+            aria-label="Open board overview"
+            aria-pressed={overviewOpen}
+          >
+            <ListBulletIcon className="h-4 w-4" />
+            <span>Overview</span>
+          </button>
+
+          {/* Animated segmented-control pill — DESIGN.md §2 */}
+          <AnimatedModePill mode={mode} onToggle={toggleMode} />
+        </div>
       </div>
 
       {/* ── Canvas area ───────────────────────────────────────────────── */}
@@ -194,6 +223,7 @@ export default function WhiteboardView() {
             mode={mode}
             onToggleChecklistEntry={handleToggleChecklistEntry}
             onDelete={handleDelete}
+            onRegisterJumpTo={handleRegisterJumpTo}
           />
         )}
 
@@ -224,6 +254,15 @@ export default function WhiteboardView() {
           </button>
         </div>
       </div>
+
+      {/* ── Overview Drawer ───────────────────────────────────────────── */}
+      {overviewOpen && (
+        <OverviewDrawer
+          items={items}
+          onClose={() => setOverviewOpen(false)}
+          onJumpTo={handleJumpTo}
+        />
+      )}
 
       {/* ── Snackbar — completed-checklist remove + Undo ──────────────── */}
       {undoEntry && (
@@ -335,6 +374,14 @@ function MoveIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+    </svg>
+  );
+}
+
+function ListBulletIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
     </svg>
   );
 }

@@ -22,6 +22,7 @@ import { EditItemSheet } from '../components/whiteboard/EditItemSheet';
 import { ItemContextMenu } from '../components/whiteboard/ItemContextMenu';
 import { AddWidgetSheet } from '../components/whiteboard/AddWidgetSheet';
 import { IntelligenceSidebar } from '../components/whiteboard/IntelligenceSidebar';
+import { OverviewSheet } from '../components/whiteboard/OverviewSheet';
 import {
   CHECKLIST_DEFAULT_SIZE,
   ITEM_DEFAULT_SIZE,
@@ -68,6 +69,7 @@ export default function WhiteboardScreen() {
   const [contextId, setContextId] = useState<string | null>(null);
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [intelligenceSidebarVisible, setIntelligenceSidebarVisible] = useState(false);
+  const [overviewVisible, setOverviewVisible] = useState(false);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   // Captured shape of a just-deleted checklist item — kept for 5s so Undo can recreate it.
   const [undoDeleteItem, setUndoDeleteItem] = useState<WhiteboardItem | null>(null);
@@ -385,6 +387,7 @@ export default function WhiteboardScreen() {
         onModeChange={setMode}
         onRequestAdd={() => setAddSheetVisible(true)}
         onRequestSuggestions={() => setIntelligenceSidebarVisible(true)}
+        onRequestOverview={() => setOverviewVisible(true)}
         onClose={handleClose}
       />
 
@@ -417,6 +420,16 @@ export default function WhiteboardScreen() {
         visible={intelligenceSidebarVisible}
         onDismiss={() => setIntelligenceSidebarVisible(false)}
         onAddToBoard={handleAddSuggestionToBoard}
+      />
+
+      {/* Overview sheet — searchable list of all board items with tap-to-pan. */}
+      <OverviewSheet
+        visible={overviewVisible}
+        items={items}
+        cameraX={cameraX}
+        cameraY={cameraY}
+        cameraScale={cameraScale}
+        onDismiss={() => setOverviewVisible(false)}
       />
 
       <Snackbar

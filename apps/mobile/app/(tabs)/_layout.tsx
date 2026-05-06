@@ -79,10 +79,11 @@ const TopHeader = memo(function TopHeader() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => router.push('/(tabs)/stats' as never)}
+            onPress={() => router.push('/whiteboard' as never)}
             style={styles.headerIcon}
+            accessibilityLabel="Open whiteboard"
           >
-            <Icon name="chart-bar" size={22} color={theme.colors.onSurfaceVariant} />
+            <Icon name="sticker-text-outline" size={22} color={theme.colors.onSurfaceVariant} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => router.push('/(tabs)/settings' as never)}

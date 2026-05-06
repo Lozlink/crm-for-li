@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -123,10 +123,19 @@ export function WhiteboardItemView({
   };
 
   // --- Gestures -----------------------------------------------------------
+  // Android touchscreens have noisier touch detection than iOS; a 4pt threshold
+  // triggers accidental drags from finger jitter during taps. Bump to 8pt on
+  // Android so brief touches with small drift resolve as taps, not drags.
+  // If you add more gestures here, tune Android thresholds by ~50% as well.
+  const PAN_MIN_DISTANCE = Platform.select({ android: 8, default: 4 });
+  // Android users tap slightly slower on average; give Tap more time to resolve
+  // before the Race hands the touch to Pan.
+  const TAP_MAX_DURATION = Platform.select({ android: 280, default: 220 });
+
   // Pan only in Move mode; in Edit mode the canvas + inputs need the touches.
   const pan = Gesture.Pan()
     .enabled(mode === 'move')
-    .minDistance(4)
+    .minDistance(PAN_MIN_DISTANCE)
     .onStart(() => {
       startX.value = translateX.value;
       startY.value = translateY.value;
@@ -152,7 +161,7 @@ export function WhiteboardItemView({
   // Tap is only attached in Move mode (Edit mode lets inner inputs receive taps).
   const tap = Gesture.Tap()
     .enabled(mode === 'move')
-    .maxDuration(220)
+    .maxDuration(TAP_MAX_DURATION)
     .onEnd((_e, success) => {
       if (success) runOnJS(handleSingleTap)();
     });

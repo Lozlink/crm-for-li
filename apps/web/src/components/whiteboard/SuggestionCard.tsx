@@ -2,6 +2,7 @@
 
 import React, { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { buildMapDeepLink } from '@realestate-crm/api';
 import type { WhiteboardItem, WhiteboardSuggestionContent, WhiteboardSuggestionKind } from '@realestate-crm/types';
 
 // ── Kind metadata ────────────────────────────────────────────────────────────
@@ -44,9 +45,9 @@ const KIND_DEFS: Record<WhiteboardSuggestionKind, KindDef> = {
 //
 // Mobile expo-router paths → Next.js App Router equivalents.
 //
-// Map deep-link zoom param contract: mobile sends ?zoom=<latitudeDelta>.
-// Web /map consumer converts latitudeDelta → tile-zoom via log2 (see MapView.tsx).
-// We pass latitudeDelta unchanged so the conversion happens at the boundary.
+// Map deep-link zoom param contract: uses buildMapDeepLink helper which encodes
+// ?zoom=<latitudeDelta>. Web /map consumer converts latitudeDelta → tile-zoom
+// via log2 (see MapView.tsx).
 
 function buildWebNavTarget(
   kind: WhiteboardSuggestionKind,
@@ -63,8 +64,7 @@ function buildWebNavTarget(
       const lng = payload?.lng as number | undefined;
       if (typeof lat === 'number' && typeof lng === 'number') {
         // Tile-zoom 17 ≈ 0.0027° delta — close enough to spot the building.
-        const delta = 360 / Math.pow(2, 17);
-        return `/map?lat=${lat}&lng=${lng}&zoom=${delta}&layer=buildings`;
+        return `/map${buildMapDeepLink({ lat, lng, tileZoom: 17, layer: 'buildings' })}`;
       }
       return '/map?layer=buildings';
     }
@@ -75,7 +75,7 @@ function buildWebNavTarget(
     case 'route': {
       const lls = payload?.orderedLatLngs as { lat: number; lng: number }[] | undefined;
       if (lls?.[0]) {
-        return `/map?lat=${lls[0].lat}&lng=${lls[0].lng}&zoom=0.05&layer=contacts`;
+        return `/map${buildMapDeepLink({ lat: lls[0].lat, lng: lls[0].lng, latitudeDelta: 0.05, layer: 'contacts' })}`;
       }
       return null;
     }

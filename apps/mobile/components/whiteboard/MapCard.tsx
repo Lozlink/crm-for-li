@@ -3,7 +3,7 @@ import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
-import { reverseGeocode } from '@realestate-crm/api';
+import { reverseGeocode, buildMapDeepLink } from '@realestate-crm/api';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
 import type { WhiteboardItem, WhiteboardMapContent } from '@realestate-crm/types';
 
@@ -71,16 +71,8 @@ export function MapCard({ item }: Props) {
   const fallbackCoords = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
   const handlePress = () => {
-    // Convert stored tile-zoom integer (1-21) → latitudeDelta in degrees.
-    // delta = 360 / 2^z is technically the longitudeDelta-at-equator, but for
-    // our centering purpose it's adequate (the map screen also assigns it to
-    // longitudeDelta). At z=13 → ~0.044° ≈ 5km region; z=17 → ~300m.
-    // Clamp to a sane tile-zoom range; anything outside falls back to 13.
-    const tileZoom = zoom >= 1 && zoom <= 21 ? zoom : 13;
-    const delta = 360 / Math.pow(2, tileZoom);
-    router.push(
-      `/(tabs)/map?lat=${lat}&lng=${lng}&zoom=${delta}` as never,
-    );
+    const deepLink = buildMapDeepLink({ lat, lng, tileZoom: zoom });
+    router.push(`/(tabs)/map${deepLink}` as never);
   };
 
   return (

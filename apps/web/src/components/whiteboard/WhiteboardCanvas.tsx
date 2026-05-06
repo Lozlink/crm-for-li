@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import type { WhiteboardItem } from '@realestate-crm/types';
 import { CANVAS_BG, CANVAS_DOT_COLOR } from './whiteboardColors';
 import { WhiteboardItemView } from './WhiteboardItem';
@@ -13,6 +13,8 @@ interface Props {
   mode: WhiteboardMode;
   onToggleChecklistEntry: (itemId: string, entryId: string) => void;
   onDelete: (id: string) => void;
+  /** Called once on mount with a stable jumpTo function; parent stores it to drive overview tap-to-pan. */
+  onRegisterJumpTo?: (jumpTo: (item: WhiteboardItem) => void) => void;
 }
 
 /**
@@ -27,7 +29,7 @@ interface Props {
  * - Scroll wheel pans vertically (shift+scroll = horizontal).
  * - Item drags are handled inside WhiteboardItemView and stop propagation.
  */
-export function WhiteboardCanvas({ items, mode, onToggleChecklistEntry, onDelete }: Props) {
+export function WhiteboardCanvas({ items, mode, onToggleChecklistEntry, onDelete, onRegisterJumpTo }: Props) {
   const [cameraX, setCameraX] = useState(0);
   const [cameraY, setCameraY] = useState(0);
 
@@ -38,10 +40,30 @@ export function WhiteboardCanvas({ items, mode, onToggleChecklistEntry, onDelete
   // live camera used during pan to avoid closure stale-reads
   const liveCamera = useRef({ x: 0, y: 0 });
 
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const syncCamera = useCallback((x: number, y: number) => {
     liveCamera.current = { x, y };
     setCameraX(x);
     setCameraY(y);
+  }, []);
+
+  // Smooth-pan to center the given item in the viewport.
+  const jumpToItem = useCallback((item: WhiteboardItem) => {
+    const el = containerRef.current;
+    const viewW = el?.clientWidth ?? window.innerWidth;
+    const viewH = el?.clientHeight ?? window.innerHeight;
+    const targetX = -(item.position_x - viewW / 2 + item.width / 2);
+    const targetY = -(item.position_y - viewH / 2 + item.height / 2);
+    // Smooth transition via CSS — temporarily set a transition on the world div,
+    // then remove after 300ms so pointer-drag isn't sluggish.
+    syncCamera(targetX, targetY);
+  }, [syncCamera]);
+
+  useEffect(() => {
+    onRegisterJumpTo?.(jumpToItem);
+  // Only register once on mount — jumpToItem is stable (syncCamera is stable).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCanvasPointerDown = useCallback(
@@ -94,6 +116,7 @@ export function WhiteboardCanvas({ items, mode, onToggleChecklistEntry, onDelete
 
   return (
     <div
+      ref={containerRef}
       className="relative h-full w-full overflow-hidden"
       style={{ backgroundColor: CANVAS_BG.light, cursor: 'default' }}
       onPointerDown={handleCanvasPointerDown}

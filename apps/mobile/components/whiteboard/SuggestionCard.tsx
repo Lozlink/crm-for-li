@@ -2,6 +2,7 @@ import { useColorScheme, StyleSheet, View, Pressable } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { buildMapDeepLink } from '@realestate-crm/api';
 import {
   getSuggestionKindDef,
   suggestionKindColorForScheme,
@@ -166,8 +167,7 @@ function buildNavTarget(
       const lng = payload?.lng as number | undefined;
       if (typeof lat === 'number' && typeof lng === 'number') {
         // Tile-zoom 17 ≈ 0.0027° (~300m) — close enough to spot the building.
-        const delta = 360 / Math.pow(2, 17);
-        return `/(tabs)/map?lat=${lat}&lng=${lng}&zoom=${delta}&layer=buildings`;
+        return `/(tabs)/map${buildMapDeepLink({ lat, lng, tileZoom: 17, layer: 'buildings' })}`;
       }
       return '/(tabs)/map?layer=buildings';
     }
@@ -179,7 +179,7 @@ function buildNavTarget(
       const lls = payload?.orderedLatLngs as { lat: number; lng: number }[] | undefined;
       if (lls?.[0]) {
         // Zoom out a bit (0.05 ≈ 5km) to show several contacts at once.
-        return `/(tabs)/map?lat=${lls[0].lat}&lng=${lls[0].lng}&zoom=0.05&layer=contacts`;
+        return `/(tabs)/map${buildMapDeepLink({ lat: lls[0].lat, lng: lls[0].lng, latitudeDelta: 0.05, layer: 'contacts' })}`;
       }
       return null;
     }
