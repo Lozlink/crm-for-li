@@ -1,8 +1,9 @@
 'use client';
 
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import type { WhiteboardItem, WhiteboardPhotoContent } from '@realestate-crm/types';
 import { supabase } from '@realestate-crm/api';
+import { useAuthStore } from '@realestate-crm/hooks';
 
 interface Props {
   item: WhiteboardItem;
@@ -27,6 +28,9 @@ interface Props {
  */
 export function PhotoWidget({ item, editable, onPhotoUpdate }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isDemoMode = useAuthStore((s) => s.isDemoMode);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   const content = item.content as WhiteboardPhotoContent | undefined;
   const uri = content?.local_uri ?? content?.url ?? null;
   const caption = (content?.caption ?? '').trim();
@@ -42,19 +46,35 @@ export function PhotoWidget({ item, editable, onPhotoUpdate }: Props) {
       const file = e.target.files?.[0];
       if (!file) return;
 
+      setUploadError(null);
+
+      // Demo mode: skip upload, use picsum placeholder
+      if (isDemoMode) {
+        const seed = Math.floor(Math.random() * 1000);
+        onPhotoUpdate({
+          url: `https://picsum.photos/seed/${seed}/400/300`,
+          local_uri: undefined,
+          caption: content?.caption,
+        });
+        e.target.value = '';
+        return;
+      }
+
       // Instant preview via blob URL
       const blobUrl = URL.createObjectURL(file);
       onPhotoUpdate({ url: content?.url ?? '', local_uri: blobUrl, caption: content?.caption });
 
-      // Upload to Supabase storage (best-effort)
+      // Upload to Supabase storage
       try {
         const ext = file.name.split('.').pop() ?? 'jpg';
-        const path = `${crypto.randomUUID()}.${ext}`;
+        const path = `whiteboard-photos/${Date.now()}-${crypto.randomUUID()}.${ext}`;
         const { data, error } = await supabase.storage
           .from('whiteboard-photos')
           .upload(path, file, { upsert: false });
 
-        if (!error && data) {
+        if (error) {
+          setUploadError('Upload failed — preview only');
+        } else if (data) {
           const { data: urlData } = supabase.storage
             .from('whiteboard-photos')
             .getPublicUrl(data.path);
@@ -65,13 +85,13 @@ export function PhotoWidget({ item, editable, onPhotoUpdate }: Props) {
           });
         }
       } catch {
-        // Storage bucket may not exist — blob URL stays as preview
+        setUploadError('Upload failed — preview only');
       }
 
       // Reset input so the same file can be re-picked
       e.target.value = '';
     },
-    [content, onPhotoUpdate],
+    [content, isDemoMode, onPhotoUpdate],
   );
 
   return (
@@ -134,6 +154,11 @@ export function PhotoWidget({ item, editable, onPhotoUpdate }: Props) {
       {/* Caption — shown when present */}
       {caption && (
         <p className="line-clamp-2 px-2 pb-1 pt-0.5 text-xs text-gray-500">{caption}</p>
+      )}
+
+      {/* Upload error */}
+      {uploadError && (
+        <p className="px-2 pb-1 text-[11px] text-red-500">{uploadError}</p>
       )}
 
       {/* Hidden file input */}

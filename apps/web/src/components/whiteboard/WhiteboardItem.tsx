@@ -12,6 +12,8 @@ import { snapToGrid, WIDGET_DELETE_COLOR } from './whiteboardColors';
 import { StickyNoteWidget } from './StickyNoteWidget';
 import { ChecklistWidget, ChecklistEditorDialog } from './ChecklistWidget';
 import { PhotoWidget } from './PhotoWidget';
+import { MapCard } from './MapCard';
+import { SuggestionCard } from './SuggestionCard';
 
 type WhiteboardMode = 'move' | 'edit';
 
@@ -258,8 +260,20 @@ export function WhiteboardItemView({
           />
         )}
 
-        {/* Phase 2+ items: graceful "View on mobile" placeholder */}
-        {item.type !== 'sticky' && item.type !== 'checklist' && item.type !== 'photo' && (
+        {item.type === 'map' && (
+          <MapCard item={item} />
+        )}
+
+        {item.type === 'suggestion' && (
+          <SuggestionCard item={item} />
+        )}
+
+        {/* Phase 2 contact/property/goal widgets: graceful "View on mobile" placeholder */}
+        {item.type !== 'sticky' &&
+          item.type !== 'checklist' &&
+          item.type !== 'photo' &&
+          item.type !== 'map' &&
+          item.type !== 'suggestion' && (
           <MobileOnlyPlaceholder type={item.type} />
         )}
 

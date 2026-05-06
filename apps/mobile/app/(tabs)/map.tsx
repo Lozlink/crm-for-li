@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { StyleSheet, View, Dimensions, Linking, TouchableOpacity, ScrollView, LayoutAnimation } from 'react-native';
-import { FAB, Portal, useTheme, Chip, Surface, Text, Dialog, Button, Switch } from 'react-native-paper';
+import { FAB, Portal, useTheme, Chip, Surface, Text, Dialog, Button, Switch, Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import ClusterMapView from 'react-native-map-clustering';
@@ -8,7 +8,7 @@ import MapView, { Marker, Polygon, Circle, Polyline, PROVIDER_GOOGLE, LongPressE
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useCRMStore, useStreetStats, usePropertyStore, useTrackingStore, useBuyerMatchStore, useProspectingMetrics, useProspectingMatcher, useLeadScoringEngine, useDeclaredBuildingsStore } from '@realestate-crm/hooks';
+import { useCRMStore, useStreetStats, usePropertyStore, useTrackingStore, useBuyerMatchStore, useProspectingMetrics, useProspectingMatcher, useLeadScoringEngine, useDeclaredBuildingsStore, useWhiteboardStore } from '@realestate-crm/hooks';
 import type { MultiDwellingBuilding, NearbyContact } from '@realestate-crm/hooks';
 import type { Contact, Property, ActivityWithContact, ContactRequirement, OSMBuilding, DeclaredBuilding } from '@realestate-crm/types';
 import { fetchSuburbByName, decodePolyline, fetchMultiDwellingBuildings } from '@realestate-crm/api';
@@ -157,6 +157,10 @@ export default function MapScreen() {
     | null
   >(null);
   const [selectedBuildingCoverage, setSelectedBuildingCoverage] = useState<MultiDwellingBuilding | null>(null);
+
+  // Whiteboard pin state (building dialog)
+  const createWhiteboardItem = useWhiteboardStore((s) => s.createItem);
+  const [buildingPinSnackbar, setBuildingPinSnackbar] = useState(false);
 
   // Fly to coordinates when navigated with ?lat=X&lng=Y params
   // Auto-enable the relevant layer so the marker is visible
@@ -1158,6 +1162,35 @@ export default function MapScreen() {
           </Dialog.Content>
           <Dialog.Actions style={styles.dialogActions}>
             <Button onPress={() => setBuildingDialogVisible(false)}>Close</Button>
+            <Button
+              icon="pin-outline"
+              onPress={() => {
+                if (!selectedBuildingView) return;
+                const lat =
+                  selectedBuildingView.kind === 'declared'
+                    ? selectedBuildingView.building.latitude
+                    : selectedBuildingView.building.center.latitude;
+                const lng =
+                  selectedBuildingView.kind === 'declared'
+                    ? selectedBuildingView.building.longitude
+                    : selectedBuildingView.building.center.longitude;
+                createWhiteboardItem({
+                  type: 'map',
+                  position_x: 0,
+                  position_y: 0,
+                  width: 180,
+                  height: 160,
+                  content: {
+                    viewport: { lat, lng, zoom: 17 },
+                    overlays: ['buildings'],
+                  },
+                });
+                setBuildingDialogVisible(false);
+                setBuildingPinSnackbar(true);
+              }}
+            >
+              Pin to whiteboard
+            </Button>
             <Button icon="walk" mode="contained" onPress={handleStartProspectingBuilding}>
               Start Prospecting
             </Button>
@@ -1195,6 +1228,15 @@ export default function MapScreen() {
         onDismiss={() => setBriefingVisible(false)}
         briefing={activeBriefing}
       />
+
+      <Snackbar
+        visible={buildingPinSnackbar}
+        onDismiss={() => setBuildingPinSnackbar(false)}
+        duration={3500}
+        action={{ label: 'Open', onPress: () => router.push('/whiteboard') }}
+      >
+        Pinned to whiteboard
+      </Snackbar>
     </View>
   );
 }

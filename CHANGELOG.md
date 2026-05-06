@@ -1,5 +1,126 @@
 # Changelog
 
+## [Unreleased] - 2026-05-06 (later)
+
+### Added — Whiteboard polish follow-ups + full web parity
+
+This block is the deferred-items sweep that followed the earlier 2026-05-06 sprint. Mobile follow-ups + complete web parity for everything in the prior block, shipped by a two-engineer team (`mobile-eng`, `web-eng`) with a code review pass that surfaced four high-confidence concerns (all fixed in the same session).
+
+**Mobile follow-ups:**
+
+- **Lead-scoring perf cliff fixed** (`packages/hooks/src/useLeadScoringEngine.ts`). The `attendeeIndex` rebuild was firing on every `inspections`/`upcomingInspections` reference change — including `set({ isLoading: true })` flips during inspection mutations. Stabilized via an `attendeeHash` content-fingerprint of `[attendeeId:contactId:interest_level]` triples; the index now rebuilds only when actual attendee data changes. `interest_level` is included in the hash so a real-time-subscription path that hot-patches nested `inspections[].attendees` can't silently score against stale levels.
+- **Snackbar+Undo for completed-checklist remove** (`apps/mobile/app/whiteboard.tsx`). Replaced the prior Dialog confirm. Captures the full item shape (including `ref_id`) before optimistic delete; 5s Undo button on the Snackbar recreates the item with all bindings intact. No more hard-delete-with-no-recovery.
+- **Embedded MapView picker for the map widget editor** (`apps/mobile/components/whiteboard/EditItemSheet.tsx`). Replaced the three numeric lat/lng/zoom inputs with a 210pt embedded `<MapView>`: draggable centered Marker plus `onLongPress` to drop a pin. Region changes debounce 600ms then reverse-geocode; the resolved address renders below the map. Save derives `viewport.zoom` (tile-zoom integer) from the map's `latitudeDelta` via `Math.round(Math.log2(360 / delta))`, clamped 1–21. Uses `react-native-maps` which is already a dep — no native rebuild needed.
+- **Pin-to-whiteboard expanded** to three more entry points:
+  - `apps/mobile/app/inspection/[id].tsx` — header overflow Menu pins the inspection's `property_id` as a `property` widget. Menu item is `disabled` when the inspection has no property_id (was a silent no-op before review).
+  - `apps/mobile/app/(tabs)/map.tsx` — building Dialog.Actions adds a "Pin to whiteboard" button; pins as a `map` widget with `overlays: ['buildings']` so re-tapping opens the map with the buildings layer enabled (T#13's deep-link contract from the prior block).
+  - `apps/mobile/app/(tabs)/contacts.tsx` — multi-select bar adds a "Pin" button capped at 10/tap. Cards stagger on a 24pt diagonal so they don't all land at the same coords.
+
+**Full web parity for the 2026-05-06 sprint:**
+
+- **`apps/web/src/components/whiteboard/MapCard.tsx`** (new, 108 lines) — calls `reverseGeocode` on first render, persists address/suburb via `updateItem`, navigates to `/map?lat=&lng=&zoom=&layer=` on click. Replaces the prior "View on mobile" placeholder for `map`-typed items.
+- **Animated Move/Edit toggle on web** (`apps/web/src/components/WhiteboardView.tsx`) — `AnimatedModePill` 230×36px segmented control with a sliding indicator (CSS transform + 200ms cubic-bezier transition). Visual parity with the mobile spring-pill but using web-native motion primitives.
+- **Completed-checklist Snackbar+Undo on web** (`apps/web/src/components/WhiteboardView.tsx`) — when all checklist entries are checked and the widget is deleted, a 5s bottom-center toast offers Undo. Recreate captures the FULL item shape including `ref_id` so live-binding survives the delete/undo round-trip even for non-checklist widget types reusing this path.
+- **Real photo picker on web** (`apps/web/src/components/whiteboard/PhotoWidget.tsx`) — uses the browser's native File API (`<input type="file" accept="image/*">`) since `expo-image-picker` is RN-only. Same Supabase Storage `whiteboard-photos` bucket as mobile; same demo-mode bypass to a `picsum.photos` placeholder; same inline error UX on upload failure.
+- **`apps/web/src/components/whiteboard/SuggestionCard.tsx`** (new, 216 lines) — port of mobile SuggestionCard with kind→route translation: `hot_prospects` → `/contacts/<id>`, `coverage_gap` → `/map?layer=buildings&...`, `today_play` → `/prospecting` (no web inspection detail screen exists yet — falls back gracefully), `route` → `/map?layer=contacts&...`.
+- **Map deep-link consumer on web** (`apps/web/src/components/MapView.tsx`) — accepts `?lat=&lng=&zoom=&layer=` and applies on URL change. `?zoom=` is treated strictly as `latitudeDelta` in degrees (cross-platform contract); converted to Google Maps tile-zoom at the boundary via `Math.round(Math.log2(360 / delta))`. Layer param wires to existing layer toggles.
+- **Pin-to-whiteboard on web detail screens** (`apps/web/src/components/ContactDetail.tsx`, `apps/web/src/components/PropertyDetail.tsx`) — buttons below Edit/Delete; toast with "Open" link to `/whiteboard`. Both correctly carry `ref_id` for live-binding (caught in review — see Fixed below).
+
+### Fixed (post-review pass)
+
+- **Web pin-to-whiteboard omitted `ref_id`** — `ContactDetail.tsx` and `PropertyDetail.tsx` were creating widgets without the live-binding key, so deletion cleanup and lead-score live updates wouldn't propagate to web-pinned cards. Added `ref_id` to both (mobile equivalents already had it). H1 from review.
+- **Snackbar+Undo recreate omitted `ref_id`** — both mobile (`apps/mobile/app/whiteboard.tsx`) and web (`apps/web/src/components/WhiteboardView.tsx` ) were dropping `ref_id` on the recreate path. Latent today (only fires for ref_id-less checklists) but a landmine for any future widget type reusing the path. Added to both. H3 from review.
+- **`?zoom=` cross-platform contract drift** — three different conventions in play: web MapCard pushed tile-zoom integers, web SuggestionCard pushed latitudeDelta, web MapView consumer used a `>21 = delta, ≤21 = tile-zoom` heuristic to disambiguate. The heuristic was brittle (a producer pushing `?zoom=0.5` thinking "coarse delta" would be misread as tile-zoom 1, fly to a whole-region view). Unified all producers to send `latitudeDelta`; web MapCard now converts `360 / 2^z` at push time matching mobile. Consumer drops the heuristic; `?zoom=` is strictly a delta. H2 from review.
+- **`attendeeHash` missed `interest_level` mutations** — the perf-fix hash only fingerprinted `id:contact_id`, so a level change on an existing attendee wouldn't trigger an `attendeeIndex` rebuild. Masked today by the fact that `useInspectionStore.updateAttendee` mutates the flat `attendees` array, not the nested `inspections[].attendees`, but a future real-time-subscription path could trigger silent stale-score scoring. Hash now includes `interest_level`. H4 from review.
+
+### Style / polish (folded in)
+
+- **Inspection pin no-op silenced** when `property_id` is missing — Menu.Item now disables itself rather than swallowing the tap. (S1 from review.)
+- **Bulk-pin contacts cascade-stagger** at 24pt diagonal instead of all stacking at `(0, 0)`. (S2 from review.)
+
+### Verified
+
+- `cd apps/mobile && pnpm exec tsc --noEmit` ✓
+- `cd apps/web && pnpm exec tsc --noEmit` ✓
+- `pnpm --filter web build` ✓ (web-eng confirmed; reviewer re-verified — all 19 routes static-prerender)
+- Reviewer verdict: **ship-with-followups** before fixes; all four high-confidence concerns landed in the same session, leaving no follow-ups blocking ship.
+
+### Deferred to a future sprint
+
+- **iOS haptics** on the Move/Edit toggle (Android works via `Vibration` core API; iOS needs `expo-haptics` + an EAS prebuild — no precedent for the dep elsewhere, deferred per user call).
+- **Documented zoom-contract helper** — H2 was patched at every site, but a shared `buildMapDeepLink({ lat, lng, tileZoom })` helper in `packages/api` would prevent future producers from drifting again. Worth doing on the next map-feature touch.
+- **MapCard `useEffect` dep noise** — the `content` reference in the deps array is fine in practice (the `geocodeFired` ref guards against re-fetch) but reads ambiguously. Replace with primitive deps. (S3 from review.)
+- **Map picker tile-zoom rounding** can shift the saved zoom by ±1 from what the user pinch-zooms to. Acceptable for territory pins but worth flagging if a partner reports it. (S5 from review.)
+
+---
+
+## [Unreleased] - 2026-05-06
+
+### Added — Whiteboard becomes a first-class index into the app
+
+- **Whiteboard in the bottom tab bar** — new `apps/mobile/app/(tabs)/whiteboard-tab.tsx` redirect shim + `_layout.tsx` entry. Was previously buried under More → Field Work; now one tap from anywhere.
+- **"Pin to whiteboard" actions** on contact + property detail screens (`apps/mobile/app/contact/[id].tsx`, `apps/mobile/app/property/[id].tsx`). Header overflow icon → creates the corresponding live-bound widget on the board → Snackbar "Pinned to whiteboard — Open" with a one-tap link back to the board. Inspection + building detail are deferred to a follow-up.
+- **Real photo upload** for the photo widget — `expo-image-picker` (camera + library) → Supabase Storage upload to `whiteboard-photos` bucket → public URL persisted as `content.url`. Demo mode falls back to `picsum.photos` placeholder URLs so seed users don't hit Storage. Replaces the paste-an-image-URL placeholder UX. Touches `EditItemSheet.tsx` (+217 lines), `package.json`, lockfile.
+- **Tappable suggestion cards** (`apps/mobile/components/whiteboard/SuggestionCard.tsx`) — Intelligence sidebar suggestions now deep-link by kind:
+  - `hot_prospects` → `/contact/<id>` (uses first id in payload).
+  - `coverage_gap` → map centered on the building with the buildings layer enabled.
+  - `today_play` → `/inspection/<id>` (or `/(tabs)/prospecting` if id missing).
+  - `route` → map centered on the first ordered stop with the contacts layer enabled and a wider zoom (~5km region).
+  Missing-payload paths fail soft (no nav) rather than crashing.
+- **Map deep-link contract** (`apps/mobile/app/(tabs)/map.tsx`) — accepts `?lat=`, `?lng=`, `?zoom=` (latitudeDelta in degrees), and `?layer=<key>` query params and applies them on focus. Auto-enables the requested layer (`contacts | properties | fieldActivity | buildings | stats`) if not already visible. Same contract is used by MapCard taps, suggestion deep-links, and (in future) the route view's map dispatch.
+- **MapCard renders the resolved address** instead of raw `lat: -33.8688 / lng: 151.2093 / zoom: 13`. New `packages/api/src/geocoding.ts` does OSM Nominatim reverse-geocoding with an in-memory LRU cache (200 entries, keyed on lat/lng rounded to 4 decimals ≈ 11m precision), required `User-Agent` header, null-cache on 429/network error. Resolved address + suburb persist back onto the row so re-renders skip the network call. `WhiteboardMapContent` extended with optional `address` + `suburb`.
+- **Completed-checklist "Done — remove?" pill** — when every item in a to-do widget is checked, a pill appears on the card so users can dismiss it in one tap. Touches `ChecklistCard.tsx`, `WhiteboardItemView.tsx`, `apps/mobile/app/whiteboard.tsx`. Currently a Dialog confirm → hard delete; Snackbar+Undo deferred (see Known issues).
+- **Inspection attendance feeds lead scoring** (`packages/hooks/src/useLeadScoringEngine.ts`) — open-home attendance now bumps the attendee's lead score, weighted by `interest_level` (hot=+12 / warm=+6 / cold=+2 / null=+4), recency-decayed (1.0× ≤14d, 0.6× 15-45d, 0.3× 46-90d, 0× older), capped at +30 so a single hot attendee can't dominate. Total score still capped at 100, tier mapping unchanged. Composes via memoized `Map<contactId, attendees[]>` index keyed on `[inspections, upcomingInspections]`.
+- **Animated Move/Edit toggle** — `WhiteboardToolbar.tsx` (+163 lines) replaces the static buttons with a sliding segmented-control pill (Reanimated `withSpring`, mass/damping/stiffness matched to existing `SPRING_LIFT/SPRING_DROP`) plus an Android `Vibration` haptic on real toggle. iOS haptic via `expo-haptics` deferred — no precedent for the dep yet.
+- **`useSmartSuggestions` owns its own `fetchUpcoming()` trigger** — mount + 5-min interval + in-flight dedup via `useRef` + demo-mode skip. Without this nothing in the app called `fetchUpcoming()`, so the `today_play` suggestion bucket was effectively dead.
+
+### Changed
+
+- **"Notes" replaces "Session tracking"** in user-facing copy on `apps/mobile/app/tracking/[id].tsx` and the prospecting/guided flow's tracking strings. Internal symbols (`useTrackingStore`, etc.) intentionally kept.
+- **Mobile dashboard's today's-inspections filter** now excludes `status === 'cancelled'` and consistently filters on the same-day semantic. Web dashboard parity deferred.
+- **`InspectionAttendee` type** now declares `suggestedContactMatch?: boolean` — the transient flag `addAttendee` was already returning but wasn't typed, causing silent property strip in some consumers. (`packages/types/src/entities.ts`.)
+
+### Fixed
+
+- **Move-mode drag crashes the app** (Reanimated 4 strict workletization) — `WhiteboardItemView.tsx` had a module-scope `snap()` helper that was called from inside the Pan gesture's `onEnd` worklet. Reanimated 4 hard-crashes with "Tried to synchronously call a non-worklet function on the UI thread" the moment a drag is released. Fixed by adding the `'worklet'` directive to `snap()`. Repro: drag any whiteboard item ≥ 4pt and release. Symptom: app crash on every drop.
+- **Checklist text writes backwards when prepending** — per-entry `TextInput`s in the checklist editor sourced `value` directly from the parent's `checklistEntries` array, so every keystroke triggered a parent re-render that raced the native cursor sync on RN-Paper's `mode="flat" dense` wrapper. Cursor reset to position 0 after each keystroke; typing "abc" at the start of "hello" produced "cbahello". Fixed by extracting a `ChecklistEntryEditor` inner component that buffers the live value in local state and commits upstream on every change. (`apps/mobile/components/whiteboard/EditItemSheet.tsx`.)
+- **Sticky-note text writes backwards when prepending** — same root cause as the checklist (parent-controlled `value`, store re-emit on every keystroke). Same buffered-input pattern applied. (`apps/mobile/components/whiteboard/StickyNote.tsx` +80 lines.)
+- **Toolbar haptic fires on every screen mount, not just on toggle** — `WhiteboardToolbar.tsx`'s first-render guard was racy. The `onLayout` handler cleared `isFirstRender.current = false` eagerly on first measurement, so the next effect run (triggered by `setSegmentWidth`) found the ref already false and treated a measurement-driven re-render as a real toggle, firing the spring animation + Android vibration. Replaced the ref with a `prevModeRef<WhiteboardMode | null>` keyed on actual mode change. Layout handler no longer touches the ref. Cold-open the whiteboard now does nothing; only real Move↔Edit toggles fire feedback.
+- **MapCard tap shows continental view instead of the saved location** — stored `viewport.zoom` is a tile-zoom integer (Google/OSM convention, default 13), but `(tabs)/map.tsx` interprets `?zoom=` as `latitudeDelta` in degrees. A value of 13 ≈ 1450km region, so tapping a Sydney CBD pin showed the entire continent. Fixed by converting tile-zoom → latitudeDelta at push time via `360 / 2^z` with a 1-21 sanity clamp. At z=13 → ~0.044° ≈ 5km region; at z=17 → ~300m.
+- **Coverage-gap suggestion card has nowhere to land** — `useSmartSuggestions` payload for the `coverage_gap` kind didn't include lat/lng even though `DeclaredBuilding` rows carry them. Tap-through opened the map with the buildings layer enabled but no camera focus, leaving the user to scan for the building manually. Added `lat`/`lng` to the payload + SuggestionCard now uses them when present (older persisted suggestions without coords still navigate, just to a less-focused view — backward-compatible).
+- **Photo upload silently swallows the photo on Supabase error** — when `uploadPhoto()` returned `null`, the picker callbacks did `if (url) setPhotoUrl(url)` and silently no-op'd. The user saw the spinner stop and the local preview persist (which looks identical to a saved photo), then on Save got an empty URL persisted with no warning. Now surfaces inline error text + clears the local preview so the failure is obvious. (`EditItemSheet.tsx`.)
+- **`useInspectionStore` actions leave `isLoading: true` on error** — `createInspection` and several siblings only reset `isLoading` on the catch path, not on the `return null` early-out paths after a Supabase error. UI subscribers stuck in loading state on a failed write. Audited every exit path and confirmed reset on both success and failure.
+- **iOS pretends to vibrate on Move/Edit toggle** — `Vibration.vibrate(30)` is a no-op on iOS for short pulses, so the toolbar's haptic was Android-only in practice but the call was unconditional. Gated to `Platform.OS === 'android'` so iOS doesn't pretend to provide feedback it isn't. Proper iOS haptics via `expo-haptics` deferred.
+
+### Known issues
+
+- **Lead-scoring perf cliff on large contact tables.** `useLeadScoringEngine.attendeeIndex` rebuilds whenever the `inspections` or `upcomingInspections` reference changes. With the more-aggressive `isLoading: true` set calls preceding mutations, the store now publishes intermediate states more often, which can make the outer per-contact memo recompute frequently during inspection edit flows. Mitigation: split the index memo or use a stable-key cache. Not blocking; flag for next perf pass.
+- **Completed-checklist "Done — remove?" hard-deletes with no Undo.** Currently a Paper Dialog confirm → `deleteItem`. Should implement Snackbar + Undo (capture deleted item content/position for recreation) OR add a soft-delete `archived_at` column before broader rollout.
+- **iOS haptics on Move/Edit toggle.** Android works; iOS would require adding `expo-haptics` + an EAS prebuild. Deferred — no precedent for the dep elsewhere in the app.
+- **Real map picker for the map widget editor.** EditItemSheet still takes raw lat/lng/zoom numeric inputs. The "Zoom" input has no range hint either — users typing a `latitudeDelta` value (e.g. 0.05) will be clamped to 13 by MapCard. Add a range hint + better label, or replace with an embedded MapView with onLongPress to capture coords.
+- **"Pin to whiteboard" scope.** Implemented on contact + property detail only. Inspection detail, building detail, and contact-list multi-select pin are not yet wired.
+- **Web parity.** Explicitly skipped this sprint per scope. When web is revisited: shared address-resolution helper (already in `packages/api`) and shared lead-scoring inspection bonus (already in shared hook) port for free. Pin-to-whiteboard, image picker, suggestion deep-links, animated toggle, completed-checklist remove, and map deep-link consumer all need web-side ports.
+
+### Required to land this update in the running app: a fresh `eas build`
+
+The photo widget integration adds **`expo-image-picker`**, which is a native module — it ships native iOS and Android code that must be linked into the .ipa / .apk at build time. Static `import * as ImagePicker from 'expo-image-picker'` at the top of `EditItemSheet.tsx` will crash any existing build that doesn't have the native side compiled in: opening the whiteboard route mounts EditItemSheet, the import fires at module-load, the native module isn't registered, and the app crashes.
+
+OTA (`eas update`) cannot deliver this — it only pushes JavaScript bundles to existing native builds. You need a full rebuild:
+
+- `pnpm mobile:build:preview` — rebuilds Android preview channel
+- `pnpm mobile:build:production` — rebuilds iOS + Android production
+- For local dev: `pnpm --filter mobile ios` / `pnpm --filter mobile android` (runs `expo run:` which prebuilds + builds locally)
+
+The same rebuild also lands the still-pending **caller-id native module fix** from the 2026-05-01 sprint (Android silent SMS + iOS App Group identifier mismatch). Both are bundled into the next build.
+
+### Verified
+
+- `cd apps/mobile && pnpm exec tsc --noEmit` ✓
+- ~795 lines added net across 23 modified files + 2 new files (`packages/api/src/geocoding.ts`, `apps/mobile/app/(tabs)/whiteboard-tab.tsx`).
+- Pre-existing package-level type errors (`packages/hooks` caller-id native module path, `packages/api` `process` refs) are environmental — they resolve correctly when consumed from `apps/mobile`. Unchanged by this sprint.
+
+---
+
 ## [Unreleased] - 2026-05-01
 
 ### Added — Web parity sprint (matches mobile capabilities)

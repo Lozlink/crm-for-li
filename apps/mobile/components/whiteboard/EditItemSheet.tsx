@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Button,
@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
+import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import type {
   WhiteboardChecklistContent,
   WhiteboardChecklistEntry,
@@ -136,10 +137,16 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
   const [goalTarget, setGoalTarget] = useState<string>('5000');
   const [goalPeriod, setGoalPeriod] = useState<WhiteboardGoalPeriod>('month');
 
-  // Map state
-  const [mapLat, setMapLat] = useState<string>('-33.8688');
-  const [mapLng, setMapLng] = useState<string>('151.2093');
-  const [mapZoom, setMapZoom] = useState<string>('13');
+  // Map state — region drives the picker MapView; pickedAddress shows resolved name.
+  const [mapRegion, setMapRegion] = useState<Region>({
+    latitude: -33.8688,
+    longitude: 151.2093,
+    latitudeDelta: 0.01,
+    longitudeDelta: 0.01,
+  });
+  const [mapPickedAddress, setMapPickedAddress] = useState<string | null>(null);
+  const mapRef = useRef<MapView>(null);
+  const geocodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Live data for pickers — read at hook level so we don't break the rules.
   const allContacts = useCRMStore((s) => s.contacts);
@@ -199,9 +206,17 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
       setGoalPeriod(c?.period ?? 'month');
     } else if (item.type === 'map') {
       const c = item.content as WhiteboardMapContent;
-      setMapLat(String(c?.viewport?.lat ?? -33.8688));
-      setMapLng(String(c?.viewport?.lng ?? 151.2093));
-      setMapZoom(String(c?.viewport?.zoom ?? 13));
+      const lat = c?.viewport?.lat ?? -33.8688;
+      const lng = c?.viewport?.lng ?? 151.2093;
+      const zoom = c?.viewport?.zoom ?? 13;
+      const latDelta = 360 / Math.pow(2, zoom);
+      setMapRegion({
+        latitude: lat,
+        longitude: lng,
+        latitudeDelta: latDelta,
+        longitudeDelta: latDelta,
+      });
+      setMapPickedAddress(c?.address ?? null);
     }
   }, [item]);
 
@@ -255,17 +270,18 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
         } as WhiteboardGoalContent,
       });
     } else if (item.type === 'map') {
-      const lat = parseFloat(mapLat) || 0;
-      const lng = parseFloat(mapLng) || 0;
-      const zoom = parseInt(mapZoom, 10) || 13;
+      const lat = mapRegion.latitude;
+      const lng = mapRegion.longitude;
+      const zoom = Math.round(Math.log2(360 / mapRegion.latitudeDelta));
+      const clampedZoom = Math.max(1, Math.min(21, zoom));
       const prevContent = item.content as WhiteboardMapContent;
       const coordsChanged =
         prevContent.viewport.lat !== lat || prevContent.viewport.lng !== lng;
       const mapContent: WhiteboardMapContent = {
         ...prevContent,
-        viewport: { lat, lng, zoom },
-        // Clear cached address when coords change so MapCard re-resolves.
-        address: coordsChanged ? undefined : prevContent.address,
+        viewport: { lat, lng, zoom: clampedZoom },
+        // Keep the address the picker resolved; clear if coords moved significantly.
+        address: coordsChanged ? (mapPickedAddress ?? undefined) : prevContent.address,
         suburb: coordsChanged ? undefined : prevContent.suburb,
       };
       onSave(item.id, { content: mapContent });
@@ -682,31 +698,55 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
 
             {item.type === 'map' && (
               <View>
-                <TextInput
-                  mode="outlined"
-                  label="Latitude"
-                  value={mapLat}
-                  onChangeText={setMapLat}
-                  keyboardType="numbers-and-punctuation"
-                />
-                <TextInput
-                  mode="outlined"
-                  label="Longitude"
-                  value={mapLng}
-                  onChangeText={setMapLng}
-                  keyboardType="numbers-and-punctuation"
-                  style={{ marginTop: 8 }}
-                />
-                <TextInput
-                  mode="outlined"
-                  label="Zoom"
-                  value={mapZoom}
-                  onChangeText={setMapZoom}
-                  keyboardType="number-pad"
-                  style={{ marginTop: 8 }}
-                />
+                <Text variant="labelMedium" style={styles.swatchLabel}>Pick location</Text>
+                <View style={styles.mapPickerContainer}>
+                  <MapView
+                    ref={mapRef}
+                    provider={PROVIDER_GOOGLE}
+                    style={styles.mapPicker}
+                    region={mapRegion}
+                    onRegionChangeComplete={(region) => {
+                      setMapRegion(region);
+                      // Debounce reverse-geocode to avoid hammering Nominatim on every drag.
+                      if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+                      geocodeTimerRef.current = setTimeout(async () => {
+                        const result = await reverseGeocode(region.latitude, region.longitude);
+                        setMapPickedAddress(result?.address ?? null);
+                      }, 600);
+                    }}
+                    onLongPress={(e) => {
+                      const { latitude, longitude } = e.nativeEvent.coordinate;
+                      const next: Region = {
+                        latitude,
+                        longitude,
+                        latitudeDelta: mapRegion.latitudeDelta,
+                        longitudeDelta: mapRegion.longitudeDelta,
+                      };
+                      setMapRegion(next);
+                      mapRef.current?.animateToRegion(next, 300);
+                    }}
+                  >
+                    <Marker
+                      coordinate={{ latitude: mapRegion.latitude, longitude: mapRegion.longitude }}
+                      draggable
+                      onDragEnd={(e) => {
+                        const { latitude, longitude } = e.nativeEvent.coordinate;
+                        setMapRegion((prev) => ({ ...prev, latitude, longitude }));
+                      }}
+                    />
+                  </MapView>
+                </View>
+                {mapPickedAddress !== null && (
+                  <Text
+                    variant="bodySmall"
+                    style={[styles.helper, { marginTop: 6 }]}
+                    numberOfLines={2}
+                  >
+                    {mapPickedAddress}
+                  </Text>
+                )}
                 <Text variant="bodySmall" style={styles.helper}>
-                  Tip: long-press the territory map to copy a pin's coordinates.
+                  Drag the pin or long-press to reposition.
                 </Text>
               </View>
             )}
@@ -804,5 +844,14 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 8,
     marginTop: 10,
+  },
+  mapPickerContainer: {
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginTop: 6,
+  },
+  mapPicker: {
+    height: 210,
+    width: '100%',
   },
 });

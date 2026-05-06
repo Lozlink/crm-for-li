@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Snackbar, useTheme, Dialog, Button, Portal } from 'react-native-paper';
+import { Snackbar, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSharedValue } from 'react-native-reanimated';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
@@ -69,8 +69,8 @@ export default function WhiteboardScreen() {
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [intelligenceSidebarVisible, setIntelligenceSidebarVisible] = useState(false);
   const [snackbar, setSnackbar] = useState<string | null>(null);
-  // Pending checklist completion — holds the item id until user confirms removal.
-  const [completeConfirmId, setCompleteConfirmId] = useState<string | null>(null);
+  // Captured shape of a just-deleted checklist item — kept for 5s so Undo can recreate it.
+  const [undoDeleteItem, setUndoDeleteItem] = useState<WhiteboardItem | null>(null);
 
   const editingItem = useMemo<WhiteboardItem | null>(
     () => items.find((it) => it.id === editingId) ?? null,
@@ -300,19 +300,35 @@ export default function WhiteboardScreen() {
   );
 
   // --- Checklist "Done" affordance ----------------------------------------
+  // Optimistic-delete + 5s Snackbar undo. Captures the full item shape before
+  // deletion so Undo can recreate it at the same position with same content.
   const handleCompleteChecklist = useCallback(
     (id: string) => {
-      setCompleteConfirmId(id);
+      const it = items.find((x) => x.id === id);
+      if (!it) return;
+      setUndoDeleteItem(it);
+      void deleteItem(id);
     },
-    [],
+    [items, deleteItem],
   );
 
-  const handleConfirmComplete = useCallback(() => {
-    if (completeConfirmId) {
-      void deleteItem(completeConfirmId);
-      setCompleteConfirmId(null);
-    }
-  }, [completeConfirmId, deleteItem]);
+  const handleUndoDelete = useCallback(() => {
+    if (!undoDeleteItem) return;
+    void createItem({
+      type: undoDeleteItem.type,
+      position_x: undoDeleteItem.position_x,
+      position_y: undoDeleteItem.position_y,
+      width: undoDeleteItem.width,
+      height: undoDeleteItem.height,
+      content: undoDeleteItem.content,
+      color: undoDeleteItem.color ?? undefined,
+      // Preserve live-binding on undo. Today this only fires for completed
+      // checklists (which carry no ref_id), but the path may be reused for
+      // pinned contact/property/map widgets where ref_id matters.
+      ref_id: undoDeleteItem.ref_id ?? null,
+    });
+    setUndoDeleteItem(null);
+  }, [undoDeleteItem, createItem]);
 
   // --- Context menu actions -----------------------------------------------
   const handleDelete = useCallback(
@@ -403,22 +419,14 @@ export default function WhiteboardScreen() {
         onAddToBoard={handleAddSuggestionToBoard}
       />
 
-      {/* Checklist completion confirm dialog.
-          Hard-delete has no undo — Dialog gives one deliberate tap to confirm.
-          TODO: replace with Snackbar + Undo for a smoother UX (requires capturing
-          the deleted item's content/position for recreation). */}
-      <Portal>
-        <Dialog
-          visible={!!completeConfirmId}
-          onDismiss={() => setCompleteConfirmId(null)}
-        >
-          <Dialog.Title>Remove completed list?</Dialog.Title>
-          <Dialog.Actions>
-            <Button onPress={() => setCompleteConfirmId(null)}>Keep</Button>
-            <Button mode="contained" onPress={handleConfirmComplete}>Remove</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+      <Snackbar
+        visible={!!undoDeleteItem}
+        onDismiss={() => setUndoDeleteItem(null)}
+        duration={5000}
+        action={{ label: 'Undo', onPress: handleUndoDelete }}
+      >
+        Checklist removed
+      </Snackbar>
 
       <Snackbar
         visible={!!snackbar}

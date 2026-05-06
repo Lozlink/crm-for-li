@@ -10,6 +10,7 @@ import {
   useBuyerMatchStore,
   useInspectionStore,
   useDataEnrichmentStore,
+  useWhiteboardStore,
 } from '@realestate-crm/hooks';
 import type {
   Property,
@@ -269,9 +270,12 @@ export default function PropertyDetail({ propertyId }: PropertyDetailProps) {
   const isInspectionLoading = useInspectionStore((s) => s.isLoading);
   const addContact = useCRMStore((s) => s.addContact);
 
+  const createWhiteboardItem = useWhiteboardStore((s) => s.createItem);
+
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [linkingContact, setLinkingContact] = useState(false);
+  const [pinnedToast, setPinnedToast] = useState(false);
   const [contactSearchQuery, setContactSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<PropertyContactRole>('vendor');
 
@@ -384,6 +388,23 @@ export default function PropertyDetail({ propertyId }: PropertyDetailProps) {
     await deleteProperty(activeProperty.id);
     router.push('/properties');
   }, [activeProperty, deleteProperty, router]);
+
+  const handlePinToWhiteboard = useCallback(async () => {
+    if (!activeProperty) return;
+    await createWhiteboardItem({
+      type: 'property',
+      position_x: 40,
+      position_y: 40,
+      width: 200,
+      height: 120,
+      content: { propertyId: activeProperty.id, snapshotAddress: activeProperty.address },
+      color: null,
+      // Live-binding — see ContactDetail.handlePinToWhiteboard for rationale.
+      ref_id: activeProperty.id,
+    });
+    setPinnedToast(true);
+    setTimeout(() => setPinnedToast(false), 4000);
+  }, [activeProperty, createWhiteboardItem]);
 
   const handleLinkContact = useCallback(async (contactId: string) => {
     if (!activeProperty) return;
@@ -535,7 +556,7 @@ export default function PropertyDetail({ propertyId }: PropertyDetailProps) {
                   <span className="text-xs capitalize text-gray-500">For {activeProperty.for_type}</span>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setEditing(!editing)}
                   className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -548,6 +569,15 @@ export default function PropertyDetail({ propertyId }: PropertyDetailProps) {
                   className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                 >
                   {deleting ? 'Deleting...' : 'Delete'}
+                </button>
+                <button
+                  onClick={handlePinToWhiteboard}
+                  className="flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                  </svg>
+                  Pin to whiteboard
                 </button>
               </div>
             </div>
@@ -1275,6 +1305,21 @@ export default function PropertyDetail({ propertyId }: PropertyDetailProps) {
           </div>
         </div>
       </div>
+
+      {/* Pin to whiteboard toast */}
+      {pinnedToast && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-xl bg-gray-900 px-4 py-3 text-white shadow-xl">
+            <span className="text-sm">Pinned to whiteboard</span>
+            <Link
+              href="/whiteboard"
+              className="shrink-0 text-sm font-bold text-blue-400 hover:text-blue-300"
+            >
+              Open
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

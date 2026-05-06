@@ -205,9 +205,31 @@ export function useLeadScoringEngine(): {
     return map;
   }, [declaredBuildings, contacts]);
 
+  // Stable hash over attendee identity AND scoring-relevant fields — changes
+  // only when actual attendee rows change, not when the inspection store emits
+  // isLoading flips mid-mutation. Includes `interest_level` because the
+  // downstream scoring loop reads it (a level change on an existing attendee
+  // must rebuild the index even though the id+contact_id pair is unchanged).
+  // Today this is masked by the fact that `useInspectionStore.updateAttendee`
+  // mutates the flat `attendees` array rather than the nested
+  // `inspections[].attendees`, so the bug is latent — but adding the field
+  // here costs nothing and prevents a future real-time-subscription path from
+  // silently scoring against stale levels.
+  const attendeeHash = useMemo(() => {
+    const parts: string[] = [];
+    for (const insp of [...inspections, ...upcomingInspections]) {
+      if (!insp.attendees) continue;
+      for (const att of insp.attendees) {
+        if (att.contact_id) parts.push(`${att.id}:${att.contact_id}:${att.interest_level ?? ''}`);
+      }
+    }
+    return parts.join('|');
+  }, [inspections, upcomingInspections]);
+
   // Pre-build inspection attendance index: contactId -> InspectionAttendee[].
   // Built once per render from the union of loaded inspections (all + upcoming).
   // Using a Map avoids O(n) filtering per contact inside the scoring loop.
+  // Keyed on attendeeHash so isLoading-only store updates don't rebuild the map.
   const attendeeIndex = useMemo(() => {
     const map = new Map<string, InspectionAttendee[]>();
     const allInspections = [...inspections, ...upcomingInspections];
@@ -224,7 +246,8 @@ export function useLeadScoringEngine(): {
       }
     }
     return map;
-  }, [inspections, upcomingInspections]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attendeeHash]);
 
   // Pre-build suburb stats lookup and per-suburb contact counts
   const { suburbStatsMap, suburbContactCounts } = useMemo(() => {

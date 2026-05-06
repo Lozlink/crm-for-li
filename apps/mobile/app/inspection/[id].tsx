@@ -11,9 +11,12 @@ import {
   Dialog,
   ActivityIndicator,
   TextInput,
+  Menu,
+  IconButton,
+  Snackbar,
 } from 'react-native-paper';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { useInspectionStore, useTaskStore, useCRMStore, useDuplicateCheck } from '@realestate-crm/hooks';
+import { useInspectionStore, useTaskStore, useCRMStore, useDuplicateCheck, useWhiteboardStore } from '@realestate-crm/hooks';
 import type {
   InspectionType,
   InspectionStatus,
@@ -94,6 +97,11 @@ export default function InspectionDetailScreen() {
   const addContact = useCRMStore(state => state.addContact);
   const createFollowUpTasks = useTaskStore(state => state.createFollowUpTasks);
   const { checkForDuplicate } = useDuplicateCheck();
+
+  // Whiteboard pin
+  const createWhiteboardItem = useWhiteboardStore((s) => s.createItem);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [pinSnackbar, setPinSnackbar] = useState(false);
 
   // Check-in form state
   const [firstName, setFirstName] = useState('');
@@ -337,7 +345,44 @@ export default function InspectionDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: propertyAddress }} />
+      <Stack.Screen
+        options={{
+          title: propertyAddress,
+          headerRight: () => (
+            <Menu
+              visible={menuVisible}
+              onDismiss={() => setMenuVisible(false)}
+              anchor={
+                <IconButton
+                  icon="dots-vertical"
+                  onPress={() => setMenuVisible(true)}
+                />
+              }
+            >
+              <Menu.Item
+                leadingIcon="pin-outline"
+                disabled={!inspection.property_id}
+                onPress={() => {
+                  setMenuVisible(false);
+                  if (!inspection.property_id) return;
+                  createWhiteboardItem({
+                    type: 'property',
+                    position_x: 0,
+                    position_y: 0,
+                    content: {
+                      propertyId: inspection.property_id,
+                      snapshotAddress: propertyAddress,
+                    },
+                    ref_id: inspection.property_id,
+                  });
+                  setPinSnackbar(true);
+                }}
+                title="Pin to whiteboard"
+              />
+            </Menu>
+          ),
+        }}
+      />
 
       <KeyboardAvoidingView
         style={styles.container}
@@ -576,6 +621,15 @@ export default function InspectionDetailScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Snackbar
+        visible={pinSnackbar}
+        onDismiss={() => setPinSnackbar(false)}
+        duration={3500}
+        action={{ label: 'Open', onPress: () => router.push('/whiteboard') }}
+      >
+        Pinned to whiteboard
+      </Snackbar>
 
       <Portal>
         {/* End Inspection dialog with ratings */}

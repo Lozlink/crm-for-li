@@ -71,20 +71,53 @@ export default function MapView() {
   const addContact = useCRMStore((s) => s.addContact);
   const searchParams = useSearchParams();
 
-  // Fly to location from query params (e.g. from Stats page)
+  // Fly to location + apply layer from query params.
+  //
+  // Zoom param contract: ?zoom=<latitudeDelta> in degrees, always.
+  // This matches react-native-maps' convention used by all producers in this
+  // codebase (mobile MapCard, SuggestionCard, web MapCard since the H2 fix).
+  // Google Maps JS API takes a tile-zoom integer, so convert at the boundary:
+  //   tileZoom = round(log2(360 / latitudeDelta))   clamped 1-21
+  // An earlier revision treated values ≤ 21 as already-tile-zoom integers, but
+  // that heuristic was brittle (a producer pushing 0.5 thinking "coarse delta"
+  // was misread as tile-zoom 1). Strict delta-only is unambiguous.
   useEffect(() => {
     const lat = searchParams.get('lat');
     const lng = searchParams.get('lng');
-    const zoom = searchParams.get('zoom');
+    const zoomParam = searchParams.get('zoom');
+    const layer = searchParams.get('layer');
+
     if (lat && lng) {
       const latNum = parseFloat(lat);
       const lngNum = parseFloat(lng);
-      const zoomNum = zoom ? parseInt(zoom, 10) : 17;
       if (!isNaN(latNum) && !isNaN(lngNum)) {
+        let tileZoom = 17; // street-level default
+        if (zoomParam) {
+          const delta = parseFloat(zoomParam);
+          if (!isNaN(delta) && delta > 0) {
+            tileZoom = Math.min(21, Math.max(1, Math.round(Math.log2(360 / delta))));
+          }
+        }
         // Small delay to ensure map is loaded
         setTimeout(() => {
-          mapRef.current?.flyTo(latNum, lngNum, zoomNum);
+          mapRef.current?.flyTo(latNum, lngNum, tileZoom);
         }, 500);
+      }
+    }
+
+    // Apply layer — enable the matching overlay if not already visible.
+    if (layer) {
+      switch (layer) {
+        case 'buildings':
+          setShowBuildings(true);
+          break;
+        // contacts / properties / fieldActivity / stats layers are filter-based;
+        // clear tag filter to show all contacts when deep-linked to 'contacts'.
+        case 'contacts':
+          setSelectedTagIds([]);
+          break;
+        default:
+          break;
       }
     }
   }, [searchParams]);

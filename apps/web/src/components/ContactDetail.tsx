@@ -9,6 +9,7 @@ import {
   useBuyerMatchStore,
   usePropertyStore,
   useInspectionStore,
+  useWhiteboardStore,
 } from '@realestate-crm/hooks';
 import { ACTIVITY_TYPES } from '@realestate-crm/config';
 import type {
@@ -135,11 +136,14 @@ export default function ContactDetail({ contactId }: ContactDetailProps) {
   const inspections = useInspectionStore((s) => s.inspections);
   const fetchInspections = useInspectionStore((s) => s.fetchInspections);
 
+  const createWhiteboardItem = useWhiteboardStore((s) => s.createItem);
+
   const [showEditForm, setShowEditForm] = useState(false);
   const [newActivityType, setNewActivityType] = useState<string>('note');
   const [newActivityContent, setNewActivityContent] = useState('');
   const [addingActivity, setAddingActivity] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('activity');
+  const [pinnedToast, setPinnedToast] = useState(false);
 
   // Requirements tab state
   const [showReqForm, setShowReqForm] = useState(false);
@@ -258,6 +262,25 @@ export default function ContactDetail({ contactId }: ContactDetailProps) {
     setLinkPropertyId('');
     await fetchProperties();
   }, [linkPropertyId, linkRole, contactId, addPropertyContact, fetchProperties]);
+
+  const handlePinToWhiteboard = useCallback(async () => {
+    if (!contact) return;
+    const name = [contact.first_name, contact.last_name].filter(Boolean).join(' ');
+    await createWhiteboardItem({
+      type: 'contact',
+      position_x: 40,
+      position_y: 40,
+      width: 200,
+      height: 120,
+      content: { contactId: contact.id, snapshotName: name },
+      color: null,
+      // Live-binding: ref_id ties the widget to the entity so deletion cleanup
+      // and lead-score live updates keep flowing through to the card.
+      ref_id: contact.id,
+    });
+    setPinnedToast(true);
+    setTimeout(() => setPinnedToast(false), 4000);
+  }, [contact, createWhiteboardItem]);
 
   if (!contact) {
     return (
@@ -394,6 +417,15 @@ export default function ContactDetail({ contactId }: ContactDetailProps) {
                 Delete
               </button>
             </div>
+
+            {/* Pin to whiteboard */}
+            <button
+              onClick={handlePinToWhiteboard}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50"
+            >
+              <PinIcon className="h-4 w-4" />
+              Pin to whiteboard
+            </button>
           </div>
 
           {/* Info Card */}
@@ -607,11 +639,34 @@ export default function ContactDetail({ contactId }: ContactDetailProps) {
           onClose={() => setShowEditForm(false)}
         />
       )}
+
+      {/* Pin to whiteboard toast */}
+      {pinnedToast && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-xl bg-gray-900 px-4 py-3 text-white shadow-xl">
+            <span className="text-sm">Pinned to whiteboard</span>
+            <Link
+              href="/whiteboard"
+              className="shrink-0 text-sm font-bold text-blue-400 hover:text-blue-300"
+            >
+              Open
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // --- Sub-components ---
+
+function PinIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+    </svg>
+  );
+}
 
 function InfoLabel({ label }: { label: string }) {
   return <p className="text-xs font-medium uppercase text-gray-400">{label}</p>;

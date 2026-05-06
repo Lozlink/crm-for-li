@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { StyleSheet, View, FlatList, ScrollView, Alert, Linking, Platform, Pressable, useWindowDimensions } from 'react-native';
 import {
   Searchbar, FAB, useTheme, Text, ActivityIndicator, Button,
-  IconButton, Portal, Dialog, Chip, TextInput, Switch, Checkbox, Modal, Surface,
+  IconButton, Portal, Dialog, Chip, TextInput, Switch, Checkbox, Modal, Surface, Snackbar,
 } from 'react-native-paper';
 import * as SMS from 'expo-sms';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -17,7 +17,7 @@ try { CallerIdModule = require('caller-id').default; } catch { /* Expo Go / web 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { useCRMStore, useSavedSearchStore, useLeadScoringEngine, useSmsTemplateStore } from '@realestate-crm/hooks';
+import { useCRMStore, useSavedSearchStore, useLeadScoringEngine, useSmsTemplateStore, useWhiteboardStore } from '@realestate-crm/hooks';
 import { ContactCard } from '@realestate-crm/ui';
 import type { Contact, ContactSource, ContactType, ContactStatus } from '@realestate-crm/types';
 
@@ -187,6 +187,10 @@ export default function ContactsScreen() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Whiteboard pin (multi-select)
+  const createWhiteboardItem = useWhiteboardStore((s) => s.createItem);
+  const [pinSnackbar, setPinSnackbar] = useState<string | null>(null);
+
   // Bulk SMS state
   // Default seed for the bulk SMS message — used only when there's no preserved draft.
   // Hoisted so the open + close handlers compare against the same value.
@@ -345,6 +349,35 @@ export default function ContactsScreen() {
       ]
     );
   }, [selectedIds, bulkDeleteContacts]);
+
+  const handlePinSelected = useCallback(() => {
+    const PIN_CAP = 10;
+    const ids = [...selectedIds];
+    const toPinIds = ids.slice(0, PIN_CAP);
+    // Cascade-stagger so the pinned cards don't all stack at (0, 0). 24pt
+    // diagonal step is enough to make each card distinct without scattering
+    // them across the canvas — the user can rearrange after.
+    toPinIds.forEach((contactId, i) => {
+      const c = contacts.find((x) => x.id === contactId);
+      if (!c) return;
+      const name = [c.first_name, c.last_name].filter(Boolean).join(' ').trim();
+      void createWhiteboardItem({
+        type: 'contact',
+        position_x: 20 + i * 24,
+        position_y: 20 + i * 24,
+        content: { contactId, snapshotName: name || undefined },
+        ref_id: contactId,
+      });
+    });
+    const pinned = toPinIds.length;
+    const total = ids.length;
+    const msg =
+      total > PIN_CAP
+        ? `Pinned ${pinned} of ${total} — open whiteboard to see them`
+        : `Pinned ${pinned} to whiteboard`;
+    setPinSnackbar(msg);
+    exitSelectMode();
+  }, [selectedIds, contacts, createWhiteboardItem, exitSelectMode]);
 
   // ── Bulk SMS helpers ─────────────────────────────────────────────
   const bulkSmsEligibleContacts = useMemo(() => {
@@ -822,6 +855,14 @@ export default function ContactsScreen() {
               Bulk SMS
             </Button>
           )}
+          <Button
+            compact
+            icon="pin-outline"
+            onPress={handlePinSelected}
+            textColor={theme.colors.primary}
+          >
+            Pin
+          </Button>
           <Button compact onPress={handleBulkDelete} textColor={theme.colors.error}>
             Delete
           </Button>
@@ -1383,6 +1424,15 @@ export default function ContactsScreen() {
           )}
         </Modal>
       </Portal>
+
+      <Snackbar
+        visible={!!pinSnackbar}
+        onDismiss={() => setPinSnackbar(null)}
+        duration={4000}
+        action={{ label: 'Open', onPress: () => router.push('/whiteboard') }}
+      >
+        {pinSnackbar ?? ''}
+      </Snackbar>
     </View>
   );
 }
