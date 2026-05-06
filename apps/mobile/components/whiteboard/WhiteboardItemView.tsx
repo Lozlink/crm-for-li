@@ -19,9 +19,16 @@ const SPRING_LIFT = { mass: 0.4, damping: 14, stiffness: 220 } as const;
 // Drop: springy landing with intentional overshoot so the note "lands"
 const SPRING_DROP = { mass: 0.5, damping: 12, stiffness: 180 } as const;
 
-// Snap-to-grid (16pt grid, DESIGN.md §1)
+// Snap-to-grid (16pt grid, DESIGN.md §1).
+// Called from gesture onEnd (a worklet that runs on the UI thread), so this
+// helper itself must be a worklet — otherwise Reanimated throws
+// "Tried to synchronously call a non-worklet function on the UI thread"
+// and the app crashes when the user finishes dragging an item.
 const GRID = 16;
-const snap = (v: number) => Math.round(v / GRID) * GRID;
+const snap = (v: number) => {
+  'worklet';
+  return Math.round(v / GRID) * GRID;
+};
 import { StickyNote } from './StickyNote';
 import { ChecklistCard } from './ChecklistCard';
 import { PhotoCard } from './PhotoCard';
