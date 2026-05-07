@@ -71,39 +71,24 @@ export function WhiteboardCanvas({
   const startFocalX = useSharedValue(0);
   const startFocalY = useSharedValue(0);
 
-  // Two-finger camera pan. Clamps so the user can't pan past the world edges;
-  // without this the canvas felt boundless and items could vanish into empty space.
-  const cameraPan = Gesture.Pan()
-    .minPointers(2)
-    .maxPointers(2)
-    .onStart(() => {
-      startX.value = cameraX.value;
-      startY.value = cameraY.value;
-    })
-    .onUpdate((e) => {
-      cameraX.value = clampCameraTranslate(
-        startX.value + e.translationX,
-        viewportW,
-        WORLD_WIDTH,
-        cameraScale.value,
-      );
-      cameraY.value = clampCameraTranslate(
-        startY.value + e.translationY,
-        viewportH,
-        WORLD_HEIGHT,
-        cameraScale.value,
-      );
-    });
-
-  // Pinch zoom — DESIGN.md canvas v2. Clamped to [0.4, 2.0] to keep widgets readable.
+  // Unified two-finger gesture: handles BOTH pinch-zoom AND two-finger pan in
+  // a single handler. The previous design used a separate `Gesture.Pan()` with
+  // .minPointers(2) running simultaneously with this pinch handler — that
+  // produced a race where both wrote to cameraX/cameraY each frame, causing
+  // the minimap viewport rect to flicker between two values during pinch.
   //
-  // Focal-point algebra (ensures the world point under the pinch stays fixed):
-  //   World transform: screen = camera + world * scale
-  //   So worldX_at_focal = (focalX - camera_old) / scale_old
-  //   We want that same world point to be at focalX after the zoom:
-  //     focalX = camera_new + worldX_at_focal * scale_new
-  //   → camera_new = focalX - worldX_at_focal * scale_new
-  //               = focalX - (focalX - camera_old) * (scale_new / scale_old)
+  // Solution: track the *current* focal point (`e.focalX/Y`) on the LHS of the
+  // algebra. The world point originally under (startFocalX, startFocalY) at
+  // scaleOld is anchored to (e.focalX, e.focalY) at scaleNew. This handles both
+  // scale change AND centroid translation in one update, so two-finger drag
+  // without zoom (e.scale ≈ 1) still produces clean panning via the same
+  // formula:  cameraX_new = e.focalX - startFocalX + startX  when scaleNew=scaleOld.
+  //
+  // Form A transform: screen = camera + world * scale.
+  // worldX_at_startFocal = (startFocalX - startX) / scaleOld
+  // We want that same world point at e.focalX at scaleNew:
+  //   e.focalX = cameraX_new + worldX_at_startFocal * scaleNew
+  //   → cameraX_new = e.focalX - (startFocalX - startX) * (scaleNew / scaleOld)
   const cameraPinch = Gesture.Pinch()
     .onStart((e) => {
       startScale.value = cameraScale.value;
@@ -117,21 +102,18 @@ export function WhiteboardCanvas({
       const scaleNew = Math.max(0.4, Math.min(2.0, scaleOld * e.scale));
       cameraScale.value = scaleNew;
 
-      // Adjust camera so the focal world point stays pinned to the focal screen coord.
-      const rawX = startFocalX.value - (startFocalX.value - startX.value) * (scaleNew / scaleOld);
-      const rawY = startFocalY.value - (startFocalY.value - startY.value) * (scaleNew / scaleOld);
+      const rawX = e.focalX - (startFocalX.value - startX.value) * (scaleNew / scaleOld);
+      const rawY = e.focalY - (startFocalY.value - startY.value) * (scaleNew / scaleOld);
       cameraX.value = clampCameraTranslate(rawX, viewportW, WORLD_WIDTH, scaleNew);
       cameraY.value = clampCameraTranslate(rawY, viewportH, WORLD_HEIGHT, scaleNew);
 
       if (__DEV__) {
-        const clampedX = clampCameraTranslate(rawX, viewportW, WORLD_WIDTH, scaleNew);
-        const clampedY = clampCameraTranslate(rawY, viewportH, WORLD_HEIGHT, scaleNew);
         console.log(
           `[whiteboard:pinch] gestureScale=${e.scale.toFixed(4)} scaleOld=${scaleOld.toFixed(4)} scaleNew=${scaleNew.toFixed(4)}` +
           ` startFocalX=${startFocalX.value.toFixed(1)} startFocalY=${startFocalY.value.toFixed(1)}` +
+          ` eFocalX=${e.focalX.toFixed(1)} eFocalY=${e.focalY.toFixed(1)}` +
           ` startX=${startX.value.toFixed(1)} startY=${startY.value.toFixed(1)}` +
           ` rawX=${rawX.toFixed(1)} rawY=${rawY.toFixed(1)}` +
-          ` clampedX=${clampedX.toFixed(1)} clampedY=${clampedY.toFixed(1)}` +
           ` cameraX.value=${cameraX.value.toFixed(1)} cameraY.value=${cameraY.value.toFixed(1)}`,
         );
       }
@@ -169,22 +151,29 @@ export function WhiteboardCanvas({
       );
     });
 
-  // All three compose simultaneously — pan + pinch can fire together with
-  // two fingers, single-finger move pan with one. Items still win for touches
-  // on widgets via RNGH child-gesture precedence.
-  const cameraGestures = Gesture.Simultaneous(cameraPan, cameraPinch, movePan);
+  // Two-finger pinch (which now also handles two-finger pan) and single-finger
+  // move pan compose simultaneously — they have non-overlapping pointer counts
+  // so they never conflict. Items still win for touches on widgets via RNGH
+  // child-gesture precedence.
+  const cameraGestures = Gesture.Simultaneous(cameraPinch, movePan);
 
   // DEV-ONLY: animated props for the camera state overlay.
-  // Called unconditionally to satisfy rules-of-hooks; the overlay JSX is
-  // only rendered when __DEV__ is true so it dead-code-eliminates in prod.
-  // useAnimatedProps runs on the UI thread driven directly by shared values —
-  // the overlay updates at 60fps without any JS-thread roundtrip.
-  const debugOverlayProps = useAnimatedProps(() => ({
-    value:
-      `cameraX: ${cameraX.value.toFixed(1)}\n` +
-      `cameraY: ${cameraY.value.toFixed(1)}\n` +
-      `scale:   ${cameraScale.value.toFixed(4)}`,
-  }));
+  // Reanimated's useAnimatedProps must drive `text` (the private TextInput
+  // animatable prop), NOT `value` (React's controlled-input prop) — `value`
+  // goes through React reconciliation and won't update from the UI thread.
+  // The `text` prop is the documented Reanimated pattern for animated text.
+  const debugOverlayProps = useAnimatedProps(() => {
+    return {
+      // `text` is the documented Reanimated-only animatable prop on TextInput.
+      // It's not a public React prop, so we cast through `any` (standard
+      // Reanimated pattern — see docs on createAnimatedComponent for TextInput).
+      text:
+        `cameraX: ${cameraX.value.toFixed(1)}\n` +
+        `cameraY: ${cameraY.value.toFixed(1)}\n` +
+        `scale:   ${cameraScale.value.toFixed(4)}`,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+  });
 
   const cameraStyle = useAnimatedStyle(() => ({
     transform: [
@@ -230,6 +219,8 @@ export function WhiteboardCanvas({
             multiline
             pointerEvents="none"
             style={styles.debugOverlay}
+            // Initial text — gets replaced by useAnimatedProps `text` updates on UI thread.
+            defaultValue={'cameraX: …\ncameraY: …\nscale:   …'}
           />
         )}
       </View>

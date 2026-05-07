@@ -64,3 +64,5 @@ yarn-error.*
 /schemadump.sql
 /CLAUDE.md
 /.CLAUDE.md.swp
+/modules/caller-id/android/build/
+/.junie/

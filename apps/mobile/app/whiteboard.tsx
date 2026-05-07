@@ -3,7 +3,7 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Snackbar, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSharedValue, withTiming } from 'react-native-reanimated';
+import { useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
 import { CanvasViewControls, type WorldBounds } from '../components/shared/CanvasViewControls';
 import { WORLD_WIDTH, WORLD_HEIGHT, clampCameraTranslate } from '../components/whiteboard/whiteboardWorld';
@@ -65,6 +65,21 @@ export default function WhiteboardScreen() {
   const cameraY = useSharedValue(0);
   const cameraScale = useSharedValue(1);
   const { width: screenW, height: screenH } = useWindowDimensions();
+
+  // DEV-ONLY: log every camera-state change on the UI thread so we can identify
+  // which writer is producing unexpected values at mount (currently cameraY
+  // appears at ~-2888 in the first minimap log even though useSharedValue
+  // initializes to 0). useDerivedValue re-runs whenever any read shared value
+  // changes; logging here shows every write site's effect in chronological order.
+  // Hook runs unconditionally to satisfy rules-of-hooks; the log itself is
+  // gated on __DEV__ so it dead-code-eliminates in production bundles.
+  useDerivedValue(() => {
+    if (__DEV__) {
+      console.log(
+        `[whiteboard:camera-watch] cameraX=${cameraX.value.toFixed(1)} cameraY=${cameraY.value.toFixed(1)} scale=${cameraScale.value.toFixed(4)} itemsCount=${items.length}`,
+      );
+    }
+  });
 
   // Bounding box of all items — fed into CanvasViewControls for Fit All.
   const worldBounds = useMemo<WorldBounds | null>(() => {
