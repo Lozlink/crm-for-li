@@ -126,10 +126,21 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
     const scale = cameraScale.value || 1;
     // Per-axis scales — minimap aspect ratio (140×100) doesn't match world
     // aspect (4000×4000), so X and Y need different MINIMAP_SCALEs.
-    const left = Math.max(0, (-cameraX.value / scale) * MINIMAP_SCALE_X);
-    const top = Math.max(0, (-cameraY.value / scale) * MINIMAP_SCALE_Y);
+    const rawLeft = (-cameraX.value / scale) * MINIMAP_SCALE_X;
+    const rawTop = (-cameraY.value / scale) * MINIMAP_SCALE_Y;
+    const left = Math.max(0, rawLeft);
+    const top = Math.max(0, rawTop);
     const width = Math.min((viewportW / scale) * MINIMAP_SCALE_X, MINIMAP_W - left);
     const height = Math.min((viewportH / scale) * MINIMAP_SCALE_Y, MINIMAP_H - top);
+
+    if (__DEV__) {
+      console.log(
+        `[whiteboard:minimap-rect] cameraX=${cameraX.value.toFixed(1)} cameraY=${cameraY.value.toFixed(1)} scale=${scale.toFixed(4)}` +
+        ` rawLeft=${rawLeft.toFixed(2)} rawTop=${rawTop.toFixed(2)}` +
+        ` left=${left.toFixed(2)} top=${top.toFixed(2)} width=${width.toFixed(2)} height=${height.toFixed(2)}`,
+      );
+    }
+
     return { left, top, width, height };
   });
 

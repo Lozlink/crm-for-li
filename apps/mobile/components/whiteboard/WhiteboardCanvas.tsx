@@ -1,11 +1,16 @@
-import { Platform, useColorScheme, useWindowDimensions, StyleSheet, View } from 'react-native';
+import { Platform, TextInput, useColorScheme, useWindowDimensions, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedProps, useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import type { WhiteboardItem } from '@realestate-crm/types';
 import { CANVAS_BG, CANVAS_DOT_COLOR } from './whiteboardColors';
 import { WhiteboardItemView } from './WhiteboardItemView';
 import { WhiteboardEmptyState } from './WhiteboardEmptyState';
 import { WORLD_WIDTH, WORLD_HEIGHT, clampCameraTranslate } from './whiteboardWorld';
+
+// DEV-ONLY: Animated TextInput for the camera debug overlay.
+// createAnimatedComponent lets useAnimatedProps drive the `value` prop
+// on the UI thread at 60fps without any JS-thread involvement.
+const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
 // Dot grid constants (DESIGN.md §1)
 const DOT_SPACING = 16;    // pt between dots
@@ -117,6 +122,19 @@ export function WhiteboardCanvas({
       const rawY = startFocalY.value - (startFocalY.value - startY.value) * (scaleNew / scaleOld);
       cameraX.value = clampCameraTranslate(rawX, viewportW, WORLD_WIDTH, scaleNew);
       cameraY.value = clampCameraTranslate(rawY, viewportH, WORLD_HEIGHT, scaleNew);
+
+      if (__DEV__) {
+        const clampedX = clampCameraTranslate(rawX, viewportW, WORLD_WIDTH, scaleNew);
+        const clampedY = clampCameraTranslate(rawY, viewportH, WORLD_HEIGHT, scaleNew);
+        console.log(
+          `[whiteboard:pinch] gestureScale=${e.scale.toFixed(4)} scaleOld=${scaleOld.toFixed(4)} scaleNew=${scaleNew.toFixed(4)}` +
+          ` startFocalX=${startFocalX.value.toFixed(1)} startFocalY=${startFocalY.value.toFixed(1)}` +
+          ` startX=${startX.value.toFixed(1)} startY=${startY.value.toFixed(1)}` +
+          ` rawX=${rawX.toFixed(1)} rawY=${rawY.toFixed(1)}` +
+          ` clampedX=${clampedX.toFixed(1)} clampedY=${clampedY.toFixed(1)}` +
+          ` cameraX.value=${cameraX.value.toFixed(1)} cameraY.value=${cameraY.value.toFixed(1)}`,
+        );
+      }
     });
 
   // Single-finger canvas pan — always-on. Item gestures take precedence for
@@ -156,6 +174,18 @@ export function WhiteboardCanvas({
   // on widgets via RNGH child-gesture precedence.
   const cameraGestures = Gesture.Simultaneous(cameraPan, cameraPinch, movePan);
 
+  // DEV-ONLY: animated props for the camera state overlay.
+  // Called unconditionally to satisfy rules-of-hooks; the overlay JSX is
+  // only rendered when __DEV__ is true so it dead-code-eliminates in prod.
+  // useAnimatedProps runs on the UI thread driven directly by shared values —
+  // the overlay updates at 60fps without any JS-thread roundtrip.
+  const debugOverlayProps = useAnimatedProps(() => ({
+    value:
+      `cameraX: ${cameraX.value.toFixed(1)}\n` +
+      `cameraY: ${cameraY.value.toFixed(1)}\n` +
+      `scale:   ${cameraScale.value.toFixed(4)}`,
+  }));
+
   const cameraStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: cameraX.value },
@@ -187,6 +217,21 @@ export function WhiteboardCanvas({
 
         {/* Empty state — only shown when there are no items */}
         {items.length === 0 && <WhiteboardEmptyState />}
+
+        {/* DEV-ONLY: camera state overlay — shows live cameraX/cameraY/scale as
+            text so the user can screenshot exact values during repro without
+            needing Metro. Driven by useAnimatedProps so it updates on the UI
+            thread at 60fps. Strips from production via Metro dead-code elimination
+            on __DEV__. */}
+        {__DEV__ && (
+          <AnimatedTextInput
+            animatedProps={debugOverlayProps}
+            editable={false}
+            multiline
+            pointerEvents="none"
+            style={styles.debugOverlay}
+          />
+        )}
       </View>
     </GestureDetector>
   );
@@ -241,5 +286,20 @@ const styles = StyleSheet.create({
     width: DOT_SIZE,
     height: DOT_SIZE,
     borderRadius: DOT_SIZE / 2,
+  },
+  debugOverlay: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    color: '#fff',
+    fontFamily: 'monospace',
+    fontSize: 11,
+    lineHeight: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    // Prevent the TextInput from capturing any touches.
+    pointerEvents: 'none',
   },
 });

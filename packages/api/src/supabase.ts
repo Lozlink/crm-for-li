@@ -9,8 +9,8 @@ let _supabase: SupabaseClient | null = null;
 function getSupabaseClient() {
   if (_supabase) return _supabase;
 
-  const supabaseUrl = Constants.expoConfig?.extra?.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-  const supabaseAnonKey = Constants.expoConfig?.extra?.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+  const supabaseUrl = Constants.expoConfig?.extra?.SUPABASE_URL || '';
+  const supabaseAnonKey = Constants.expoConfig?.extra?.SUPABASE_ANON_KEY || '';
 
   // Allow empty values for demo mode
   _supabase = createClient(
@@ -37,8 +37,8 @@ export const supabase = new Proxy({} as SupabaseClient, {
 
 // Demo mode - when Supabase is not configured, use local storage
 export const isDemoMode =
-  !(Constants.expoConfig?.extra?.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL) ||
-  !(Constants.expoConfig?.extra?.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+  !(Constants.expoConfig?.extra?.SUPABASE_URL) ||
+  !(Constants.expoConfig?.extra?.SUPABASE_ANON_KEY);
 
 // Helper to generate UUID for demo mode
 export function generateUUID(): string {
