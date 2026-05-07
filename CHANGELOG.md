@@ -1,5 +1,72 @@
 # Changelog
 
+## [Unreleased] - 2026-05-07
+
+### Added — Smart Whiteboard canvas v3: viewport navigation, world boundaries, quick arrange
+
+A full day's sprint on the whiteboard canvas. Goal: take the v2 freeform canvas (shipped 2026-05-04) and harden it into something that doesn't lose the user — clear viewport navigation, hard world edges, an auto-layout escape hatch when the board gets messy, and a simpler gesture model with no modal toggle. Closing thread: a long-running minimap viewport-rect bug whose root cause was finally found via runtime instrumentation rather than further math-patching.
+
+#### Viewport navigation primitives (mobile + web)
+
+- **`CanvasViewControls`** (`apps/mobile/components/shared/CanvasViewControls.tsx`, `apps/web/src/components/whiteboard/CanvasViewControls.tsx`) — bottom-left floating control cluster with zoom in/out, fit-all, reset. Mobile has the complete set (zoom + fit-all + reset). Web ships fit-all + reset; pinch-to-zoom on web is deferred until the web canvas grows a pinch handler.
+- **`Minimap`** (`apps/mobile/components/whiteboard/Minimap.tsx`, `apps/web/src/components/whiteboard/Minimap.tsx`) — bottom-right 140×100 overlay showing all board items as dots plus a live viewport rectangle. Mobile supports tap-to-pan (translates camera so the tapped minimap point becomes the new viewport center); web is read-only display this sprint.
+- **`OverviewSheet`** (`apps/mobile/components/whiteboard/OverviewSheet.tsx`) — slide-up sheet with a searchable list of all items; tap an item → camera pans to center it. Web equivalent (`OverviewDrawer`) wired the same way.
+- **Centralized world boundaries** — new `apps/mobile/components/whiteboard/whiteboardWorld.ts` exports `WORLD_WIDTH = 4000`, `WORLD_HEIGHT = 4000`, plus pure helpers `clampCameraTranslate(translate, viewport, worldSize, scale)` and `clampItemPosition(pos, size, worldSize)`. All previously-hardcoded `4000`s across `WhiteboardCanvas`, `WhiteboardItemView`, `Minimap`, `OverviewSheet` now reference these constants.
+
+#### Quick Arrange auto-layout
+
+- **"Quick Arrange" action** in `CanvasViewControls` — sorts items by `updated_at` (most recent first), lays them into a tidy column-major grid (3 columns, 24pt gutter, 32pt outer pad), updates each item's `position_x/y` via the existing optimistic `updateItem` path, then animates the camera to fit-all the new layout. Provides an escape hatch when a freeform board gets messy without nuking item content. Computed in-place in `whiteboard.tsx` rather than calling `CanvasViewControls.handleFitAll` because the `items` array hasn't re-rendered yet at the moment the post-arrange fit fires.
+
+#### Geocoding debounce + dialer + tab rename
+
+- **600ms debounce on reverse-geocoding** (`apps/mobile/components/whiteboard/EditItemSheet.tsx`) — the embedded MapView picker calls `reverseGeocode` on every region change. Dragging the marker or long-press-dropping a pin used to spam Nominatim with 5+ requests/sec. A single `setTimeout` per pending region drops that to ≤1 request per pause.
+- **Dialer hardening** (`apps/mobile/app/dialer.tsx`) — bypassed `Linking.canOpenURL` false-negatives that were swallowing valid `tel:` URLs on certain Android OEM dialers; added a try/catch fallback so `Linking.openURL` errors surface as a toast instead of silently failing.
+- **App URL-scheme allowlist** (`apps/mobile/app.config.ts`) — Android `<queries>` and iOS `LSApplicationQueriesSchemes` widened to cover `tel`, `sms`, `mailto`, `https`, plus mapping/scheme entries for future `Linking.canOpenURL` checks. Without these, Android 11+ silently returns false from `canOpenURL`.
+- **"Contacts" tab → "Prospecting"** (`apps/mobile/app/(tabs)/_layout.tsx`) — better matches what's actually on that screen now (smart prospecting engine, lead score sort, building coverage). Icon swapped to match.
+
+### Changed — gesture model simplification
+
+- **Move/Edit mode toggle removed** (`apps/mobile/components/whiteboard/WhiteboardToolbar.tsx`, `WhiteboardItemView.tsx`, `WhiteboardCanvas.tsx`, `whiteboard.tsx`, `types.ts`). The animated segmented pill, the `WhiteboardMode` type, and all mode-conditional gesture branches are gone. The new model is mode-free and always-on:
+  - Tap an item → bring to front.
+  - Long-press an item → open structured editor.
+  - Drag an item → move it.
+  - Single-finger drag on empty space → pan camera.
+  - Two-finger pinch → zoom (and pan, see Fixed below).
+- **`StickyNote` and `ChecklistCard` are read-only inline views** — the inline-editing path is gone. Editing always goes through long-press → `EditItemSheet`. This also retires the buffered-editor pattern that was needed in the inline path to dodge the "writes backwards" cursor-reset bug; `EditItemSheet` already had its own working buffered editors.
+
+### Fixed
+
+- **Minimap viewport rect drifts away from where the camera actually is** (`apps/mobile/components/whiteboard/WhiteboardCanvas.tsx`). This was the bug that ate the morning. **Root cause**: `cameraGestures = Gesture.Simultaneous(cameraPan, cameraPinch, movePan)` allowed a `.minPointers(2).maxPointers(2)` pan handler to run *concurrently* with the pinch handler. During every 2-finger gesture, *both* wrote to `cameraX.value` and `cameraY.value` — pinch wrote the focal-anchored value, pan wrote `startX + e.translationX`. The minimap's `useAnimatedStyle` re-evaluated between writes and read whichever value was set most recently, producing the visible flicker. Runtime instrumentation (a `useDerivedValue` camera-watch logger) caught the smoking gun: `[pinch] sets cameraX=-220.5` followed immediately by `[minimap-rect] reads cameraX=-277.2` on the very next frame. **Fix**: dropped the standalone two-finger `cameraPan` entirely. `cameraPinch` now uses `e.focalX/Y` on the LHS of its focal-point algebra (instead of the captured `startFocalX/Y`), so centroid translation and scale change are handled atomically by one writer. The unified formula reduces to pure pan when `e.scale ≈ 1` (`cameraX_new = startX + (e.focalX - startFocalX)`), preserving 2-finger drag-without-zoom UX. `cameraGestures = Gesture.Simultaneous(cameraPinch, movePan)` — only two handlers now, with non-overlapping pointer counts so they can never fight again. Verified by reproing the original bug post-fix: `[minimap-rect]` matches `[camera-watch]` on every single frame, no divergence anywhere. ([fd13a1d])
+- **Minimap items dots distort when zoomed** (`Minimap.tsx`). The minimap is 140×100 but the world is 4000×4000 (1:1). A single `MINIMAP_SCALE` produced clipped dots near world edges. Split into per-axis `MINIMAP_SCALE_X = 140/4000` and `MINIMAP_SCALE_Y = 100/4000`. Items dots and viewport rect are computed independently per axis, accurately reflecting the world's aspect.
+- **`OverviewSheet` scrim blocks taps after dismiss** (`OverviewSheet.tsx`). The slide-out animation left the React tree mounted because dismiss only flipped `visible=false`; the scrim's `pointerEvents` stayed live. Added a `mounted` state flipped via `runOnJS` after `withTiming(0)` resolves, so the component unmounts only after animation completes — no more dead scrim swallowing touches on the canvas underneath.
+- **`OverviewSheet` item-centering wrong at non-default zoom** (`OverviewSheet.tsx`). The tap-to-pan handler computed camera offsets without applying `cameraScale`. At any zoom ≠ 1, tapping an item put it well off-center. Now scales correctly. (Same `aa9d9cd` and `9bc2b09` were both needed because the first fix corrected centering math but didn't touch unmount; the second corrected unmount but exposed a second centering bug at non-default zoom.)
+- **Camera and items can drift past world edges** — without bounds enforcement, a fast 2-finger pan or a dragged-and-released widget could land in empty world space, effectively "vanishing." `clampCameraTranslate` (called from pinch + movePan) and `clampItemPosition` (called from `WhiteboardItemView`'s drag onEnd) now keep both within world bounds. Special-case: when `world * scale < viewport` (zoomed out enough that the world fits inside the viewport), camera pins to origin instead of clamping to a min/max range.
+
+### DEV-only diagnostic instrumentation (ships in dev bundles, dead-code-eliminated in production)
+
+- **Live camera-state overlay** on the canvas (`WhiteboardCanvas.tsx`). Top-right monospace pill showing `cameraX / cameraY / scale` formatted to 1–4 decimals, updated at 60fps via `useAnimatedProps` on `Animated.createAnimatedComponent(TextInput)`. Critical detail: the `useAnimatedProps` callback drives the `text` prop, **not** `value` — `value` is React's controlled-input prop and goes through reconciliation, so it never updates from the UI thread; `text` is the documented Reanimated-only animatable prop on the native TextInput shadow node. The first attempt used `value` and silently did nothing.
+- **`[whiteboard:pinch]`** Metro log — fires inside the pinch worklet's `onUpdate` with every gesture, raw, clamped, and final camera value. Tag-prefixed for filterability.
+- **`[whiteboard:minimap-rect]`** Metro log — fires every minimap re-evaluation with the read camera state plus the rect formula's intermediate values (raw vs clamped left/top, computed width/height).
+- **`[whiteboard:camera-watch]`** Metro log (`whiteboard.tsx`) — `useDerivedValue` watcher that fires on every camera-state change regardless of which writer caused it. Reads the current cameraX/Y/scale plus item count. Critical for narrowing "who's writing this value?" questions when multiple gestures or effects compete.
+
+All four are gated on `if (__DEV__)` (the JS log calls) or `{__DEV__ && …}` (the JSX overlay), so Metro's dead-code elimination strips them from production OTAs.
+
+### Known issues / Deferred
+
+- **Web Minimap is read-only.** Mobile supports tap-to-pan; the web port doesn't yet. Trivial to add but not in scope this sprint.
+- **Web CanvasViewControls missing zoom.** Web canvas needs its own pinch/scroll-wheel handler before the buttons can usefully scale the camera. Deferred until web canvas v3.
+- **Web parity for Quick Arrange + Move/Edit removal.** Mobile-first per convention; web parity sprint will follow.
+- **Dev instrumentation cleanup.** The four diagnostic channels above are still in the codebase. They're DEV-only and zero production cost, but should be removed in a follow-up commit once the canvas has been stable for a few sessions. Keeping them now in case any related regression surfaces.
+- **Pinch with focal at world edges.** When pinching out around a focal point near `(0, 0)` or `(WORLD, WORLD)`, the algebra wants to push the camera *outside* the valid clamp range, so the focal point doesn't stay perfectly anchored under the user's fingers. This is the natural cost of the clamp policy ("never expose space outside the world") and not a regression — the previous implementation had the same behavior, masked by the rect-drift bug. Worth revisiting if a partner reports it as confusing.
+
+### Verified
+
+- `pnpm --filter mobile type-check` ✓
+- **Runtime verification of the minimap-rect fix**: re-ran the original memo's repro (open whiteboard → pinch zoom out twice). Default-state rect now sits at minimap top-left on top of the items dots (was at bottom-center-right). During pinch, every `[whiteboard:pinch]` line is matched by a `[whiteboard:minimap-rect]` and `[whiteboard:camera-watch]` line at the same value — no divergence. Original bug confirmed dead.
+- **Native build state**: same EAS rebuild that's still pending from 2026-05-06 (for `expo-image-picker`) covers everything in this sprint too — none of today's work adds new native modules. Once the next EAS build lands, today's changes are immediately available alongside the photo picker + caller-id native module fix.
+
+---
+
 ## [Unreleased] - 2026-05-06 (later)
 
 ### Added — Whiteboard polish follow-ups + full web parity
