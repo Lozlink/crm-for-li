@@ -3,9 +3,10 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Snackbar, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSharedValue } from 'react-native-reanimated';
+import { useSharedValue, withTiming } from 'react-native-reanimated';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
 import { CanvasViewControls, type WorldBounds } from '../components/shared/CanvasViewControls';
+import { WORLD_WIDTH, WORLD_HEIGHT, clampCameraTranslate } from '../components/whiteboard/whiteboardWorld';
 import { Minimap } from '../components/whiteboard/Minimap';
 import type {
   WhiteboardChecklistContent,
@@ -376,6 +377,58 @@ export default function WhiteboardScreen() {
     }
   }, [router]);
 
+  // Quick-arrange: tidy all items into a clean grid laid out top-left in the
+  // world, then animate the camera to fit-all the new layout. Items are
+  // ordered by `updated_at` desc so the freshest land in the top-left.
+  //
+  // Sizing assumes max widget bounds of 240×240 plus a 24pt gutter — items
+  // smaller than that simply leave whitespace below themselves in their cell,
+  // which reads cleanly. Column count scales toward sqrt(n) capped at 8 so
+  // small boards stay tight and very large boards don't overflow the world's
+  // 4000pt height (worst case 60 items × 8 cols → 8 rows × 264pt = 2112pt,
+  // well within bounds).
+  const handleQuickArrange = useCallback(() => {
+    if (items.length === 0) return;
+    const sorted = [...items].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    const COL_W = 240;
+    const ROW_H = 240;
+    const GUTTER = 24;
+    const COLS = Math.min(8, Math.max(2, Math.ceil(Math.sqrt(sorted.length * 1.4))));
+    const START = 80;
+
+    sorted.forEach((item, i) => {
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      const x = START + col * (COL_W + GUTTER);
+      const y = START + row * (ROW_H + GUTTER);
+      // Optimistic-first updateItem persists in the background — the UI
+      // updates immediately, the network catch-up runs concurrent.
+      void updateItem(item.id, { position_x: x, position_y: y });
+    });
+
+    // Camera fit on the new layout. Computed in-place rather than calling
+    // CanvasViewControls's handleFitAll because we need to fit on the layout
+    // we JUST wrote (the items array hasn't re-rendered yet at this point).
+    const totalRows = Math.ceil(sorted.length / COLS);
+    const layoutW = COLS * COL_W + Math.max(0, COLS - 1) * GUTTER;
+    const layoutH = totalRows * ROW_H + Math.max(0, totalRows - 1) * GUTTER;
+    const PAD = 0.10;
+    const fitScaleX = (screenW * (1 - PAD * 2)) / layoutW;
+    const fitScaleY = (screenH * (1 - PAD * 2)) / layoutH;
+    const next = Math.max(0.4, Math.min(2.0, Math.min(fitScaleX, fitScaleY)));
+    const centerX = START + layoutW / 2;
+    const centerY = START + layoutH / 2;
+    cameraScale.value = withTiming(next, { duration: 300 });
+    cameraX.value = withTiming(
+      clampCameraTranslate(screenW / 2 - centerX * next, screenW, WORLD_WIDTH, next),
+      { duration: 300 },
+    );
+    cameraY.value = withTiming(
+      clampCameraTranslate(screenH / 2 - centerY * next, screenH, WORLD_HEIGHT, next),
+      { duration: 300 },
+    );
+  }, [items, updateItem, cameraX, cameraY, cameraScale, screenW, screenH]);
+
   return (
     <SafeAreaView
       edges={['top']}
@@ -413,6 +466,7 @@ export default function WhiteboardScreen() {
             cameraY={cameraY}
             cameraScale={cameraScale}
             worldBounds={worldBounds}
+            onQuickArrange={items.length > 0 ? handleQuickArrange : undefined}
             viewportW={screenW}
             viewportH={screenH}
           />

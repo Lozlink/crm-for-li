@@ -1,6 +1,11 @@
 import { StyleSheet, View } from 'react-native';
 import { IconButton, Surface, useTheme } from 'react-native-paper';
 import { withTiming, type SharedValue } from 'react-native-reanimated';
+import {
+  WORLD_WIDTH,
+  WORLD_HEIGHT,
+  clampCameraTranslate,
+} from '../whiteboard/whiteboardWorld';
 
 const ANIM_DURATION = 250;
 
@@ -16,6 +21,9 @@ interface Props {
   cameraY: SharedValue<number>;
   cameraScale: SharedValue<number>;
   worldBounds?: WorldBounds | null;
+  /** Optional quick-arrange handler. When provided, a fifth button appears in the
+   *  cluster that triggers the host's arrangement logic (e.g. tidy items into a grid). */
+  onQuickArrange?: () => void;
   viewportW: number;
   viewportH: number;
   minScale?: number;
@@ -33,6 +41,7 @@ export function CanvasViewControls({
   cameraY,
   cameraScale,
   worldBounds,
+  onQuickArrange,
   viewportW,
   viewportH,
   minScale = 0.4,
@@ -40,28 +49,31 @@ export function CanvasViewControls({
 }: Props) {
   const theme = useTheme();
 
-  const handleZoomIn = () => {
-    const next = Math.min(cameraScale.value * 1.25, maxScale);
-    // Keep the viewport center point fixed during zoom.
+  // Zoom around the viewport center, then clamp the resulting camera so it
+  // can't drift past the world bounds. Without the clamp, zooming near an
+  // edge would leave the camera in a position the pan gestures would
+  // immediately have rejected — visible as the minimap viewport rect drifting
+  // off into invalid space when the user pressed +/- repeatedly.
+  const zoomAround = (next: number) => {
     const cx = viewportW / 2;
     const cy = viewportH / 2;
     const worldCx = (cx - cameraX.value) / cameraScale.value;
     const worldCy = (cy - cameraY.value) / cameraScale.value;
+    const rawX = cx - worldCx * next;
+    const rawY = cy - worldCy * next;
     cameraScale.value = withTiming(next, { duration: ANIM_DURATION });
-    cameraX.value = withTiming(cx - worldCx * next, { duration: ANIM_DURATION });
-    cameraY.value = withTiming(cy - worldCy * next, { duration: ANIM_DURATION });
+    cameraX.value = withTiming(
+      clampCameraTranslate(rawX, viewportW, WORLD_WIDTH, next),
+      { duration: ANIM_DURATION },
+    );
+    cameraY.value = withTiming(
+      clampCameraTranslate(rawY, viewportH, WORLD_HEIGHT, next),
+      { duration: ANIM_DURATION },
+    );
   };
 
-  const handleZoomOut = () => {
-    const next = Math.max(cameraScale.value * 0.8, minScale);
-    const cx = viewportW / 2;
-    const cy = viewportH / 2;
-    const worldCx = (cx - cameraX.value) / cameraScale.value;
-    const worldCy = (cy - cameraY.value) / cameraScale.value;
-    cameraScale.value = withTiming(next, { duration: ANIM_DURATION });
-    cameraX.value = withTiming(cx - worldCx * next, { duration: ANIM_DURATION });
-    cameraY.value = withTiming(cy - worldCy * next, { duration: ANIM_DURATION });
-  };
+  const handleZoomIn = () => zoomAround(Math.min(cameraScale.value * 1.25, maxScale));
+  const handleZoomOut = () => zoomAround(Math.max(cameraScale.value * 0.8, minScale));
 
   const handleFitAll = () => {
     if (!worldBounds) return;
@@ -76,8 +88,17 @@ export function CanvasViewControls({
     const worldCenterX = minX + worldW / 2;
     const worldCenterY = minY + worldH / 2;
     cameraScale.value = withTiming(next, { duration: ANIM_DURATION });
-    cameraX.value = withTiming(viewportW / 2 - worldCenterX * next, { duration: ANIM_DURATION });
-    cameraY.value = withTiming(viewportH / 2 - worldCenterY * next, { duration: ANIM_DURATION });
+    // Clamp Fit-All's target camera to world bounds too. Centering on the
+    // items' bounding box can produce an out-of-bounds camera if the items
+    // cluster near a world edge.
+    cameraX.value = withTiming(
+      clampCameraTranslate(viewportW / 2 - worldCenterX * next, viewportW, WORLD_WIDTH, next),
+      { duration: ANIM_DURATION },
+    );
+    cameraY.value = withTiming(
+      clampCameraTranslate(viewportH / 2 - worldCenterY * next, viewportH, WORLD_HEIGHT, next),
+      { duration: ANIM_DURATION },
+    );
   };
 
   const handleReset = () => {
@@ -122,6 +143,18 @@ export function CanvasViewControls({
         style={styles.btn}
         accessibilityLabel="Reset view"
       />
+      {onQuickArrange ? (
+        <>
+          <View style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
+          <IconButton
+            icon="view-grid-plus-outline"
+            size={20}
+            onPress={onQuickArrange}
+            style={styles.btn}
+            accessibilityLabel="Quick arrange items into a tidy grid"
+          />
+        </>
+      ) : null}
     </Surface>
   );
 }

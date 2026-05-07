@@ -18,10 +18,15 @@ import { WORLD_WIDTH, WORLD_HEIGHT, clampCameraTranslate } from './whiteboardWor
 const MINIMAP_W = 140;
 const MINIMAP_H = 100;
 
-// Minimap is drawn at (MINIMAP_W / WORLD_WIDTH) scale — the world is square so
-// the X scale also works for Y. If the world ever becomes non-square, derive
-// a separate Y scale from MINIMAP_H / WORLD_HEIGHT.
-const MINIMAP_SCALE = MINIMAP_W / WORLD_WIDTH;
+// Separate X/Y scales — the world is square but the minimap isn't (140×100),
+// so a single uniform scale would clip the bottom (4000-2857)/4000 = ~28% of
+// the world's vertical range. Earlier revisions used MINIMAP_W/WORLD_WIDTH for
+// both axes; the comment claimed "world is square so X works for Y" but missed
+// that the MINIMAP isn't square. Symptom: at certain zoom/pan combinations the
+// viewport rect would drift off the bottom edge and disappear, and items in
+// the bottom ~28% of the world were silently clipped from the dots.
+const MINIMAP_SCALE_X = MINIMAP_W / WORLD_WIDTH;
+const MINIMAP_SCALE_Y = MINIMAP_H / WORLD_HEIGHT;
 
 const PAN_DURATION_MS = 200;
 
@@ -78,8 +83,9 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
 
   const panWorldPoint = useCallback(
     (tapXInMinimap: number, tapYInMinimap: number) => {
-      const worldX = tapXInMinimap / MINIMAP_SCALE;
-      const worldY = tapYInMinimap / MINIMAP_SCALE;
+      // Use separate X/Y scales when converting minimap coords back to world.
+      const worldX = tapXInMinimap / MINIMAP_SCALE_X;
+      const worldY = tapYInMinimap / MINIMAP_SCALE_Y;
       const scale = cameraScale.value || 1;
       // Correct algebra: cameraX = screenCenter - worldX * scale.
       // Clamp so a tap near the minimap edges doesn't pan the camera past
@@ -118,10 +124,12 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
   // as the user zooms in (larger scale → smaller visible window).
   const viewportRectStyle = useAnimatedStyle(() => {
     const scale = cameraScale.value || 1;
-    const left = Math.max(0, (-cameraX.value / scale) * MINIMAP_SCALE);
-    const top = Math.max(0, (-cameraY.value / scale) * MINIMAP_SCALE);
-    const width = Math.min((viewportW / scale) * MINIMAP_SCALE, MINIMAP_W - left);
-    const height = Math.min((viewportH / scale) * MINIMAP_SCALE, MINIMAP_H - top);
+    // Per-axis scales — minimap aspect ratio (140×100) doesn't match world
+    // aspect (4000×4000), so X and Y need different MINIMAP_SCALEs.
+    const left = Math.max(0, (-cameraX.value / scale) * MINIMAP_SCALE_X);
+    const top = Math.max(0, (-cameraY.value / scale) * MINIMAP_SCALE_Y);
+    const width = Math.min((viewportW / scale) * MINIMAP_SCALE_X, MINIMAP_W - left);
+    const height = Math.min((viewportH / scale) * MINIMAP_SCALE_Y, MINIMAP_H - top);
     return { left, top, width, height };
   });
 
@@ -163,12 +171,20 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
             { backgroundColor: theme.colors.surfaceVariant },
           ]}
         >
-          {/* Item dots */}
+          {/* Item dots — positioned via transform rather than left/top.
+              On Android, an absolutely-positioned View inside an overflow:hidden
+              parent can cache its layout bounds and not pick up subsequent
+              `left/top` changes when items are dragged or migrated. Going through
+              transform (translateX/Y) routes the position through the GPU
+              compositor, which always picks up the new value, AND is slightly
+              cheaper. Width/height stay as layout props since they don't change
+              after first render for a given item. */}
           {items.map((item) => {
-            const x = item.position_x * MINIMAP_SCALE;
-            const y = item.position_y * MINIMAP_SCALE;
-            const w = Math.max(2, item.width * MINIMAP_SCALE);
-            const h = Math.max(2, item.height * MINIMAP_SCALE);
+            // Per-axis scale — see MINIMAP_SCALE_X/Y notes above.
+            const x = item.position_x * MINIMAP_SCALE_X;
+            const y = item.position_y * MINIMAP_SCALE_Y;
+            const w = Math.max(2, item.width * MINIMAP_SCALE_X);
+            const h = Math.max(2, item.height * MINIMAP_SCALE_Y);
             const color = itemDotColor(item, colorScheme);
             return (
               <View
@@ -176,11 +192,10 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
                 style={[
                   styles.dot,
                   {
-                    left: x,
-                    top: y,
                     width: w,
                     height: h,
                     backgroundColor: color,
+                    transform: [{ translateX: x }, { translateY: y }],
                   },
                 ]}
               />
