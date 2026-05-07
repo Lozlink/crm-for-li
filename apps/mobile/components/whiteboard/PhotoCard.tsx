@@ -5,8 +5,6 @@ import type { WhiteboardItem, WhiteboardPhotoContent } from '@realestate-crm/typ
 
 interface Props {
   item: WhiteboardItem;
-  /** When true, shows the "replace photo" overlay (Edit mode). */
-  editable?: boolean;
 }
 
 /**
@@ -14,10 +12,11 @@ interface Props {
  *
  * Design tokens (see DESIGN.md §7):
  * - 12pt outer corner, 8pt inner image corner
- * - Empty state: dashed border + image-plus icon + "Tap to add a photo"
- * - Filled state: cover image. In Edit mode shows camera-retake overlay at 40% opacity.
+ * - Empty state: dashed border + image-plus icon + "Long-press to add a photo"
+ * - Filled state: cover image. Long-press opens the editor to replace photo.
  */
-export function PhotoCard({ item, editable = false }: Props) {
+export function PhotoCard({ item }: Props) {
+  const editable = false; // always false on canvas — edit via long-press → editor
   const theme = useTheme();
   const content = item.content as WhiteboardPhotoContent | undefined;
   const uri = content?.local_uri ?? content?.url ?? null;
@@ -68,7 +67,7 @@ export function PhotoCard({ item, editable = false }: Props) {
               variant="bodySmall"
               style={[styles.emptyLabel, { color: theme.colors.onSurfaceVariant }]}
             >
-              Tap to add a photo
+              Long-press to add a photo
             </Text>
           </View>
         )}

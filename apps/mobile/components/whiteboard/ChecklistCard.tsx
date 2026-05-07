@@ -7,12 +7,12 @@ interface Props {
   item: WhiteboardItem;
   /**
    * Inline check-toggling so users can tick items without opening the editor.
-   * Only wired up in Move mode tap-handling layer, not during drag.
+   * Wired to the item's tap handler in WhiteboardItemView.
    */
   onToggle?: (entryId: string) => void;
   /**
    * Called when the user taps the "Done" affordance on a fully-checked list.
-   * Only wired in Move mode — parent handles deletion + confirmation.
+   * Parent handles deletion + confirmation (undo snackbar).
    */
   onComplete?: () => void;
 }
@@ -57,7 +57,7 @@ export function ChecklistCard({ item, onToggle, onComplete }: Props) {
             variant="bodySmall"
             style={{ color: theme.colors.onSurfaceVariant, fontStyle: 'italic', paddingVertical: 8 }}
           >
-            Tap Edit to add items
+            Long-press to add items
           </Text>
         )}
         {entries.slice(0, 8).map((entry) => (

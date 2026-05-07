@@ -13,11 +13,12 @@
  * `reanimated-worklet-helpers-gotcha.md`).
  */
 
-// 6000pt matches the historical world size used by WhiteboardCanvas's styles.
-// Don't shrink — existing whiteboard_items rows may already have positions
-// past 4000pt; reducing the world would clip them out of view.
-export const WORLD_WIDTH = 6000;
-export const WORLD_HEIGHT = 6000;
+// 4000pt — ~10 screen widths at scale=1, enough for real use cases.
+// Reduced from the historical 6000pt (too large, felt boundless). Items persisted
+// at positions > 4000pt are migrated defensively in WhiteboardItemView on first
+// mount (clamp → optimistic-update → persist), so the transition is seamless.
+export const WORLD_WIDTH = 4000;
+export const WORLD_HEIGHT = 4000;
 
 /**
  * Clamp the camera's translate value so the user can't pan past the edges of

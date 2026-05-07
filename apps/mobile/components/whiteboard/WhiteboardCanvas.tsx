@@ -2,7 +2,6 @@ import { Platform, useColorScheme, useWindowDimensions, StyleSheet, View } from 
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import type { WhiteboardItem } from '@realestate-crm/types';
-import type { WhiteboardMode } from './types';
 import { CANVAS_BG, CANVAS_DOT_COLOR } from './whiteboardColors';
 import { WhiteboardItemView } from './WhiteboardItemView';
 import { WhiteboardEmptyState } from './WhiteboardEmptyState';
@@ -19,7 +18,6 @@ const DOT_ROWS = 60;
 
 interface Props {
   items: WhiteboardItem[];
-  mode: WhiteboardMode;
   /** Camera shared values lifted up so whiteboard.tsx can read viewport for placement. */
   cameraX: SharedValue<number>;
   cameraY: SharedValue<number>;
@@ -36,21 +34,18 @@ interface Props {
  *
  * Design tokens (DESIGN.md §1):
  * - Warm canvas bg: light #F5F0E8 / dark #1E1C1A — feels like cork board, not CRM.
- * - Dot grid (Edit mode only): 2pt dots on 16pt grid, viewport-fixed overlay.
+ * - Dot grid: 2pt dots on 16pt grid, viewport-fixed overlay (always shown).
  *
- * Gesture rules (canvas v2):
- * - Two-finger pan always moves the camera (works in both modes).
- * - Two-finger pinch zooms 0.4-2.0x (works in both modes).
- * - Single-finger pan moves the camera in Move mode ONLY when the touch
- *   doesn't land on an item. Items have their own GestureDetector inside
- *   WhiteboardItemView (with minDistance:4) — RNGH propagation gives child
- *   gestures precedence, so the canvas only fires for empty-space touches.
- * - In Edit mode the single-finger canvas pan is disabled so inputs and
- *   tap targets inside widgets receive their touches cleanly.
+ * Gesture model (mode-free):
+ * - Single-finger canvas pan: always-on for empty-space touches. High
+ *   minDistance (iOS 8 / Android 14) avoids accidental pans during item taps.
+ * - Two-finger pan: always moves the camera.
+ * - Two-finger pinch: zooms 0.4–2.0x, anchored to focal point.
+ * - Item interactions are handled in WhiteboardItemView:
+ *     Tap → bring to front. Long-press → open editor. Drag → move item.
  */
 export function WhiteboardCanvas({
   items,
-  mode,
   cameraX,
   cameraY,
   cameraScale,
@@ -68,10 +63,11 @@ export function WhiteboardCanvas({
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
   const startScale = useSharedValue(1);
+  const startFocalX = useSharedValue(0);
+  const startFocalY = useSharedValue(0);
 
-  // Two-finger camera pan — works in both modes. Clamps so the user can't
-  // pan past the world edges; without this the canvas felt boundless and
-  // items could vanish into empty space.
+  // Two-finger camera pan. Clamps so the user can't pan past the world edges;
+  // without this the canvas felt boundless and items could vanish into empty space.
   const cameraPan = Gesture.Pan()
     .minPointers(2)
     .maxPointers(2)
@@ -95,16 +91,35 @@ export function WhiteboardCanvas({
     });
 
   // Pinch zoom — DESIGN.md canvas v2. Clamped to [0.4, 2.0] to keep widgets readable.
+  //
+  // Focal-point algebra (ensures the world point under the pinch stays fixed):
+  //   World transform: screen = camera + world * scale
+  //   So worldX_at_focal = (focalX - camera_old) / scale_old
+  //   We want that same world point to be at focalX after the zoom:
+  //     focalX = camera_new + worldX_at_focal * scale_new
+  //   → camera_new = focalX - worldX_at_focal * scale_new
+  //               = focalX - (focalX - camera_old) * (scale_new / scale_old)
   const cameraPinch = Gesture.Pinch()
-    .onStart(() => {
+    .onStart((e) => {
       startScale.value = cameraScale.value;
+      startX.value = cameraX.value;
+      startY.value = cameraY.value;
+      startFocalX.value = e.focalX;
+      startFocalY.value = e.focalY;
     })
     .onUpdate((e) => {
-      const next = startScale.value * e.scale;
-      cameraScale.value = Math.max(0.4, Math.min(2.0, next));
+      const scaleOld = startScale.value;
+      const scaleNew = Math.max(0.4, Math.min(2.0, scaleOld * e.scale));
+      cameraScale.value = scaleNew;
+
+      // Adjust camera so the focal world point stays pinned to the focal screen coord.
+      const rawX = startFocalX.value - (startFocalX.value - startX.value) * (scaleNew / scaleOld);
+      const rawY = startFocalY.value - (startFocalY.value - startY.value) * (scaleNew / scaleOld);
+      cameraX.value = clampCameraTranslate(rawX, viewportW, WORLD_WIDTH, scaleNew);
+      cameraY.value = clampCameraTranslate(rawY, viewportH, WORLD_HEIGHT, scaleNew);
     });
 
-  // Single-finger canvas pan — Move mode only. Item gestures take precedence for
+  // Single-finger canvas pan — always-on. Item gestures take precedence for
   // touches landing on a widget; this only fires for touches on empty world
   // space. Higher minDistance than items (iOS 8 vs item's 4) so a brief tap on
   // an item doesn't accidentally trigger a canvas pan.
@@ -114,7 +129,6 @@ export function WhiteboardCanvas({
   const CANVAS_PAN_MIN_DISTANCE = Platform.select({ android: 14, default: 8 });
 
   const movePan = Gesture.Pan()
-    .enabled(mode === 'move')
     .minPointers(1)
     .maxPointers(1)
     .minDistance(CANVAS_PAN_MIN_DISTANCE)
@@ -153,8 +167,8 @@ export function WhiteboardCanvas({
   return (
     <GestureDetector gesture={cameraGestures}>
       <View style={[styles.viewport, { backgroundColor: canvasBg }]}>
-        {/* Dot grid — Edit mode only, fixed to viewport */}
-        {mode === 'edit' && <DotGrid dotColor={dotColor} />}
+        {/* Dot grid — always visible, fixed to viewport */}
+        <DotGrid dotColor={dotColor} />
 
         {/* World layer — items rendered absolutely in world space */}
         <Animated.View style={[styles.world, cameraStyle]} pointerEvents="box-none">
@@ -162,7 +176,6 @@ export function WhiteboardCanvas({
             <WhiteboardItemView
               key={it.id}
               item={it}
-              mode={mode}
               onRequestEdit={onRequestEdit}
               onRequestContext={onRequestContext}
               onToggleChecklistEntry={onToggleChecklistEntry}
@@ -180,7 +193,7 @@ export function WhiteboardCanvas({
 }
 
 /**
- * Viewport-fixed dot grid for Edit mode.
+ * Viewport-fixed dot grid.
  * Pure RN Views — no react-native-svg dependency needed.
  * 30×60 grid at 16pt spacing fills any phone screen with 2pt dots.
  */

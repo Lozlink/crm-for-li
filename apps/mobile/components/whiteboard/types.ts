@@ -1,8 +1,3 @@
-// Mode model for the whiteboard.
-// - 'move' : drag/reposition items, bring-to-front on tap, long-press for context.
-// - 'edit' : tap an item to open its content editor (sticky text, checklist items, photo caption).
-export type WhiteboardMode = 'move' | 'edit';
-
 // Re-export the canonical color tokens from whiteboardColors.ts so that
 // code that imports from './types' still compiles without changes.
 export {

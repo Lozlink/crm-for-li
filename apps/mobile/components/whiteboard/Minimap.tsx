@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { Text, Surface, useTheme } from 'react-native-paper';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, withTiming, type SharedValue } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { WhiteboardItem, WhiteboardItemType } from '@realestate-crm/types';
 import {
@@ -108,17 +108,22 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
 
   const minimapGesture = Gesture.Simultaneous(tapGesture, dragGesture);
 
-  // Viewport rect in minimap coords.
-  // World coords visible: topLeft = (-cameraX/scale, -cameraY/scale)
-  // Map to minimap: multiply by MINIMAP_SCALE
-  const viewportRectStyle = () => {
+  // Viewport rect driven by useAnimatedStyle so it updates on the UI thread
+  // in real time as the camera moves — React render is NOT subscribed to
+  // SharedValue changes, so reading `.value` in JSX only works at mount/re-render.
+  //
+  // Math: the visible world area starts at (-cameraX/scale, -cameraY/scale)
+  // and has size (viewportW/scale, viewportH/scale). Multiply by MINIMAP_SCALE
+  // to map onto the minimap. Width/height are also animated because they shrink
+  // as the user zooms in (larger scale → smaller visible window).
+  const viewportRectStyle = useAnimatedStyle(() => {
     const scale = cameraScale.value || 1;
-    const left = (-cameraX.value / scale) * MINIMAP_SCALE;
-    const top = (-cameraY.value / scale) * MINIMAP_SCALE;
-    const width = (viewportW / scale) * MINIMAP_SCALE;
-    const height = (viewportH / scale) * MINIMAP_SCALE;
+    const left = Math.max(0, (-cameraX.value / scale) * MINIMAP_SCALE);
+    const top = Math.max(0, (-cameraY.value / scale) * MINIMAP_SCALE);
+    const width = Math.min((viewportW / scale) * MINIMAP_SCALE, MINIMAP_W - left);
+    const height = Math.min((viewportH / scale) * MINIMAP_SCALE, MINIMAP_H - top);
     return { left, top, width, height };
-  };
+  });
 
   if (collapsed) {
     return (
@@ -137,8 +142,6 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
       </TouchableOpacity>
     );
   }
-
-  const vp = viewportRectStyle();
 
   return (
     <Surface style={[styles.container, { backgroundColor: theme.colors.surface }]} elevation={3}>
@@ -184,18 +187,14 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
             );
           })}
 
-          {/* Viewport rect — clamped so it doesn't render outside the minimap */}
-          <View
+          {/* Viewport rect — driven by useAnimatedStyle so it tracks camera in real time.
+              Left/top/width/height all animate on the UI thread (no JS-thread lag). */}
+          <Animated.View
             pointerEvents="none"
             style={[
               styles.viewportRect,
-              {
-                left: Math.max(0, vp.left),
-                top: Math.max(0, vp.top),
-                width: Math.min(vp.width, MINIMAP_W - Math.max(0, vp.left)),
-                height: Math.min(vp.height, MINIMAP_H - Math.max(0, vp.top)),
-                borderColor: theme.colors.primary,
-              },
+              { borderColor: theme.colors.primary },
+              viewportRectStyle,
             ]}
           />
         </View>

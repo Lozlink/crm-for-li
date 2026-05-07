@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Platform, StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -7,11 +7,8 @@ import Animated, {
   withSpring,
   runOnJS,
 } from 'react-native-reanimated';
-import { IconButton, useTheme } from 'react-native-paper';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
-import type { WhiteboardItem, WhiteboardStickyContent } from '@realestate-crm/types';
-import type { WhiteboardMode } from './types';
-import { WIDGET_DELETE_COLOR } from './whiteboardColors';
+import type { WhiteboardItem } from '@realestate-crm/types';
 import { WORLD_WIDTH, WORLD_HEIGHT, clampItemPosition } from './whiteboardWorld';
 
 // --- Spring configs (DESIGN.md §4) ---
@@ -42,41 +39,38 @@ import type { WhiteboardSuggestionItem } from './types';
 
 interface Props {
   item: WhiteboardItem;
-  mode: WhiteboardMode;
-  /** Open the editor for this item. Wired in Edit mode for non-sticky types. */
+  /** Open the structured editor for this item (long-press). */
   onRequestEdit: (id: string) => void;
-  /** Open the context menu for this item. Wired via long-press in Move mode. */
+  /** Open the context menu for this item (unused path — kept for OverviewSheet / future use). */
   onRequestContext: (id: string) => void;
-  /** Toggle a single checklist entry inline (Move mode only). */
+  /** Toggle a single checklist entry inline (tap on row). */
   onToggleChecklistEntry: (itemId: string, entryId: string) => void;
-  /** Delete an item. Wired to the × affordance in Edit mode. */
-  onDelete: (id: string) => void;
-  /** Fired when the user taps "Done — remove?" on a fully-checked checklist (Move mode only). */
+  /** Fired when the user taps "Done — remove?" on a fully-checked checklist. */
   onCompleteChecklist?: (id: string) => void;
+  /** Delete an item — wired from ItemContextMenu which is opened via long-press. */
+  onDelete: (id: string) => void;
 }
 
 /**
  * One draggable, tap/long-press-aware item card.
  *
- * Move mode  → Pan drags item; tap brings to front; long-press opens context menu.
- * Edit mode  → Pan disabled. Sticky text becomes focusable inline (no dialog).
- *              Checklist/Photo tap opens the editor sheet. × shows top-right (delete).
+ * Gesture model (mode-free):
+ *   Tap        → bringToFront
+ *   Long-press → open structured editor (EditItemSheet)
+ *   Drag       → move item; snap-to-grid on drop; clamp within world bounds
  *
- * Spec: see DESIGN.md §4 (BaseWidget — focus ring, lift animation, delete affordance).
+ * Spec: see DESIGN.md §4 (BaseWidget — lift animation, snap-to-grid landing).
  */
 export function WhiteboardItemView({
   item,
-  mode,
   onRequestEdit,
   onRequestContext,
   onToggleChecklistEntry,
-  onDelete,
   onCompleteChecklist,
+  onDelete,
 }: Props) {
-  const theme = useTheme();
   const updateItemLocal = useWhiteboardStore(s => s.updateItemLocal);
   const commitItem = useWhiteboardStore(s => s.commitItem);
-  const updateItem = useWhiteboardStore(s => s.updateItem);
   const bringToFront = useWhiteboardStore(s => s.bringToFront);
 
   // Shared values for the active gesture — separate from the persisted
@@ -94,48 +88,54 @@ export function WhiteboardItemView({
     translateY.value = item.position_y;
   }, [item.position_x, item.position_y, translateX, translateY]);
 
+  // One-time world-bounds migration: items persisted at positions > 4000pt
+  // (from the old 6000pt world) are clamped on first mount and written back
+  // so they're permanently visible inside the new world.
+  const hasMigratedRef = useRef(false);
+  useEffect(() => {
+    if (hasMigratedRef.current) return;
+    hasMigratedRef.current = true;
+    const clampedX = clampItemPosition(item.position_x, item.width, WORLD_WIDTH);
+    const clampedY = clampItemPosition(item.position_y, item.height, WORLD_HEIGHT);
+    if (clampedX !== item.position_x || clampedY !== item.position_y) {
+      translateX.value = clampedX;
+      translateY.value = clampedY;
+      updateItemLocal(item.id, { position_x: clampedX, position_y: clampedY });
+      void commitItem(item.id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const persistPosition = (x: number, y: number) => {
     updateItemLocal(item.id, { position_x: x, position_y: y });
     void commitItem(item.id);
   };
 
   const handleSingleTap = () => {
-    if (mode === 'edit') {
-      // Sticky: inline TextInput captures focus — no dialog needed.
-      // Suggestion: has its own footer CTA for navigation — no editor.
-      if (item.type !== 'sticky' && item.type !== 'suggestion') {
-        onRequestEdit(item.id);
-      }
-    } else {
-      void bringToFront(item.id);
-    }
+    void bringToFront(item.id);
   };
 
   const handleLongPress = () => {
-    onRequestContext(item.id);
-  };
-
-  // Inline sticky text persistence — debounced via the store's optimistic
-  // updateItem (which itself patches local then writes through to Supabase).
-  const handleStickyTextChange = (text: string) => {
-    void updateItem(item.id, {
-      content: { text } as WhiteboardStickyContent,
-    });
+    // Long-press always opens the editor for all item types.
+    // For suggestion cards we open the context menu (they have no editable fields).
+    if (item.type === 'suggestion') {
+      onRequestContext(item.id);
+    } else {
+      onRequestEdit(item.id);
+    }
   };
 
   // --- Gestures -----------------------------------------------------------
   // Android touchscreens have noisier touch detection than iOS; a 4pt threshold
   // triggers accidental drags from finger jitter during taps. Bump to 8pt on
   // Android so brief touches with small drift resolve as taps, not drags.
-  // If you add more gestures here, tune Android thresholds by ~50% as well.
   const PAN_MIN_DISTANCE = Platform.select({ android: 8, default: 4 });
   // Android users tap slightly slower on average; give Tap more time to resolve
   // before the Race hands the touch to Pan.
   const TAP_MAX_DURATION = Platform.select({ android: 280, default: 220 });
 
-  // Pan only in Move mode; in Edit mode the canvas + inputs need the touches.
+  // Pan is always enabled — no mode gate.
   const pan = Gesture.Pan()
-    .enabled(mode === 'move')
     .minDistance(PAN_MIN_DISTANCE)
     .onStart(() => {
       startX.value = translateX.value;
@@ -163,16 +163,15 @@ export function WhiteboardItemView({
       runOnJS(persistPosition)(snappedX, snappedY);
     });
 
-  // Tap is only attached in Move mode (Edit mode lets inner inputs receive taps).
+  // Tap always brings to front — no mode gate.
   const tap = Gesture.Tap()
-    .enabled(mode === 'move')
     .maxDuration(TAP_MAX_DURATION)
     .onEnd((_e, success) => {
       if (success) runOnJS(handleSingleTap)();
     });
 
+  // Long-press always opens the editor — no mode gate.
   const longPress = Gesture.LongPress()
-    .enabled(mode === 'move')
     .minDuration(450)
     .onStart(() => {
       runOnJS(handleLongPress)();
@@ -188,8 +187,6 @@ export function WhiteboardItemView({
     ],
   }));
 
-  const isEdit = mode === 'edit';
-
   return (
     <GestureDetector gesture={composed}>
       <Animated.View
@@ -200,31 +197,21 @@ export function WhiteboardItemView({
             height: item.height,
             zIndex: item.z_index,
           },
-          // Edit mode focus ring: 2pt primary border, 14pt radius (12 corner + 2 border)
-          isEdit && {
-            borderWidth: 2,
-            borderColor: theme.colors.primary,
-            borderRadius: 14,
-          },
           animatedStyle,
         ]}
       >
-        {/* Body widget — receives `editable` only in Edit mode. */}
+        {/* Sticky: always read-only on canvas; edit text via long-press → editor. */}
         {item.type === 'sticky' && (
-          <StickyNote
-            item={item}
-            editable={isEdit}
-            onChangeText={handleStickyTextChange}
-          />
+          <StickyNote item={item} />
         )}
         {item.type === 'checklist' && (
           <ChecklistCard
             item={item}
-            onToggle={mode === 'move' ? (entryId) => onToggleChecklistEntry(item.id, entryId) : undefined}
-            onComplete={mode === 'move' && onCompleteChecklist ? () => onCompleteChecklist(item.id) : undefined}
+            onToggle={(entryId) => onToggleChecklistEntry(item.id, entryId)}
+            onComplete={onCompleteChecklist ? () => onCompleteChecklist(item.id) : undefined}
           />
         )}
-        {item.type === 'photo' && <PhotoCard item={item} editable={isEdit} />}
+        {item.type === 'photo' && <PhotoCard item={item} />}
 
         {/* Suggestion card — read-only; added from IntelligenceSidebar. DESIGN.md §12. */}
         {item.type === 'suggestion' && (
@@ -234,20 +221,6 @@ export function WhiteboardItemView({
         {item.type === 'map' && <MapCard item={item} />}
         {item.type === 'contact' && <ContactCard item={item} />}
         {item.type === 'property' && <PropertyCard item={item} />}
-
-        {/* Edit-mode delete affordance (× button, top-right). DESIGN.md §4. */}
-        {isEdit && (
-          <View style={styles.deleteBtnWrap} pointerEvents="box-none">
-            <IconButton
-              icon="close-circle"
-              size={20}
-              iconColor={WIDGET_DELETE_COLOR}
-              onPress={() => onDelete(item.id)}
-              accessibilityLabel="Delete item"
-              style={styles.deleteBtn}
-            />
-          </View>
-        )}
       </Animated.View>
     </GestureDetector>
   );
@@ -258,17 +231,5 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
-  },
-  deleteBtnWrap: {
-    position: 'absolute',
-    top: -10,
-    right: -10,
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteBtn: {
-    margin: 0,
   },
 });

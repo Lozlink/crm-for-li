@@ -31,7 +31,6 @@ import {
   PHOTO_DEFAULT_SIZE,
   SUGGESTION_CARD_DEFAULT_SIZE,
   type SmartSuggestion,
-  type WhiteboardMode,
   type WhiteboardSuggestionContent,
 } from '../components/whiteboard/types';
 import { DEFAULT_STICKY_COLOR_DEF, stickyColorKey } from '../components/whiteboard/whiteboardColors';
@@ -79,7 +78,6 @@ export default function WhiteboardScreen() {
     return { minX, minY, maxX, maxY };
   }, [items]);
 
-  const [mode, setMode] = useState<WhiteboardMode>('move');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [contextId, setContextId] = useState<string | null>(null);
   const [addSheetVisible, setAddSheetVisible] = useState(false);
@@ -139,8 +137,9 @@ export default function WhiteboardScreen() {
         });
         if (!created) {
           setSnackbar('Could not add note. Check your connection.');
-        } else if (mode === 'edit') {
-          // Sticky text is inline-editable; no dialog needed.
+        } else {
+          // Open editor so the user can type the note text immediately.
+          setEditingId(created.id);
         }
         return;
       }
@@ -255,7 +254,7 @@ export default function WhiteboardScreen() {
         return;
       }
     },
-    [createItem, mode, placementForNew],
+    [createItem, placementForNew],
   );
 
   // --- Intelligence sidebar: add suggestion to board ----------------------
@@ -385,7 +384,6 @@ export default function WhiteboardScreen() {
       <View style={styles.canvasArea}>
         <WhiteboardCanvas
           items={items}
-          mode={mode}
           cameraX={cameraX}
           cameraY={cameraY}
           cameraScale={cameraScale}
@@ -422,8 +420,6 @@ export default function WhiteboardScreen() {
       </View>
 
       <WhiteboardToolbar
-        mode={mode}
-        onModeChange={setMode}
         onRequestAdd={() => setAddSheetVisible(true)}
         onRequestSuggestions={() => setIntelligenceSidebarVisible(true)}
         onRequestOverview={() => setOverviewVisible(true)}
