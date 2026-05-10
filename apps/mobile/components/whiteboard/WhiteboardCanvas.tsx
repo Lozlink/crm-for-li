@@ -119,12 +119,13 @@ export function WhiteboardCanvas({
       }
     });
 
-  // Single-finger canvas pan — always-on. Item gestures take precedence for
-  // touches landing on a widget; this only fires for touches on empty world
-  // space. Higher minDistance than items (iOS 8 vs item's 4) so a brief tap on
-  // an item doesn't accidentally trigger a canvas pan.
+  // Single-finger canvas pan — empty-space only. We attach this to a dedicated
+  // background layer behind all widgets so buttons and item gestures are never
+  // competing with the canvas for the same one-finger touch stream.
+  // Higher minDistance than items (iOS 8 vs item's 4) so a brief tap near a
+  // widget edge doesn't accidentally trigger a camera pan.
   // Android bumped further (14pt) to match the item's raised 8pt threshold —
-  // keeping the ratio consistent avoids canvas pan winning over item taps on
+  // keeping the ratio consistent avoids canvas pan winning over nearby taps on
   // noisy Android touchscreens. If a second finger lands after this pan has
   // already begun, we fail it immediately so the pinch gesture becomes the only
   // camera writer for the rest of that multi-touch interaction.
@@ -158,12 +159,6 @@ export function WhiteboardCanvas({
       );
     });
 
-  // Two-finger pinch (which now also handles two-finger pan) and single-finger
-  // move pan compose simultaneously — they have non-overlapping pointer counts
-  // so they never conflict. Items still win for touches on widgets via RNGH
-  // child-gesture precedence.
-  const cameraGestures = Gesture.Simultaneous(cameraPinch, movePan);
-
   // DEV-ONLY: animated props for the camera state overlay.
   // Reanimated's useAnimatedProps must drive `text` (the private TextInput
   // animatable prop), NOT `value` (React's controlled-input prop) — `value`
@@ -191,10 +186,16 @@ export function WhiteboardCanvas({
   }));
 
   return (
-    <GestureDetector gesture={cameraGestures}>
+    <GestureDetector gesture={cameraPinch}>
       <View style={[styles.viewport, { backgroundColor: canvasBg }]}>
         {/* Dot grid — always visible, fixed to viewport */}
         <DotGrid dotColor={dotColor} />
+
+        {/* Empty-space pan layer — sits behind widgets so one-finger camera pan
+            only starts from bare canvas, not from item bodies or buttons. */}
+        <GestureDetector gesture={movePan}>
+          <View style={StyleSheet.absoluteFill} />
+        </GestureDetector>
 
         {/* World layer — items rendered absolutely in world space */}
         <Animated.View style={[styles.world, cameraStyle]} pointerEvents="box-none">
