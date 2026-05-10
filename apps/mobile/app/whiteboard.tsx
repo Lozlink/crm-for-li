@@ -5,8 +5,13 @@ import { Snackbar, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
-import { CanvasViewControls, type WorldBounds } from '../components/shared/CanvasViewControls';
-import { WORLD_WIDTH, WORLD_HEIGHT, clampCameraTranslate } from '../components/whiteboard/whiteboardWorld';
+import { CanvasViewControls } from '../components/shared/CanvasViewControls';
+import {
+  clampCameraAxis,
+  DEFAULT_WORLD_BOUNDS,
+  padBounds,
+  type ContentBounds,
+} from '../components/whiteboard/whiteboardWorld';
 import { Minimap } from '../components/whiteboard/Minimap';
 import type {
   WhiteboardChecklistContent,
@@ -81,8 +86,10 @@ export default function WhiteboardScreen() {
     }
   });
 
-  // Bounding box of all items — fed into CanvasViewControls for Fit All.
-  const worldBounds = useMemo<WorldBounds | null>(() => {
+  // Raw bounding box of all items — fed into CanvasViewControls for Fit-All.
+  // Null when the board is empty; consumers should fall back to the abstract
+  // world rect in that case (`DEFAULT_WORLD_BOUNDS`).
+  const itemBounds = useMemo<ContentBounds | null>(() => {
     if (items.length === 0) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const it of items) {
@@ -93,6 +100,21 @@ export default function WhiteboardScreen() {
     }
     return { minX, minY, maxX, maxY };
   }, [items]);
+
+  // Effective camera/minimap bounds: the items' bbox padded by ~one viewport
+  // so the user has breathing room to pan past existing items and drop new
+  // ones in open space. When the board is empty, fall back to the abstract
+  // world rect so panning still works.
+  //
+  // This is the single source of truth for "where is the camera allowed to
+  // roam" — it replaces the old `clampCameraTranslate(_, _, WORLD_WIDTH, _)`
+  // pattern that let the user drift into vast empty world. Threaded into
+  // WhiteboardCanvas (pan/pinch clamp), Minimap (projection), CanvasViewControls
+  // (zoom + reset target), and OverviewSheet (tap-to-pan destination clamp).
+  const effectiveBounds = useMemo<ContentBounds>(() => {
+    if (!itemBounds) return DEFAULT_WORLD_BOUNDS;
+    return padBounds(itemBounds, Math.max(screenW, screenH));
+  }, [itemBounds, screenW, screenH]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [contextId, setContextId] = useState<string | null>(null);
@@ -434,15 +456,30 @@ export default function WhiteboardScreen() {
     const centerX = START + layoutW / 2;
     const centerY = START + layoutH / 2;
     cameraScale.value = withTiming(next, { duration: 300 });
+    // Clamp against the *effective* (content-padded) bounds rather than the
+    // abstract world rect — keeps the camera honest about where items live
+    // post-arrange.
     cameraX.value = withTiming(
-      clampCameraTranslate(screenW / 2 - centerX * next, screenW, WORLD_WIDTH, next),
+      clampCameraAxis(
+        screenW / 2 - centerX * next,
+        screenW,
+        effectiveBounds.minX,
+        effectiveBounds.maxX,
+        next,
+      ),
       { duration: 300 },
     );
     cameraY.value = withTiming(
-      clampCameraTranslate(screenH / 2 - centerY * next, screenH, WORLD_HEIGHT, next),
+      clampCameraAxis(
+        screenH / 2 - centerY * next,
+        screenH,
+        effectiveBounds.minY,
+        effectiveBounds.maxY,
+        next,
+      ),
       { duration: 300 },
     );
-  }, [items, updateItem, cameraX, cameraY, cameraScale, screenW, screenH]);
+  }, [items, updateItem, cameraX, cameraY, cameraScale, screenW, screenH, effectiveBounds]);
 
   return (
     <SafeAreaView
@@ -455,6 +492,7 @@ export default function WhiteboardScreen() {
           cameraX={cameraX}
           cameraY={cameraY}
           cameraScale={cameraScale}
+          bounds={effectiveBounds}
           onRequestEdit={(id) => setEditingId(id)}
           onRequestContext={(id) => setContextId(id)}
           onToggleChecklistEntry={handleToggleChecklistEntry}
@@ -469,6 +507,7 @@ export default function WhiteboardScreen() {
             cameraX={cameraX}
             cameraY={cameraY}
             cameraScale={cameraScale}
+            bounds={effectiveBounds}
             viewportW={screenW}
             viewportH={screenH}
           />
@@ -480,7 +519,11 @@ export default function WhiteboardScreen() {
             cameraX={cameraX}
             cameraY={cameraY}
             cameraScale={cameraScale}
-            worldBounds={worldBounds}
+            bounds={effectiveBounds}
+            // Fit-All / Reset target the raw items bbox (not the padded one) so
+            // the items fill the viewport rather than being framed by
+            // breathing-room padding.
+            fitTarget={itemBounds}
             onQuickArrange={items.length > 0 ? handleQuickArrange : undefined}
             viewportW={screenW}
             viewportH={screenH}
@@ -533,6 +576,7 @@ export default function WhiteboardScreen() {
         cameraX={cameraX}
         cameraY={cameraY}
         cameraScale={cameraScale}
+        bounds={effectiveBounds}
         onDismiss={() => setOverviewVisible(false)}
       />
 

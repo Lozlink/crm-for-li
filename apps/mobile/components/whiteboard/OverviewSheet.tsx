@@ -35,7 +35,7 @@ import {
   STICKY_COLOR_DEFS,
   stickyColorForScheme,
 } from './whiteboardColors';
-import { WORLD_WIDTH, WORLD_HEIGHT, clampCameraTranslate } from './whiteboardWorld';
+import { clampCameraAxis, type ContentBounds } from './whiteboardWorld';
 
 // ── Type display metadata ─────────────────────────────────────────────────────
 
@@ -128,6 +128,12 @@ interface Props {
   cameraX: SharedValue<number>;
   cameraY: SharedValue<number>;
   cameraScale: SharedValue<number>;
+  /**
+   * Effective pan bounds — clamps the tap-to-pan target to the same content
+   * region the canvas allows, so a tap on an edge item doesn't strand the
+   * camera in unreachable space.
+   */
+  bounds: ContentBounds;
   onDismiss: () => void;
 }
 
@@ -142,6 +148,7 @@ export function OverviewSheet({
   cameraX,
   cameraY,
   cameraScale,
+  bounds,
   onDismiss,
 }: Props) {
   const theme = useTheme();
@@ -249,15 +256,28 @@ export function OverviewSheet({
       const visibleH = screenH - 80;
       const cxWorld = item.position_x + item.width / 2;
       const cyWorld = item.position_y + item.height / 2;
-      // Clamp so the resulting camera doesn't pan past the world bounds —
-      // matters when the item lives near the edge of the world and centering
-      // would push the camera into empty space.
-      const targetX = clampCameraTranslate(screenW / 2 - cxWorld * scale, screenW, WORLD_WIDTH, scale);
-      const targetY = clampCameraTranslate(visibleH / 2 - cyWorld * scale, visibleH, WORLD_HEIGHT, scale);
+      // Clamp so the resulting camera matches what the canvas's pan-clamp
+      // would allow — using the same effective content bounds the canvas
+      // uses, so taps near the edge land at a position the user can pan
+      // away from naturally rather than overshooting into rubberband space.
+      const targetX = clampCameraAxis(
+        screenW / 2 - cxWorld * scale,
+        screenW,
+        bounds.minX,
+        bounds.maxX,
+        scale,
+      );
+      const targetY = clampCameraAxis(
+        visibleH / 2 - cyWorld * scale,
+        visibleH,
+        bounds.minY,
+        bounds.maxY,
+        scale,
+      );
       cameraX.value = withTiming(targetX, { duration: PAN_DURATION_MS });
       cameraY.value = withTiming(targetY, { duration: PAN_DURATION_MS });
     },
-    [handleDismiss, cameraX, cameraY, cameraScale, screenW, screenH],
+    [handleDismiss, cameraX, cameraY, cameraScale, screenW, screenH, bounds],
   );
 
   const sheetStyle = useAnimatedStyle(() => ({

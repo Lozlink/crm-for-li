@@ -12,21 +12,11 @@ import {
   stickyColorForScheme,
   type SuggestionKind,
 } from './whiteboardColors';
-import { WORLD_WIDTH, WORLD_HEIGHT, clampCameraTranslate } from './whiteboardWorld';
+import { clampCameraAxis, type ContentBounds } from './whiteboardWorld';
 
 // Minimap display size in points.
 const MINIMAP_W = 140;
 const MINIMAP_H = 100;
-
-// Separate X/Y scales — the world is square but the minimap isn't (140×100),
-// so a single uniform scale would clip the bottom (4000-2857)/4000 = ~28% of
-// the world's vertical range. Earlier revisions used MINIMAP_W/WORLD_WIDTH for
-// both axes; the comment claimed "world is square so X works for Y" but missed
-// that the MINIMAP isn't square. Symptom: at certain zoom/pan combinations the
-// viewport rect would drift off the bottom edge and disappear, and items in
-// the bottom ~28% of the world were silently clipped from the dots.
-const MINIMAP_SCALE_X = MINIMAP_W / WORLD_WIDTH;
-const MINIMAP_SCALE_Y = MINIMAP_H / WORLD_HEIGHT;
 
 const PAN_DURATION_MS = 200;
 
@@ -60,42 +50,87 @@ interface Props {
   cameraX: SharedValue<number>;
   cameraY: SharedValue<number>;
   cameraScale: SharedValue<number>;
+  /**
+   * Effective minimap bounds — the content region the minimap projects.
+   * In practice this is items' bbox + ~one viewport of padding (computed by
+   * the parent), so dots fill the minimap meaningfully instead of clustering
+   * in 3% of it (the pre-2026-05-10 bug — items lived in <10% of the abstract
+   * 4000×4000 world rect, so MINIMAP_SCALE = 140/4000 collapsed them into a
+   * tiny corner).
+   */
+  bounds: ContentBounds;
   viewportW: number;
   viewportH: number;
 }
 
 /**
  * Minimap — a persistent corner overlay showing all board items as colored
- * dots at world scale, plus a stroked viewport rectangle.
+ * dots within the content bounds, plus a stroked viewport rectangle.
  *
- * Tap-to-pan math (matches OverviewSheet.tsx:217-228 derivation):
- *   screen_x = cameraX + worldX * scale
- *   => cameraX = screen/2 - worldX * scale
- * where worldX = tapX_in_minimap / MINIMAP_SCALE.
+ * Coordinate system note: items have world-coordinate positions, but the
+ * minimap shows the BOUNDS region (not the abstract world). All projections
+ * subtract `bounds.minX/Y` so the bounds top-left maps to (0, 0) on the
+ * minimap, then multiply by the per-axis minimap scale.
  *
- * DO NOT distribute scale across the whole expression — that was the earlier
- * bug: (screen/2 - worldX) * scale is only correct at scale=1.
+ *   minimapX = (worldX - bounds.minX) * (MINIMAP_W / boundsW)
+ *
+ * Tap-to-pan reverses this:
+ *   worldX = bounds.minX + tapX_in_minimap / (MINIMAP_W / boundsW)
+ *   cameraX = viewport/2 - worldX * scale (then clamped against bounds)
+ *
+ * DO NOT distribute scale across the whole expression — that was an earlier
+ * bug: (screen/2 - worldX) * scale only matches at scale=1.
  */
-export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewportH }: Props) {
+export function Minimap({
+  items,
+  cameraX,
+  cameraY,
+  cameraScale,
+  bounds,
+  viewportW,
+  viewportH,
+}: Props) {
   const theme = useTheme();
   const colorScheme = useColorScheme();
   const [collapsed, setCollapsed] = useState(false);
 
+  // Per-axis minimap scales derived from the *bounds* extent, not the
+  // abstract world. Guard against zero-size bounds (would never happen in
+  // practice since the parent pads by ~one viewport, but the math should
+  // still degrade gracefully).
+  const boundsW = Math.max(1, bounds.maxX - bounds.minX);
+  const boundsH = Math.max(1, bounds.maxY - bounds.minY);
+  const scaleX = MINIMAP_W / boundsW;
+  const scaleY = MINIMAP_H / boundsH;
+
   const panWorldPoint = useCallback(
     (tapXInMinimap: number, tapYInMinimap: number) => {
-      // Use separate X/Y scales when converting minimap coords back to world.
-      const worldX = tapXInMinimap / MINIMAP_SCALE_X;
-      const worldY = tapYInMinimap / MINIMAP_SCALE_Y;
+      // Convert minimap-local tap → world coords by reversing the projection
+      // (add bounds origin, divide by minimap scale).
+      const worldX = bounds.minX + tapXInMinimap / scaleX;
+      const worldY = bounds.minY + tapYInMinimap / scaleY;
       const scale = cameraScale.value || 1;
-      // Correct algebra: cameraX = screenCenter - worldX * scale.
-      // Clamp so a tap near the minimap edges doesn't pan the camera past
-      // the world boundary into empty space.
-      const targetX = clampCameraTranslate(viewportW / 2 - worldX * scale, viewportW, WORLD_WIDTH, scale);
-      const targetY = clampCameraTranslate(viewportH / 2 - worldY * scale, viewportH, WORLD_HEIGHT, scale);
+      // Center the tapped world point in the viewport, then clamp the result
+      // against the same content bounds the canvas uses — keeps the camera
+      // honest at the minimap's edge instead of overshooting into padding.
+      const targetX = clampCameraAxis(
+        viewportW / 2 - worldX * scale,
+        viewportW,
+        bounds.minX,
+        bounds.maxX,
+        scale,
+      );
+      const targetY = clampCameraAxis(
+        viewportH / 2 - worldY * scale,
+        viewportH,
+        bounds.minY,
+        bounds.maxY,
+        scale,
+      );
       cameraX.value = withTiming(targetX, { duration: PAN_DURATION_MS });
       cameraY.value = withTiming(targetY, { duration: PAN_DURATION_MS });
     },
-    [cameraX, cameraY, cameraScale, viewportW, viewportH],
+    [bounds, scaleX, scaleY, cameraX, cameraY, cameraScale, viewportW, viewportH],
   );
 
   // Tap gesture — pan camera to tapped world point.
@@ -118,25 +153,39 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
   // in real time as the camera moves — React render is NOT subscribed to
   // SharedValue changes, so reading `.value` in JSX only works at mount/re-render.
   //
-  // Math: the visible world area starts at (-cameraX/scale, -cameraY/scale)
-  // and has size (viewportW/scale, viewportH/scale). Multiply by MINIMAP_SCALE
-  // to map onto the minimap. Width/height are also animated because they shrink
-  // as the user zooms in (larger scale → smaller visible window).
+  // Math: the visible world area's top-left in WORLD coords is
+  // (-cameraX/scale, -cameraY/scale). To project onto the minimap (which is
+  // anchored at bounds.minX/Y), subtract the bounds origin first. The
+  // visible window has size (viewportW/scale, viewportH/scale) in world coords,
+  // multiplied by the minimap scale to render.
   const viewportRectStyle = useAnimatedStyle(() => {
     const scale = cameraScale.value || 1;
-    // Per-axis scales — minimap aspect ratio (140×100) doesn't match world
-    // aspect (4000×4000), so X and Y need different MINIMAP_SCALEs.
-    const rawLeft = (-cameraX.value / scale) * MINIMAP_SCALE_X;
-    const rawTop = (-cameraY.value / scale) * MINIMAP_SCALE_Y;
-    const left = Math.max(0, rawLeft);
-    const top = Math.max(0, rawTop);
-    const width = Math.min((viewportW / scale) * MINIMAP_SCALE_X, MINIMAP_W - left);
-    const height = Math.min((viewportH / scale) * MINIMAP_SCALE_Y, MINIMAP_H - top);
+    const worldVisibleX = -cameraX.value / scale;
+    const worldVisibleY = -cameraY.value / scale;
+    // Project the visible-world rect into bounds-space, then onto the minimap.
+    // Earlier rev clamped `left/top` to [0..MINIMAP_*] but left `width/height`
+    // unclamped — meaning when the camera was past the bounds origin (e.g.
+    // visible world starts at y=-251 because the user panned above the
+    // padded bounds), the rect rendered at top=0 with full height,
+    // *pinned* to the minimap top-edge regardless of where the user
+    // actually was. Symptom from logs: cameraY varied but `top` stayed at
+    // 0.00 — the rect didn't track the camera at all.
+    //
+    // Fix: don't clamp at all. Render the rect at its true projected
+    // position with its true projected size. The container View already
+    // has overflow:hidden, so portions extending past the minimap edge
+    // are correctly cut off. The visible portion always represents the
+    // actual on-screen visible-world region — which is what the user
+    // expects "minimap rect" to mean.
+    const left = (worldVisibleX - bounds.minX) * scaleX;
+    const top = (worldVisibleY - bounds.minY) * scaleY;
+    const width = (viewportW / scale) * scaleX;
+    const height = (viewportH / scale) * scaleY;
 
     if (__DEV__) {
       console.log(
         `[whiteboard:minimap-rect] cameraX=${cameraX.value.toFixed(1)} cameraY=${cameraY.value.toFixed(1)} scale=${scale.toFixed(4)}` +
-        ` rawLeft=${rawLeft.toFixed(2)} rawTop=${rawTop.toFixed(2)}` +
+        ` worldVisibleX=${worldVisibleX.toFixed(1)} worldVisibleY=${worldVisibleY.toFixed(1)}` +
         ` left=${left.toFixed(2)} top=${top.toFixed(2)} width=${width.toFixed(2)} height=${height.toFixed(2)}`,
       );
     }
@@ -163,25 +212,29 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
   }
 
   return (
+    // Surface owns the elevation/shadow ONLY. The clipping View below holds
+    // overflow:hidden so RN Paper doesn't warn about Surface losing its
+    // shadow when the parent crops itself.
     <Surface style={[styles.container, { backgroundColor: theme.colors.surface }]} elevation={3}>
-      {/* Collapse chevron */}
-      <TouchableOpacity
-        onPress={() => setCollapsed(true)}
-        style={[styles.chevron]}
-        hitSlop={{ top: 4, right: 4, bottom: 4, left: 4 }}
-        accessibilityLabel="Collapse minimap"
-      >
-        <Icon name="chevron-down" size={12} color={theme.colors.onSurfaceVariant} />
-      </TouchableOpacity>
-
-      {/* Canvas area with gesture detector */}
-      <GestureDetector gesture={minimapGesture}>
-        <View
-          style={[
-            styles.canvas,
-            { backgroundColor: theme.colors.surfaceVariant },
-          ]}
+      <View style={styles.containerInner}>
+        {/* Collapse chevron */}
+        <TouchableOpacity
+          onPress={() => setCollapsed(true)}
+          style={[styles.chevron]}
+          hitSlop={{ top: 4, right: 4, bottom: 4, left: 4 }}
+          accessibilityLabel="Collapse minimap"
         >
+          <Icon name="chevron-down" size={12} color={theme.colors.onSurfaceVariant} />
+        </TouchableOpacity>
+
+        {/* Canvas area with gesture detector */}
+        <GestureDetector gesture={minimapGesture}>
+          <View
+            style={[
+              styles.canvas,
+              { backgroundColor: theme.colors.surfaceVariant },
+            ]}
+          >
           {/* Item dots — positioned via transform rather than left/top.
               On Android, an absolutely-positioned View inside an overflow:hidden
               parent can cache its layout bounds and not pick up subsequent
@@ -191,11 +244,11 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
               cheaper. Width/height stay as layout props since they don't change
               after first render for a given item. */}
           {items.map((item) => {
-            // Per-axis scale — see MINIMAP_SCALE_X/Y notes above.
-            const x = item.position_x * MINIMAP_SCALE_X;
-            const y = item.position_y * MINIMAP_SCALE_Y;
-            const w = Math.max(2, item.width * MINIMAP_SCALE_X);
-            const h = Math.max(2, item.height * MINIMAP_SCALE_Y);
+            // Per-axis projection via bounds origin (NOT abstract world origin).
+            const x = (item.position_x - bounds.minX) * scaleX;
+            const y = (item.position_y - bounds.minY) * scaleY;
+            const w = Math.max(2, item.width * scaleX);
+            const h = Math.max(2, item.height * scaleY);
             const color = itemDotColor(item, colorScheme);
             return (
               <View
@@ -223,8 +276,9 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
               viewportRectStyle,
             ]}
           />
-        </View>
-      </GestureDetector>
+          </View>
+        </GestureDetector>
+      </View>
     </Surface>
   );
 }
@@ -232,8 +286,13 @@ export function Minimap({ items, cameraX, cameraY, cameraScale, viewportW, viewp
 const styles = StyleSheet.create({
   container: {
     borderRadius: 8,
-    overflow: 'hidden',
+    // NOTE: no overflow:hidden here — RN Paper's Surface needs to render its
+    // shadow OUTSIDE its own bounds. The inner View below crops content.
     width: MINIMAP_W,
+  },
+  containerInner: {
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   chevron: {
     alignSelf: 'flex-end',
