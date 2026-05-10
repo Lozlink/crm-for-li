@@ -423,12 +423,12 @@ function OverviewRow({ item, colorScheme, onTap, theme }: RowProps) {
   const stripeColor = resolveStripeColor(item, colorScheme);
 
   return (
-    <View
+    <Pressable
       style={[
         styles.row,
         { backgroundColor: theme.colors.surface },
       ]}
-      onTouchEnd={() => onTap(item)}
+      onPress={() => onTap(item)}
       accessibilityRole="button"
       accessibilityLabel={`Go to ${title}`}
     >
@@ -459,7 +459,7 @@ function OverviewRow({ item, colorScheme, onTap, theme }: RowProps) {
 
       {/* Navigate affordance */}
       <Icon name="chevron-right" size={18} color={theme.colors.onSurfaceVariant} />
-    </View>
+    </Pressable>
   );
 }
 

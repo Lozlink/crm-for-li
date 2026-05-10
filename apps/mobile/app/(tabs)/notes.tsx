@@ -1,9 +1,9 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { StyleSheet, View, FlatList, Pressable } from 'react-native';
-import { Searchbar, FAB, useTheme, Text, Card, Chip, Surface, SegmentedButtons, Portal, Dialog, Button, ActivityIndicator } from 'react-native-paper';
+import { Searchbar, FAB, useTheme, Text, Card, Chip, Surface, SegmentedButtons, Portal, Dialog, Button, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useCRMStore, useTrackingStore } from '@realestate-crm/hooks';
+import { useCRMStore, useTrackingStore, useWhiteboardStore } from '@realestate-crm/hooks';
 import { Contact, Activity, TrackingAnnotation, ActivitySource } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -31,6 +31,8 @@ export default function NotesScreen() {
   const recentActivities = useCRMStore(state => state.activities);
   const fetchRecentActivities = useCRMStore(state => state.fetchActivities);
   const tags = useCRMStore(state => state.tags);
+  const createWhiteboardItem = useWhiteboardStore(state => state.createItem);
+  const whiteboardItemsCount = useWhiteboardStore(state => state.items.length);
 
   const allAnnotations = useTrackingStore(state => state.allAnnotations);
   const fetchAllAnnotations = useTrackingStore(state => state.fetchAllAnnotations);
@@ -44,10 +46,12 @@ export default function NotesScreen() {
   const [linkingAnnotationId, setLinkingAnnotationId] = useState<string | null>(null);
   const [contactSearch, setContactSearch] = useState('');
   const [isLinking, setIsLinking] = useState(false);
+  const [pinSnackbarVisible, setPinSnackbarVisible] = useState(false);
+  const [pinningKey, setPinningKey] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchRecentActivities(200);
-    fetchAllAnnotations();
+    void fetchRecentActivities(200);
+    void fetchAllAnnotations();
   }, [fetchRecentActivities, fetchAllAnnotations]);
 
   // Unlinked field notes (tracking annotations without contact_id)
@@ -130,8 +134,8 @@ export default function NotesScreen() {
     setLinkDialogVisible(false);
     setLinkingAnnotationId(null);
     // Refresh data
-    fetchRecentActivities(200);
-    fetchAllAnnotations();
+    void fetchRecentActivities(200);
+    void fetchAllAnnotations();
   };
 
   const formatDate = (dateStr: string) => {
@@ -145,6 +149,87 @@ export default function NotesScreen() {
     if (diffDays < 7) return `${diffDays} days ago`;
     return date.toLocaleDateString();
   };
+
+  const getNextWhiteboardPosition = useCallback(() => {
+    const offset = (whiteboardItemsCount % 6) * 24;
+    return {
+      x: 24 + offset,
+      y: 24 + offset,
+    };
+  }, [whiteboardItemsCount]);
+
+  const buildPinnedContactNoteText = useCallback((contact: Contact, note: Activity) => {
+    const lines = [contact.address || 'No address'];
+    const name = `${contact.first_name || ''} ${contact.last_name || ''}`.trim();
+    if (name && name !== 'Quick Note') {
+      lines.push(name);
+    }
+    if (note.created_at) {
+      lines.push(formatDate(note.created_at));
+    }
+    lines.push('', (note.content || '').trim());
+    return lines.join('\n');
+  }, []);
+
+  const buildPinnedFieldNoteText = useCallback((annotation: TrackingAnnotation) => {
+    const lines = [
+      `Field note @ ${annotation.latitude.toFixed(4)}, ${annotation.longitude.toFixed(4)}`,
+    ];
+    if (annotation.created_at) {
+      lines.push(formatDate(annotation.created_at));
+    }
+    lines.push('', annotation.note.trim());
+    return lines.join('\n');
+  }, []);
+
+  const handlePinLatestNote = useCallback(async (entry: NoteEntry) => {
+    if (!entry.latestNote) return;
+
+    const pinKey = `note-${entry.latestNote.id}`;
+    setPinningKey(pinKey);
+    try {
+      const { x, y } = getNextWhiteboardPosition();
+      const created = await createWhiteboardItem({
+        type: 'sticky',
+        position_x: x,
+        position_y: y,
+        width: 240,
+        height: 180,
+        content: { text: buildPinnedContactNoteText(entry.contact, entry.latestNote) },
+        ref_id: entry.contact.id,
+      });
+      if (created) {
+        setPinSnackbarVisible(true);
+      }
+    } finally {
+      setPinningKey(current => (current === pinKey ? null : current));
+    }
+  }, [buildPinnedContactNoteText, createWhiteboardItem, getNextWhiteboardPosition]);
+
+  const handlePinAnnotationNote = useCallback(async (annotation: TrackingAnnotation) => {
+    const pinKey = `annotation-${annotation.id}`;
+    setPinningKey(pinKey);
+    try {
+      const { x, y } = getNextWhiteboardPosition();
+      const created = await createWhiteboardItem({
+        type: 'sticky',
+        position_x: x,
+        position_y: y,
+        width: 240,
+        height: 180,
+        content: { text: buildPinnedFieldNoteText(annotation) },
+      });
+      if (created) {
+        setPinSnackbarVisible(true);
+      }
+    } finally {
+      setPinningKey(current => (current === pinKey ? null : current));
+    }
+  }, [buildPinnedFieldNoteText, createWhiteboardItem, getNextWhiteboardPosition]);
+
+  const handleOpenAnnotationOnMap = useCallback((annotation: TrackingAnnotation) => {
+    router.push(`/(tabs)/map?lat=${annotation.latitude}&lng=${annotation.longitude}&zoom=0.005&layer=fieldActivity` as never);
+  }, [router]);
 
   const getSourceBadge = (source?: ActivitySource) => {
     if (!source) return null;
@@ -220,10 +305,31 @@ export default function NotesScreen() {
               +{notes.length - 1} more note{notes.length > 2 ? 's' : ''}
             </Text>
           )}
+
+          <View style={styles.actionRow}>
+            <Button
+              mode="text"
+              icon="account-outline"
+              compact
+              onPress={() => handleEntryPress(contact)}
+            >
+              Open Contact
+            </Button>
+            <Button
+              mode="contained-tonal"
+              icon="view-dashboard-outline"
+              compact
+              onPress={() => void handlePinLatestNote(item)}
+              disabled={!latestNote || pinningKey === `note-${latestNote?.id}`}
+              loading={!!latestNote && pinningKey === `note-${latestNote.id}`}
+            >
+              To Whiteboard
+            </Button>
+          </View>
         </Card.Content>
       </Card>
     );
-  }, [tags, theme.colors, handleEntryPress]);
+  }, [tags, theme.colors, handleEntryPress, handlePinLatestNote, pinningKey]);
 
   const renderUnlinkedItem = useCallback(({ item }: { item: TrackingAnnotation }) => (
     <Card style={styles.card} mode="elevated">
@@ -255,18 +361,38 @@ export default function NotesScreen() {
           </Text>
         </Surface>
 
-        <Button
-          mode="contained-tonal"
-          icon="link-variant"
-          compact
-          onPress={() => handleLinkAnnotation(item.id)}
-          style={{ alignSelf: 'flex-start', marginTop: 8 }}
-        >
-          Link to Contact
-        </Button>
+        <View style={styles.actionRow}>
+          <Button
+            mode="text"
+            icon="map-search-outline"
+            compact
+            onPress={() => handleOpenAnnotationOnMap(item)}
+          >
+            View on Map
+          </Button>
+          <Button
+            mode="contained-tonal"
+            icon="view-dashboard-outline"
+            compact
+            onPress={() => void handlePinAnnotationNote(item)}
+            disabled={pinningKey === `annotation-${item.id}`}
+            loading={pinningKey === `annotation-${item.id}`}
+          >
+            To Whiteboard
+          </Button>
+          <Button
+            mode="contained-tonal"
+            icon="link-variant"
+            compact
+            onPress={() => handleLinkAnnotation(item.id)}
+            disabled={isLinking}
+          >
+            Link to Contact
+          </Button>
+        </View>
       </Card.Content>
     </Card>
-  ), [theme.colors]);
+  ), [theme.colors, handleOpenAnnotationOnMap, handlePinAnnotationNote, isLinking, pinningKey]);
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -375,6 +501,15 @@ export default function NotesScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      <Snackbar
+        visible={pinSnackbarVisible}
+        onDismiss={() => setPinSnackbarVisible(false)}
+        duration={3500}
+        action={{ label: 'Open', onPress: () => router.push('/whiteboard' as never) }}
+      >
+        Added to whiteboard
+      </Snackbar>
     </View>
   );
 }
@@ -432,6 +567,12 @@ const styles = StyleSheet.create({
   notePreview: {
     padding: 12,
     borderRadius: 8,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
   },
   notePreviewHeader: {
     flexDirection: 'row',

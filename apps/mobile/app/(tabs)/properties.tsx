@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, FlatList, ScrollView, Alert } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { StyleSheet, View, FlatList, ScrollView, Alert, Pressable } from 'react-native';
 import {
   FAB, useTheme, Text, Chip, ActivityIndicator, Surface,
   IconButton, Portal, Dialog, Button, TextInput,
@@ -198,8 +198,8 @@ export default function PropertiesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchProperties();
-      fetchSavedSearches('property');
+      void fetchProperties();
+      void fetchSavedSearches('property');
     }, [fetchProperties, fetchSavedSearches])
   );
 
@@ -442,9 +442,9 @@ export default function PropertiesScreen() {
 
     return (
       <Surface style={styles.card} elevation={1}>
-        <View
+        <Pressable
           style={styles.cardTouchable}
-          onTouchEnd={() => handlePropertyPress(item)}
+          onPress={() => handlePropertyPress(item)}
           accessible
           accessibilityRole="button"
           accessibilityLabel={`Property: ${item.address}, ${STATUS_LABELS[item.status]}`}
@@ -537,7 +537,7 @@ export default function PropertiesScreen() {
               </View>
             )}
           </View>
-        </View>
+        </Pressable>
       </Surface>
     );
   }, [theme.colors, handlePropertyPress]);

@@ -944,9 +944,10 @@ export default function PropertyDetailScreen() {
                     style={styles.matchCard}
                     elevation={0}
                   >
-                    <View
+                    <TouchableOpacity
                       style={styles.contactOptionTouchable}
-                      onTouchEnd={() => router.push(`/contact/${match.contact.id}`)}
+                      onPress={() => router.push(`/contact/${match.contact.id}`)}
+                      activeOpacity={0.8}
                       accessible
                       accessibilityRole="button"
                       accessibilityLabel={`View ${match.contact.first_name}`}
@@ -983,7 +984,7 @@ export default function PropertyDetailScreen() {
                         </View>
                       </View>
                       <Icon name="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
-                    </View>
+                    </TouchableOpacity>
                   </Surface>
                 ))}
               </Surface>
@@ -1026,10 +1027,11 @@ export default function PropertyDetailScreen() {
                   const attendees = (inspection.attendees as InspectionAttendee[] | undefined) || [];
 
                   return (
-                    <View
+                    <TouchableOpacity
                       key={inspection.id}
                       style={styles.timelineItem}
-                      onTouchEnd={() => router.push(`/inspection/${inspection.id}`)}
+                      onPress={() => router.push(`/inspection/${inspection.id}`)}
+                      activeOpacity={0.8}
                       accessible
                       accessibilityRole="button"
                       accessibilityLabel={`View visit on ${formatDateTime(inspection.scheduled_at)}`}
@@ -1102,7 +1104,7 @@ export default function PropertyDetailScreen() {
                       </View>
 
                       <Icon name="chevron-right" size={20} color={theme.colors.onSurfaceVariant} style={{ alignSelf: 'center' }} />
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </Surface>
@@ -1203,9 +1205,10 @@ export default function PropertyDetailScreen() {
                       ]}
                       elevation={isSelected ? 1 : 0}
                     >
-                      <View
+                      <TouchableOpacity
                         style={styles.contactOptionTouchable}
-                        onTouchEnd={() => setSelectedContactId(contact.id)}
+                        onPress={() => setSelectedContactId(contact.id)}
+                        activeOpacity={0.8}
                         accessible
                         accessibilityRole="button"
                       >
@@ -1222,7 +1225,7 @@ export default function PropertyDetailScreen() {
                             </Text>
                           )}
                         </View>
-                      </View>
+                      </TouchableOpacity>
                     </Surface>
                   );
                 })}

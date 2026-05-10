@@ -57,7 +57,7 @@ All four are gated on `if (__DEV__)` (the JS log calls) or `{__DEV__ && …}` (t
 - **Web CanvasViewControls missing zoom.** Web canvas needs its own pinch/scroll-wheel handler before the buttons can usefully scale the camera. Deferred until web canvas v3.
 - **Web parity for Quick Arrange + Move/Edit removal.** Mobile-first per convention; web parity sprint will follow.
 - **Dev instrumentation cleanup.** The four diagnostic channels above are still in the codebase. They're DEV-only and zero production cost, but should be removed in a follow-up commit once the canvas has been stable for a few sessions. Keeping them now in case any related regression surfaces.
-- **Pinch with focal at world edges.** When pinching out around a focal point near `(0, 0)` or `(WORLD, WORLD)`, the algebra wants to push the camera *outside* the valid clamp range, so the focal point doesn't stay perfectly anchored under the user's fingers. This is the natural cost of the clamp policy ("never expose space outside the world") and not a regression — the previous implementation had the same behavior, masked by the rect-drift bug. Worth revisiting if a partner reports it as confusing.
+- **Piada
 
 ### Verified
 

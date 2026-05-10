@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View, FlatList, RefreshControl } from 'react-native';
+import { StyleSheet, View, FlatList, RefreshControl, Pressable } from 'react-native';
 import { FAB, useTheme, Text, Chip, ActivityIndicator, Surface, SegmentedButtons } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -47,8 +47,8 @@ export default function CampaignsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchEmailCampaigns();
-      fetchSmsCampaigns();
+      void fetchEmailCampaigns();
+      void fetchSmsCampaigns();
     }, [fetchEmailCampaigns, fetchSmsCampaigns])
   );
 
@@ -64,9 +64,15 @@ export default function CampaignsScreen() {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    if (channel === 'email') await fetchEmailCampaigns();
-    else await fetchSmsCampaigns();
-    setRefreshing(false);
+    try {
+      if (channel === 'email') {
+        await fetchEmailCampaigns();
+      } else {
+        await fetchSmsCampaigns();
+      }
+    } finally {
+      setRefreshing(false);
+    }
   }, [channel, fetchEmailCampaigns, fetchSmsCampaigns]);
 
   const renderEmailItem = useCallback(
@@ -78,9 +84,11 @@ export default function CampaignsScreen() {
           : null;
       return (
         <Surface style={styles.card} elevation={1}>
-          <View
+          <Pressable
             style={styles.cardContent}
-            onTouchEnd={() => router.push(`/campaigns/${item.id}`)}
+            onPress={() => router.push(`/campaigns/${item.id}`)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open email campaign ${item.name}`}
           >
             <View style={styles.cardHeader}>
               <Text variant="titleMedium" numberOfLines={1} style={{ flex: 1 }}>
@@ -122,7 +130,7 @@ export default function CampaignsScreen() {
                 </View>
               )}
             </View>
-          </View>
+          </Pressable>
         </Surface>
       );
     },
@@ -137,9 +145,11 @@ export default function CampaignsScreen() {
       const failed = item.failed_count ?? 0;
       return (
         <Surface style={styles.card} elevation={1}>
-          <View
+          <Pressable
             style={styles.cardContent}
-            onTouchEnd={() => router.push(`/campaigns/sms/${item.id}` as never)}
+            onPress={() => router.push(`/campaigns/sms/${item.id}` as never)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open SMS campaign ${item.name}`}
           >
             <View style={styles.cardHeader}>
               <Text variant="titleMedium" numberOfLines={1} style={{ flex: 1 }}>
@@ -181,7 +191,7 @@ export default function CampaignsScreen() {
                 </View>
               )}
             </View>
-          </View>
+          </Pressable>
         </Surface>
       );
     },
