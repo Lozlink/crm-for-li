@@ -77,12 +77,12 @@ export function WhiteboardCanvas({
   // produced a race where both wrote to cameraX/cameraY each frame, causing
   // the minimap viewport rect to flicker between two values during pinch.
   //
-  // Solution: track the *current* focal point (`e.focalX/Y`) on the LHS of the
-  // algebra. The world point originally under (startFocalX, startFocalY) at
-  // scaleOld is anchored to (e.focalX, e.focalY) at scaleNew. This handles both
-  // scale change AND centroid translation in one update, so two-finger drag
-  // without zoom (e.scale ≈ 1) still produces clean panning via the same
-  // formula:  cameraX_new = e.focalX - startFocalX + startX  when scaleNew=scaleOld.
+  //   // Solution: track the *current* focal point (`e.focalX/Y`) on the LHS of the
+  //   // algebra. The world point originally under (startFocalX, startFocalY) at
+  //   // scaleOld is anchored to (e.focalX, e.focalY) at scaleNew. This handles both
+  //   // scale change AND centroid translation in one update, so two-finger drag
+  //   // without zoom (e.scale ≈ 1) still produces clean panning via the same
+  //   // formula:  cameraX_new = e.focalX - startFocalX + startX  when scaleNew=scaleOld.
   //
   // Form A transform: screen = camera + world * scale.
   // worldX_at_startFocal = (startFocalX - startX) / scaleOld
@@ -125,13 +125,20 @@ export function WhiteboardCanvas({
   // an item doesn't accidentally trigger a canvas pan.
   // Android bumped further (14pt) to match the item's raised 8pt threshold —
   // keeping the ratio consistent avoids canvas pan winning over item taps on
-  // noisy Android touchscreens.
+  // noisy Android touchscreens. If a second finger lands after this pan has
+  // already begun, we fail it immediately so the pinch gesture becomes the only
+  // camera writer for the rest of that multi-touch interaction.
   const CANVAS_PAN_MIN_DISTANCE = Platform.select({ android: 14, default: 8 });
 
   const movePan = Gesture.Pan()
     .minPointers(1)
     .maxPointers(1)
     .minDistance(CANVAS_PAN_MIN_DISTANCE)
+    .onTouchesDown((e, stateManager) => {
+      if (e.numberOfTouches > 1) {
+        stateManager.fail();
+      }
+    })
     .onStart(() => {
       startX.value = cameraX.value;
       startY.value = cameraY.value;
