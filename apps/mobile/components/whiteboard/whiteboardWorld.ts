@@ -93,6 +93,16 @@ export function padBounds(b: ContentBounds, pad: number): ContentBounds {
  * @param boundsMax content-bounds maximum on this axis (world coords).
  * @param scale     current camera scale.
  */
+/**
+ * Minimum screen-pt of the bounds rect that must remain visible inside the
+ * viewport. Keeps the user from wandering arbitrarily far past their items
+ * at low zoom while never triggering a force-center override. ~10% of a
+ * typical phone viewport — enough that the user always has at least a sliver
+ * of bounds on screen, and enough that the minimap rect always retains some
+ * overlap with the items cluster.
+ */
+const MIN_VISIBLE_PX = 80;
+
 export function clampCameraAxis(
   value: number,
   viewport: number,
@@ -101,21 +111,52 @@ export function clampCameraAxis(
   scale: number,
 ): number {
   'worklet';
-  const upper = -boundsMin * scale;            // bounds-left flush with screen-left
-  const lower = viewport - boundsMax * scale;  // bounds-right flush with screen-right
-  if (lower > upper) {
-    // Bounds rect fits inside the viewport at this scale (zoomed-out OR
-    // small board). DO NOT force a centered position here — that override
-    // breaks the focal-anchor math in cameraPinch.onUpdate (the world point
-    // under the user's fingers gets snapped to a different screen position
-    // mid-pinch, felt as the camera "panning" during zoom). Letting the
-    // caller's value through means: at zoom-out, the camera stays where the
-    // focal-anchor put it; the user sees the items stay under their fingers
-    // exactly as expected. Recentering on demand is now Home / Fit-All's job.
+  // ── Branch 1: bounds covers viewport ────────────────────────────────────
+  // When bounds×scale ≥ viewport, use the strict cover rule: the bounds
+  // rect must always cover the viewport rect entirely. This is what
+  // prevents empty canvas at the edges when items are big OR the user is
+  // zoomed in.
+  const coverUpper = -boundsMin * scale;
+  const coverLower = viewport - boundsMax * scale;
+  if (coverLower <= coverUpper) {
+    if (value < coverLower) return coverLower;
+    if (value > coverUpper) return coverUpper;
     return value;
   }
-  if (value < lower) return lower;
-  if (value > upper) return upper;
+
+  // ── Branch 2: bounds smaller than viewport ──────────────────────────────
+  // Cover rule can't be satisfied (zoomed out, OR small board). Earlier
+  // revisions tried two wrong things here:
+  //
+  //   (a) Force-center the bounds in viewport. Override broke the focal-
+  //       anchor math in cameraPinch.onUpdate — the camera lurched
+  //       mid-pinch ("zoom out pans"). What you saw in the 8:18 video.
+  //
+  //   (b) Return value unchanged. Removed all clamping at low zoom →
+  //       cameraY drifted to ±1400+ values, items entirely off-screen,
+  //       minimap rect fell off the minimap surface. What you saw in the
+  //       8:31 video.
+  //
+  // Right answer: require the bounds rect to *intersect* the viewport
+  // with at least MIN_VISIBLE_PX of overlap. This:
+  //   • never triggers a force-center, so focal-anchor is preserved during
+  //     pinch (no "zoom-pan");
+  //   • prevents the user from wandering to cameraY=1400, since the bounds
+  //     rect can never fully exit the viewport;
+  //   • guarantees the minimap rect always overlaps the items cluster by
+  //     at least MIN_VISIBLE_PX × scale projected onto the minimap.
+  //
+  // Constraints on a single axis:
+  //   bounds-RIGHT must stay ≥ MIN_VISIBLE_PX from screen-LEFT:
+  //     camera + boundsMax*scale ≥ MIN_VISIBLE_PX
+  //     → camera ≥ MIN_VISIBLE_PX - boundsMax*scale
+  //   bounds-LEFT must stay ≤ viewport - MIN_VISIBLE_PX from screen-LEFT:
+  //     camera + boundsMin*scale ≤ viewport - MIN_VISIBLE_PX
+  //     → camera ≤ viewport - MIN_VISIBLE_PX - boundsMin*scale
+  const min = MIN_VISIBLE_PX - boundsMax * scale;
+  const max = viewport - MIN_VISIBLE_PX - boundsMin * scale;
+  if (value < min) return min;
+  if (value > max) return max;
   return value;
 }
 
@@ -138,18 +179,22 @@ export function rubberbandCameraAxis(
   rubber: number = 0.4,
 ): number {
   'worklet';
-  const upper = -boundsMin * scale;
-  const lower = viewport - boundsMax * scale;
-  if (lower > upper) {
-    // Bounds fits inside viewport at this scale — no rubberband resistance,
-    // free panning. The previous implementation pulled the camera back toward
-    // a "centered rest position" with rubberband, which made small/zoomed-out
-    // boards feel pinned to the screen center. Mirrors the same change in
-    // clampCameraAxis above; together they fix the "zoom-out pans" bug.
+  // Mirrors the two-branch logic in clampCameraAxis: cover rule when bounds
+  // covers viewport, intersect+min-visible rule otherwise. Past either
+  // boundary, motion proceeds with reduced sensitivity (rubber=0.4 → 100pt
+  // of finger drag past the edge produces 40pt of camera move). Trailing
+  // snap-back is the gesture's `.onEnd` job (uses clampCameraAxis directly).
+  const coverUpper = -boundsMin * scale;
+  const coverLower = viewport - boundsMax * scale;
+  if (coverLower <= coverUpper) {
+    if (value > coverUpper) return coverUpper + (value - coverUpper) * rubber;
+    if (value < coverLower) return coverLower - (coverLower - value) * rubber;
     return value;
   }
-  if (value > upper) return upper + (value - upper) * rubber;
-  if (value < lower) return lower - (lower - value) * rubber;
+  const min = MIN_VISIBLE_PX - boundsMax * scale;
+  const max = viewport - MIN_VISIBLE_PX - boundsMin * scale;
+  if (value > max) return max + (value - max) * rubber;
+  if (value < min) return min - (min - value) * rubber;
   return value;
 }
 

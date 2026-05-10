@@ -101,19 +101,22 @@ export default function WhiteboardScreen() {
     return { minX, minY, maxX, maxY };
   }, [items]);
 
-  // Effective camera/minimap bounds: the items' bbox padded by ~one viewport
-  // so the user has breathing room to pan past existing items and drop new
-  // ones in open space. When the board is empty, fall back to the abstract
-  // world rect so panning still works.
+  // Effective camera/minimap bounds: items' bbox + breathing room.
   //
-  // This is the single source of truth for "where is the camera allowed to
-  // roam" — it replaces the old `clampCameraTranslate(_, _, WORLD_WIDTH, _)`
-  // pattern that let the user drift into vast empty world. Threaded into
+  // Padding is half of max(viewportW, viewportH). Earlier rev used a full
+  // viewport, which pushed items down to ~30% of the minimap surface (the
+  // dots felt small and far apart). Half-viewport keeps items at ~50–60% of
+  // the minimap, which feels more like a real map; the user still has plenty
+  // of pan range to drop new items in open space because clampCameraAxis's
+  // intersect+MIN_VISIBLE_PX rule grants additional headroom past the bounds
+  // boundaries even at the strictest cover-viewport regime.
+  //
+  // Single source of truth for "where the camera can roam" — used by
   // WhiteboardCanvas (pan/pinch clamp), Minimap (projection), CanvasViewControls
   // (zoom + reset target), and OverviewSheet (tap-to-pan destination clamp).
   const effectiveBounds = useMemo<ContentBounds>(() => {
     if (!itemBounds) return DEFAULT_WORLD_BOUNDS;
-    return padBounds(itemBounds, Math.max(screenW, screenH));
+    return padBounds(itemBounds, Math.max(screenW, screenH) / 2);
   }, [itemBounds, screenW, screenH]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
