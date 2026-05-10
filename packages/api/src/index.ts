@@ -45,4 +45,4 @@ export { buildMapDeepLink } from './buildMapDeepLink';
 export type { MapDeepLinkInput } from './buildMapDeepLink';
 
 // Whiteboard photos
-export { uploadWhiteboardPhotoBuffer } from './whiteboardPhotos';
+export { uploadWhiteboardPhotoBuffer, uploadWhiteboardPhotoFile } from './whiteboardPhotos';

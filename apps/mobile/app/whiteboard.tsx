@@ -510,6 +510,13 @@ export default function WhiteboardScreen() {
             cameraX={cameraX}
             cameraY={cameraY}
             cameraScale={cameraScale}
+            // Raw items bbox (no padding) — half of the dynamic union projection.
+            // The other half (visible-viewport-in-world) is computed per frame
+            // inside Minimap from the camera shared values.
+            itemsBounds={itemBounds ?? DEFAULT_WORLD_BOUNDS}
+            // Padded effective bounds — used only for tap-to-pan target clamp
+            // so taps near the minimap edge land at a position the canvas
+            // pan-gesture would itself allow.
             bounds={effectiveBounds}
             viewportW={screenW}
             viewportH={screenH}

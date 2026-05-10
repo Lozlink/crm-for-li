@@ -27,7 +27,7 @@ import type {
   WhiteboardPropertyContent,
   WhiteboardStickyContent,
 } from '@realestate-crm/types';
-import { generateUUID, isDemoMode, reverseGeocode, uploadWhiteboardPhotoBuffer } from '@realestate-crm/api';
+import { generateUUID, isDemoMode, reverseGeocode, uploadWhiteboardPhotoFile } from '@realestate-crm/api';
 import { useCRMStore, usePropertyStore } from '@realestate-crm/hooks';
 import { STICKY_COLOR_DEFS, stickyColorKey } from './whiteboardColors';
 import { useColorScheme } from 'react-native';
@@ -44,17 +44,6 @@ const GOAL_PERIODS: { value: WhiteboardGoalPeriod; label: string }[] = [
   { value: 'month', label: 'This month' },
   { value: 'quarter', label: 'This quarter' },
 ];
-
-function decodeBase64ToArrayBuffer(base64: string): ArrayBuffer {
-  const normalized = base64.replace(/\s/g, '');
-  if (typeof globalThis.atob !== 'function') {
-    throw new Error('Base64 decoder unavailable on this device.');
-  }
-
-  const binary = globalThis.atob(normalized);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  return bytes.buffer;
-}
 
 /**
  * Per-entry editor for checklist rows.
@@ -356,38 +345,32 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
       return `https://picsum.photos/seed/${Math.floor(Math.random() * 1000)}/400/300`;
     }
     try {
-      const base64Payload = asset.base64 ?? null;
-      if (!base64Payload) {
-        setPhotoError('Selected photo did not include upload data. Please try a different image.');
+      // 2026-05-11: switched from ArrayBuffer upload to FormData/file-URI
+      // upload because `supabase.storage.upload(buffer, ...)` silently fails
+      // on production Android (RN OkHttp ArrayBuffer body issue). The new
+      // path uploads from `asset.uri` directly via multipart fetch — works
+      // identically on iOS and Android. See uploadWhiteboardPhotoFile.
+      if (!asset.uri) {
+        setPhotoError('Selected photo had no local URI. Please try a different image.');
         return null;
       }
 
       const mimeType = asset.mimeType || 'image/jpeg';
+      // Surface a size hint when available so users don't think the upload
+      // is stuck (picker's `fileSize` is in bytes, optional).
+      const sizeHint =
+        typeof asset.fileSize === 'number' && asset.fileSize > 0
+          ? ` (${(asset.fileSize / 1024).toFixed(0)} KB)`
+          : '';
+      setPhotoError(`Uploading ${mimeType}${sizeHint}…`);
 
-      // Diagnostic: surface payload size so silent native file-body failures are
-      // visible without needing Metro logs. Cleared on success.
-      setPhotoError(`Preparing ${mimeType} upload…`);
-
-      const fileBuffer = decodeBase64ToArrayBuffer(base64Payload);
-      const byteCount = fileBuffer.byteLength;
-
-      if (byteCount === 0) {
-        setPhotoError(
-          'Photo read returned 0 bytes. Try a different image or report this.',
-        );
-        console.warn('Photo upload aborted — 0 byte buffer. Asset URI:', asset.uri);
-        return null;
-      }
-
-      setPhotoError(`Uploading ${byteCount.toLocaleString()} bytes…`);
-
-      const publicUrl = await uploadWhiteboardPhotoBuffer({
-        data: fileBuffer,
+      const publicUrl = await uploadWhiteboardPhotoFile({
+        uri: asset.uri,
         mimeType: asset.mimeType,
         fileName: asset.fileName,
       });
 
-      console.log('Photo uploaded:', publicUrl, `(${byteCount} bytes)`);
+      console.log('Photo uploaded:', publicUrl);
       // Clear the diagnostic on success so the UI returns to the normal state.
       setPhotoError(null);
       return publicUrl;
@@ -431,7 +414,10 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.8,
       allowsEditing: true,
-      base64: true,
+      // base64=false: we upload via file URI now (FormData multipart), so the
+      // base64 payload is no longer needed. Skipping it saves ~5MB of JS-heap
+      // memory per photo on Android (used to OOM on big captures).
+      base64: false,
       exif: false,
     });
     if (result.canceled || !result.assets[0]) return;
@@ -449,7 +435,10 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.8,
       allowsEditing: true,
-      base64: true,
+      // base64=false: we upload via file URI now (FormData multipart), so the
+      // base64 payload is no longer needed. Skipping it saves ~5MB of JS-heap
+      // memory per photo on Android (used to OOM on big captures).
+      base64: false,
       exif: false,
     });
     if (result.canceled || !result.assets[0]) return;

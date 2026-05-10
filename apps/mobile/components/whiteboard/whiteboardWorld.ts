@@ -111,14 +111,21 @@ export function clampCameraAxis(
   scale: number,
 ): number {
   'worklet';
-  // ── Branch 1: bounds covers viewport ────────────────────────────────────
-  // When bounds×scale ≥ viewport, use the strict cover rule: the bounds
-  // rect must always cover the viewport rect entirely. This is what
-  // prevents empty canvas at the edges when items are big OR the user is
-  // zoomed in.
+  // ── Branch 1: bounds STRICTLY covers viewport ───────────────────────────
+  // When bounds×scale > viewport (strict inequality), use the cover rule:
+  // bounds must always cover viewport entirely → prevents empty canvas at
+  // the edges when items are big OR the user is zoomed in.
+  //
+  // STRICT inequality is important. At exact equality (coverLower ==
+  // coverUpper), the cover range degenerates to a single value — any
+  // proposed `value` gets clamped to that one point, which is a force-pin
+  // in disguise. Symptom: zoom-out where bounds*scale happens to equal
+  // viewport (common when bounds ≈ items + pad and pad ≈ ½ viewport) pins
+  // cameraY to 0 regardless of focal point, manifesting as a downward pan.
+  // The fix is to fall through to intersect+margin at equality.
   const coverUpper = -boundsMin * scale;
   const coverLower = viewport - boundsMax * scale;
-  if (coverLower <= coverUpper) {
+  if (coverLower < coverUpper) {
     if (value < coverLower) return coverLower;
     if (value > coverUpper) return coverUpper;
     return value;
@@ -186,7 +193,11 @@ export function rubberbandCameraAxis(
   // snap-back is the gesture's `.onEnd` job (uses clampCameraAxis directly).
   const coverUpper = -boundsMin * scale;
   const coverLower = viewport - boundsMax * scale;
-  if (coverLower <= coverUpper) {
+  // Strict inequality — see clampCameraAxis for the rationale. At equality
+  // the cover range degenerates to a single value and the rubberband would
+  // try to pull the user back to that pinned point during a gesture, which
+  // is the force-pin behavior we want to avoid.
+  if (coverLower < coverUpper) {
     if (value > coverUpper) return coverUpper + (value - coverUpper) * rubber;
     if (value < coverLower) return coverLower - (coverLower - value) * rubber;
     return value;

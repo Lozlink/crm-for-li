@@ -423,6 +423,20 @@ const styles = StyleSheet.create({
     // Deliberately large so absolutely-positioned items stay visible when panning.
     width: WORLD_WIDTH,
     height: WORLD_HEIGHT,
+    // CRITICAL: transformOrigin default in RN is '50% 50%' (the element's
+    // center). For a 4000×4000 world layer, that means `scale(s)` shifts all
+    // children by (1-s) * 2000 on each axis — at scale=0.64 that's 720pt of
+    // offset, pushing every item off-screen.
+    //
+    // Setting origin to top-left makes the camera transform math actually
+    // match its written form: `screen = cameraXY + world * scale`. Without
+    // this, every camera-clamp / minimap-projection / item-placement
+    // calculation in this codebase is silently wrong at any scale != 1.0.
+    //
+    // Symptom this fixes: items rendered correctly at scale=1.0 but
+    // disappeared as soon as the user zoomed out, even though minimap +
+    // dev overlay said they should be visible.
+    transformOrigin: '0% 0%',
   },
   dotRow: {
     flexDirection: 'row',

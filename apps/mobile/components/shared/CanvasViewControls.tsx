@@ -126,19 +126,49 @@ export function CanvasViewControls({
   };
 
   /**
-   * Home behavior:
-   *   - Items exist → Fit-All (frame the items, not the abstract world origin).
-   *     Pre-2026-05-10 this went to (0, 0, scale=1) which left users staring
-   *     at empty canvas when items lived elsewhere — exactly the "I clicked
-   *     home and nothing's there" case the screen recording showed.
-   *   - Empty board → reset to default origin so a brand-new user lands
-   *     somewhere sensible.
+   * Home behavior — distinct from Fit-All:
+   *   - Items exist → recenter on the items cluster at scale=1.0. Gives
+   *     the user a "normal zoom" view rather than a fit-all overview.
+   *     Different from Fit-All (which picks a smaller scale to frame
+   *     *everything*); useful when you've panned away and want to return
+   *     to a comfortable working zoom that's still on the items.
+   *   - Empty board → reset to default origin.
+   *
+   * Pre-2026-05-10 Home went to (0, 0, scale=1) regardless of where items
+   * lived, which left users staring at empty canvas. Pre-2026-05-11 Home
+   * called fitTo() — but that duplicated the Fit-All button. Now: Home
+   * centers items at scale=1 (a useful, distinct destination).
    */
   const handleReset = () => {
     if (fitTarget) {
-      fitTo(fitTarget);
+      const { minX, minY, maxX, maxY } = fitTarget;
+      const worldCenterX = minX + (maxX - minX) / 2;
+      const worldCenterY = minY + (maxY - minY) / 2;
+      const next = 1; // Home always returns to 1× zoom.
+      cameraScale.value = withTiming(next, { duration: ANIM_DURATION });
+      cameraX.value = withTiming(
+        clampCameraAxis(
+          viewportW / 2 - worldCenterX * next,
+          viewportW,
+          bounds.minX,
+          bounds.maxX,
+          next,
+        ),
+        { duration: ANIM_DURATION },
+      );
+      cameraY.value = withTiming(
+        clampCameraAxis(
+          viewportH / 2 - worldCenterY * next,
+          viewportH,
+          bounds.minY,
+          bounds.maxY,
+          next,
+        ),
+        { duration: ANIM_DURATION },
+      );
       return;
     }
+    // Empty board fallback — origin reset.
     cameraScale.value = withTiming(1, { duration: ANIM_DURATION });
     cameraX.value = withTiming(
       clampCameraAxis(0, viewportW, DEFAULT_WORLD_BOUNDS.minX, DEFAULT_WORLD_BOUNDS.maxX, 1),
@@ -184,7 +214,7 @@ export function CanvasViewControls({
         size={20}
         onPress={handleReset}
         style={styles.btn}
-        accessibilityLabel={fitTarget ? 'Recenter on items' : 'Reset view'}
+        accessibilityLabel={fitTarget ? 'Recenter on items at 1× zoom' : 'Reset view'}
       />
       {onQuickArrange ? (
         <>

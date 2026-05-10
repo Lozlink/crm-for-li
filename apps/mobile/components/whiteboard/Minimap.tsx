@@ -2,7 +2,12 @@ import { useCallback, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { Text, Surface, useTheme } from 'react-native-paper';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  useDerivedValue,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { WhiteboardItem, WhiteboardItemType } from '@realestate-crm/types';
 import {
@@ -51,12 +56,17 @@ interface Props {
   cameraY: SharedValue<number>;
   cameraScale: SharedValue<number>;
   /**
-   * Effective minimap bounds — the content region the minimap projects.
-   * In practice this is items' bbox + ~one viewport of padding (computed by
-   * the parent), so dots fill the minimap meaningfully instead of clustering
-   * in 3% of it (the pre-2026-05-10 bug — items lived in <10% of the abstract
-   * 4000×4000 world rect, so MINIMAP_SCALE = 140/4000 collapsed them into a
-   * tiny corner).
+   * RAW items' bounding box (no padding). Used as one of the two inputs to the
+   * dynamic union projection: `displayBounds = union(itemsBounds, visibleWorldRect)`.
+   * This gives items a stable position in the minimap as long as the viewport
+   * stays within or near them, and lets the projection expand to keep the rect
+   * inside the minimap when the user pans far away.
+   */
+  itemsBounds: ContentBounds;
+  /**
+   * Padded effective bounds — what the *canvas* clamps to. Used ONLY for tap-
+   * to-pan target clamping, so a tap near a minimap edge lands at a position
+   * the canvas pan-gesture would itself allow. NOT used for display projection.
    */
   bounds: ContentBounds;
   viewportW: number;
@@ -64,28 +74,41 @@ interface Props {
 }
 
 /**
- * Minimap — a persistent corner overlay showing all board items as colored
- * dots within the content bounds, plus a stroked viewport rectangle.
+ * Minimap — persistent corner overlay showing items as colored dots plus a
+ * stroked viewport rectangle.
  *
- * Coordinate system note: items have world-coordinate positions, but the
- * minimap shows the BOUNDS region (not the abstract world). All projections
- * subtract `bounds.minX/Y` so the bounds top-left maps to (0, 0) on the
- * minimap, then multiply by the per-axis minimap scale.
+ * ── Dynamic union projection (2026-05-10) ───────────────────────────────────
+ * Earlier revs projected against a fixed `bounds` rect (items + padding):
+ *   - When the viewport happened to be bigger than `bounds`, the rect overflowed
+ *     the minimap with `overflow:hidden` clipping it — looked like a giant rect.
+ *   - When the user panned far past `bounds`, the rect rendered outside the
+ *     minimap surface entirely → disappeared.
  *
- *   minimapX = (worldX - bounds.minX) * (MINIMAP_W / boundsW)
+ * New projection: `displayBounds = union(itemsBounds, visibleWorldRect)`,
+ * recomputed each frame via `useDerivedValue`. Both the items cluster AND
+ * the viewport rect are always fully inside the minimap. The minimap rescales
+ * dynamically as the user pans — items shrink slightly when the user wanders,
+ * but they're always visible. This is the projection model Figma/Miro use.
  *
- * Tap-to-pan reverses this:
- *   worldX = bounds.minX + tapX_in_minimap / (MINIMAP_W / boundsW)
- *   cameraX = viewport/2 - worldX * scale (then clamped against bounds)
+ * Per-item animated style (one `useAnimatedStyle` per dot via `MinimapDot`)
+ * is needed because `displayBounds` changes per frame, so the item dots' scale
+ * and offset also change per frame.
  *
- * DO NOT distribute scale across the whole expression — that was an earlier
- * bug: (screen/2 - worldX) * scale only matches at scale=1.
+ * ── Tap-to-pan math ─────────────────────────────────────────────────────────
+ * Reverse the projection using the CURRENT `displayBounds.value`:
+ *   worldX = displayBounds.minX + tapX_in_minimap / scaleX
+ *   cameraX = viewport/2 - worldX * scale  (then clamped against `bounds`)
+ *
+ * `bounds` (the padded effective bounds) is used for the final clamp so the
+ * resulting camera position matches what the canvas pan-gesture would itself
+ * accept — keeps the two in sync.
  */
 export function Minimap({
   items,
   cameraX,
   cameraY,
   cameraScale,
+  itemsBounds,
   bounds,
   viewportW,
   viewportH,
@@ -94,25 +117,40 @@ export function Minimap({
   const colorScheme = useColorScheme();
   const [collapsed, setCollapsed] = useState(false);
 
-  // Per-axis minimap scales derived from the *bounds* extent, not the
-  // abstract world. Guard against zero-size bounds (would never happen in
-  // practice since the parent pads by ~one viewport, but the math should
-  // still degrade gracefully).
-  const boundsW = Math.max(1, bounds.maxX - bounds.minX);
-  const boundsH = Math.max(1, bounds.maxY - bounds.minY);
-  const scaleX = MINIMAP_W / boundsW;
-  const scaleY = MINIMAP_H / boundsH;
+  // Dynamic display bounds = union of items' bbox and the current visible
+  // viewport (in world coords). Recomputed on UI thread whenever cameraX/Y/scale
+  // change. Both items and viewport rect project against this — by construction,
+  // both always fit inside the minimap surface.
+  const displayBounds = useDerivedValue(() => {
+    const scale = cameraScale.value || 1;
+    const visibleLeft = -cameraX.value / scale;
+    const visibleTop = -cameraY.value / scale;
+    const visibleRight = visibleLeft + viewportW / scale;
+    const visibleBottom = visibleTop + viewportH / scale;
+    return {
+      minX: Math.min(itemsBounds.minX, visibleLeft),
+      minY: Math.min(itemsBounds.minY, visibleTop),
+      maxX: Math.max(itemsBounds.maxX, visibleRight),
+      maxY: Math.max(itemsBounds.maxY, visibleBottom),
+    };
+  });
 
   const panWorldPoint = useCallback(
     (tapXInMinimap: number, tapYInMinimap: number) => {
-      // Convert minimap-local tap → world coords by reversing the projection
-      // (add bounds origin, divide by minimap scale).
-      const worldX = bounds.minX + tapXInMinimap / scaleX;
-      const worldY = bounds.minY + tapYInMinimap / scaleY;
+      // Convert minimap tap → world coords using the CURRENT displayBounds.
+      // Reading `.value` from JS thread can be a frame stale; for a tap that's
+      // imperceptible.
+      const db = displayBounds.value;
+      const dbW = Math.max(1, db.maxX - db.minX);
+      const dbH = Math.max(1, db.maxY - db.minY);
+      const sX = MINIMAP_W / dbW;
+      const sY = MINIMAP_H / dbH;
+      const worldX = db.minX + tapXInMinimap / sX;
+      const worldY = db.minY + tapYInMinimap / sY;
       const scale = cameraScale.value || 1;
-      // Center the tapped world point in the viewport, then clamp the result
-      // against the same content bounds the canvas uses — keeps the camera
-      // honest at the minimap's edge instead of overshooting into padding.
+      // Center the tapped world point in the viewport. Clamp against the
+      // CANVAS pan bounds (`bounds` prop) so the result is a position the
+      // canvas itself would allow.
       const targetX = clampCameraAxis(
         viewportW / 2 - worldX * scale,
         viewportW,
@@ -130,7 +168,7 @@ export function Minimap({
       cameraX.value = withTiming(targetX, { duration: PAN_DURATION_MS });
       cameraY.value = withTiming(targetY, { duration: PAN_DURATION_MS });
     },
-    [bounds, scaleX, scaleY, cameraX, cameraY, cameraScale, viewportW, viewportH],
+    [displayBounds, bounds, cameraX, cameraY, cameraScale, viewportW, viewportH],
   );
 
   // Tap gesture — pan camera to tapped world point.
@@ -149,44 +187,28 @@ export function Minimap({
 
   const minimapGesture = Gesture.Simultaneous(tapGesture, dragGesture);
 
-  // Viewport rect driven by useAnimatedStyle so it updates on the UI thread
-  // in real time as the camera moves — React render is NOT subscribed to
-  // SharedValue changes, so reading `.value` in JSX only works at mount/re-render.
-  //
-  // Math: the visible world area's top-left in WORLD coords is
-  // (-cameraX/scale, -cameraY/scale). To project onto the minimap (which is
-  // anchored at bounds.minX/Y), subtract the bounds origin first. The
-  // visible window has size (viewportW/scale, viewportH/scale) in world coords,
-  // multiplied by the minimap scale to render.
+  // Viewport rect — projects against the current displayBounds on the UI
+  // thread. Since displayBounds ⊇ visibleWorldRect by construction, the rect
+  // ALWAYS fits fully inside the minimap surface. No more overflow clipping.
   const viewportRectStyle = useAnimatedStyle(() => {
     const scale = cameraScale.value || 1;
+    const db = displayBounds.value;
+    const dbW = Math.max(1, db.maxX - db.minX);
+    const dbH = Math.max(1, db.maxY - db.minY);
+    const sX = MINIMAP_W / dbW;
+    const sY = MINIMAP_H / dbH;
     const worldVisibleX = -cameraX.value / scale;
     const worldVisibleY = -cameraY.value / scale;
-    // Project the visible-world rect into bounds-space, then onto the minimap.
-    // Earlier rev clamped `left/top` to [0..MINIMAP_*] but left `width/height`
-    // unclamped — meaning when the camera was past the bounds origin (e.g.
-    // visible world starts at y=-251 because the user panned above the
-    // padded bounds), the rect rendered at top=0 with full height,
-    // *pinned* to the minimap top-edge regardless of where the user
-    // actually was. Symptom from logs: cameraY varied but `top` stayed at
-    // 0.00 — the rect didn't track the camera at all.
-    //
-    // Fix: don't clamp at all. Render the rect at its true projected
-    // position with its true projected size. The container View already
-    // has overflow:hidden, so portions extending past the minimap edge
-    // are correctly cut off. The visible portion always represents the
-    // actual on-screen visible-world region — which is what the user
-    // expects "minimap rect" to mean.
-    const left = (worldVisibleX - bounds.minX) * scaleX;
-    const top = (worldVisibleY - bounds.minY) * scaleY;
-    const width = (viewportW / scale) * scaleX;
-    const height = (viewportH / scale) * scaleY;
+    const left = (worldVisibleX - db.minX) * sX;
+    const top = (worldVisibleY - db.minY) * sY;
+    const width = (viewportW / scale) * sX;
+    const height = (viewportH / scale) * sY;
 
     if (__DEV__) {
       console.log(
-        `[whiteboard:minimap-rect] cameraX=${cameraX.value.toFixed(1)} cameraY=${cameraY.value.toFixed(1)} scale=${scale.toFixed(4)}` +
-        ` worldVisibleX=${worldVisibleX.toFixed(1)} worldVisibleY=${worldVisibleY.toFixed(1)}` +
-        ` left=${left.toFixed(2)} top=${top.toFixed(2)} width=${width.toFixed(2)} height=${height.toFixed(2)}`,
+        `[whiteboard:minimap-rect] cam=(${cameraX.value.toFixed(1)},${cameraY.value.toFixed(1)},${scale.toFixed(3)})` +
+        ` db=(${db.minX.toFixed(0)}..${db.maxX.toFixed(0)},${db.minY.toFixed(0)}..${db.maxY.toFixed(0)})` +
+        ` rect=(${left.toFixed(1)},${top.toFixed(1)},${width.toFixed(1)},${height.toFixed(1)})`,
       );
     }
 
@@ -235,51 +257,83 @@ export function Minimap({
               { backgroundColor: theme.colors.surfaceVariant },
             ]}
           >
-          {/* Item dots — positioned via transform rather than left/top.
-              On Android, an absolutely-positioned View inside an overflow:hidden
-              parent can cache its layout bounds and not pick up subsequent
-              `left/top` changes when items are dragged or migrated. Going through
-              transform (translateX/Y) routes the position through the GPU
-              compositor, which always picks up the new value, AND is slightly
-              cheaper. Width/height stay as layout props since they don't change
-              after first render for a given item. */}
-          {items.map((item) => {
-            // Per-axis projection via bounds origin (NOT abstract world origin).
-            const x = (item.position_x - bounds.minX) * scaleX;
-            const y = (item.position_y - bounds.minY) * scaleY;
-            const w = Math.max(2, item.width * scaleX);
-            const h = Math.max(2, item.height * scaleY);
-            const color = itemDotColor(item, colorScheme);
-            return (
-              <View
+            {/* Item dots — each dot is its own animated component because the
+                projection (displayBounds) changes per frame as the user pans.
+                One useAnimatedStyle per dot lets each dot rescale on the UI
+                thread without re-rendering the parent. Acceptable cost for
+                whiteboards of typical size (10s of items). */}
+            {items.map((item) => (
+              <MinimapDot
                 key={item.id}
-                style={[
-                  styles.dot,
-                  {
-                    width: w,
-                    height: h,
-                    backgroundColor: color,
-                    transform: [{ translateX: x }, { translateY: y }],
-                  },
-                ]}
+                item={item}
+                color={itemDotColor(item, colorScheme)}
+                displayBounds={displayBounds}
               />
-            );
-          })}
+            ))}
 
-          {/* Viewport rect — driven by useAnimatedStyle so it tracks camera in real time.
-              Left/top/width/height all animate on the UI thread (no JS-thread lag). */}
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.viewportRect,
-              { borderColor: theme.colors.primary },
-              viewportRectStyle,
-            ]}
-          />
+            {/* Viewport rect — also driven by displayBounds, so it ALWAYS fits
+                inside the minimap surface. No more "rect falls off the
+                minimap when I pan far" symptom. */}
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.viewportRect,
+                { borderColor: theme.colors.primary },
+                viewportRectStyle,
+              ]}
+            />
           </View>
         </GestureDetector>
       </View>
     </Surface>
+  );
+}
+
+/**
+ * One item dot in the minimap. Extracted so each dot can have its own
+ * `useAnimatedStyle` hook — necessary because the projection (displayBounds)
+ * changes per frame as the user pans/zooms, so each dot's `left/top/width/height`
+ * also change per frame. React doesn't allow hooks in a loop, hence a separate
+ * component.
+ */
+function MinimapDot({
+  item,
+  color,
+  displayBounds,
+}: {
+  item: WhiteboardItem;
+  color: string;
+  displayBounds: SharedValue<ContentBounds>;
+}) {
+  const style = useAnimatedStyle(() => {
+    const db = displayBounds.value;
+    const dbW = Math.max(1, db.maxX - db.minX);
+    const dbH = Math.max(1, db.maxY - db.minY);
+    const sX = MINIMAP_W / dbW;
+    const sY = MINIMAP_H / dbH;
+    // Position via translate (cheaper than left/top on Android per old comment
+    // — transforms route through the GPU compositor and don't trip layout
+    // caching).
+    return {
+      transform: [
+        { translateX: (item.position_x - db.minX) * sX },
+        { translateY: (item.position_y - db.minY) * sY },
+      ],
+      // Min 2pt size keeps small items visible. Items don't typically have
+      // sub-2pt rendered size at typical zoom, but very-zoomed-out wide boards
+      // could collapse a tall thin item to <1px otherwise.
+      width: Math.max(2, item.width * sX),
+      height: Math.max(2, item.height * sY),
+    };
+  });
+  return (
+    <Animated.View
+      style={[
+        styles.dot,
+        { backgroundColor: color },
+        style,
+      ]}
+    />
   );
 }
 
