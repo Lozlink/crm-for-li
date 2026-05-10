@@ -13,7 +13,6 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
-import { File as FSFile } from 'expo-file-system';
 import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import type {
   WhiteboardChecklistContent,
@@ -28,7 +27,7 @@ import type {
   WhiteboardPropertyContent,
   WhiteboardStickyContent,
 } from '@realestate-crm/types';
-import { generateUUID, isDemoMode, reverseGeocode, supabase } from '@realestate-crm/api';
+import { generateUUID, isDemoMode, reverseGeocode, uploadWhiteboardPhotoBuffer } from '@realestate-crm/api';
 import { useCRMStore, usePropertyStore } from '@realestate-crm/hooks';
 import { STICKY_COLOR_DEFS, stickyColorKey } from './whiteboardColors';
 import { useColorScheme } from 'react-native';
@@ -45,6 +44,17 @@ const GOAL_PERIODS: { value: WhiteboardGoalPeriod; label: string }[] = [
   { value: 'month', label: 'This month' },
   { value: 'quarter', label: 'This quarter' },
 ];
+
+function decodeBase64ToArrayBuffer(base64: string): ArrayBuffer {
+  const normalized = base64.replace(/\s/g, '');
+  if (typeof globalThis.atob !== 'function') {
+    throw new Error('Base64 decoder unavailable on this device.');
+  }
+
+  const binary = globalThis.atob(normalized);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return bytes.buffer;
+}
 
 /**
  * Per-entry editor for checklist rows.
@@ -340,63 +350,73 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
 
   // ── Photo picker helpers ──────────────────────────────────────────────────
 
-  const uploadPhoto = async (uri: string): Promise<string | null> => {
+  const uploadPhoto = async (asset: ImagePicker.ImagePickerAsset): Promise<string | null> => {
     if (isDemoMode) {
       // Demo mode: use a placeholder so the card renders without Supabase.
       return `https://picsum.photos/seed/${Math.floor(Math.random() * 1000)}/400/300`;
     }
     try {
-      const ext = (uri.split('.').pop()?.toLowerCase().split('?')[0] ?? 'jpg').slice(0, 4);
-      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
-      // Path is RELATIVE to the bucket — don't prefix with the bucket name or
-      // files end up at `whiteboard-photos/whiteboard-photos/...` (a subfolder
-      // INSIDE the bucket), making the dashboard root look empty.
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const base64Payload = asset.base64 ?? null;
+      if (!base64Payload) {
+        setPhotoError('Selected photo did not include upload data. Please try a different image.');
+        return null;
+      }
 
-      // Diagnostic: surface URI scheme + byteLength to the UI so silent
-      // failures (0-byte buffers, content:// URIs that arrayBuffer can't read)
-      // are visible without needing Metro logs. Cleared on success.
-      setPhotoError(`Reading file (${uri.slice(0, 60)}...)`);
+      const mimeType = asset.mimeType || 'image/jpeg';
 
-      // expo-file-system v19 `new File(uri).arrayBuffer()` is the canonical
-      // RN+Supabase pattern — fetch(uri).blob() returns 0 bytes for file://
-      // URIs on iOS RN.
-      const fileBuffer = await new FSFile(uri).arrayBuffer();
+      // Diagnostic: surface payload size so silent native file-body failures are
+      // visible without needing Metro logs. Cleared on success.
+      setPhotoError(`Preparing ${mimeType} upload…`);
+
+      const fileBuffer = decodeBase64ToArrayBuffer(base64Payload);
       const byteCount = fileBuffer.byteLength;
 
       if (byteCount === 0) {
         setPhotoError(
-          `Photo read returned 0 bytes (uri scheme: ${uri.split(':')[0]}). ` +
-          `Try a different image or report this.`,
+          'Photo read returned 0 bytes. Try a different image or report this.',
         );
-        console.warn('Photo upload aborted — 0 byte buffer. URI:', uri);
+        console.warn('Photo upload aborted — 0 byte buffer. Asset URI:', asset.uri);
         return null;
       }
 
       setPhotoError(`Uploading ${byteCount.toLocaleString()} bytes…`);
 
-      const { data, error } = await supabase.storage
-        .from('whiteboard-photos')
-        .upload(path, fileBuffer, { contentType: mimeType, upsert: false });
+      const publicUrl = await uploadWhiteboardPhotoBuffer({
+        data: fileBuffer,
+        mimeType: asset.mimeType,
+        fileName: asset.fileName,
+      });
 
-      if (error) {
-        // Error message often references RLS / bucket-not-found / auth-missing.
-        setPhotoError(`Upload error: ${error.message}`);
-        console.error('Photo upload error:', error);
-        return null;
-      }
-
-      console.log('Photo uploaded:', data.path, data.id, `(${byteCount} bytes)`);
-      const { data: urlData } = supabase.storage.from('whiteboard-photos').getPublicUrl(path);
-      console.log('Photo public URL:', urlData.publicUrl);
+      console.log('Photo uploaded:', publicUrl, `(${byteCount} bytes)`);
       // Clear the diagnostic on success so the UI returns to the normal state.
       setPhotoError(null);
-      return urlData.publicUrl;
+      return publicUrl;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setPhotoError(`Photo upload threw: ${msg}`);
       console.error('Photo upload threw:', e);
       return null;
+    }
+  };
+
+  const handlePickedPhoto = async (asset: ImagePicker.ImagePickerAsset) => {
+    setPhotoLocalUri(asset.uri);
+    setPhotoUploading(true);
+
+    try {
+      const url = await uploadPhoto(asset);
+      if (url) {
+        setPhotoUrl(url);
+        return;
+      }
+
+      // Upload failed silently — surface it. Clear the local preview so the
+      // user isn't tricked into thinking their photo is saved (the unsaved
+      // local URI looks identical to a saved remote URL on screen).
+      setPhotoLocalUri(null);
+      setPhotoError('Upload failed. Check your connection and try again.');
+    } finally {
+      setPhotoUploading(false);
     }
   };
 
@@ -411,22 +431,11 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.8,
       allowsEditing: true,
+      base64: true,
+      exif: false,
     });
     if (result.canceled || !result.assets[0]) return;
-    const uri = result.assets[0].uri;
-    setPhotoLocalUri(uri);
-    setPhotoUploading(true);
-    const url = await uploadPhoto(uri);
-    setPhotoUploading(false);
-    if (url) {
-      setPhotoUrl(url);
-    } else {
-      // Upload failed silently — surface it. Clear the local preview so the
-      // user isn't tricked into thinking their photo is saved (the unsaved
-      // local URI looks identical to a saved remote URL on screen).
-      setPhotoLocalUri(null);
-      setPhotoError('Upload failed. Check your connection and try again.');
-    }
+    await handlePickedPhoto(result.assets[0]);
   };
 
   const pickFromLibrary = async () => {
@@ -440,19 +449,11 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.8,
       allowsEditing: true,
+      base64: true,
+      exif: false,
     });
     if (result.canceled || !result.assets[0]) return;
-    const uri = result.assets[0].uri;
-    setPhotoLocalUri(uri);
-    setPhotoUploading(true);
-    const url = await uploadPhoto(uri);
-    setPhotoUploading(false);
-    if (url) {
-      setPhotoUrl(url);
-    } else {
-      setPhotoLocalUri(null);
-      setPhotoError('Upload failed. Check your connection and try again.');
-    }
+    await handlePickedPhoto(result.assets[0]);
   };
 
   // Suggestion cards are read-only — they're snapshots from the Intelligence

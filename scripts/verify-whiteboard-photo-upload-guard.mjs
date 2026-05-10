@@ -8,7 +8,17 @@ const editItemSheetPath = path.resolve(
   scriptDir,
   '../apps/mobile/components/whiteboard/EditItemSheet.tsx',
 );
+const photoWidgetPath = path.resolve(
+  scriptDir,
+  '../apps/web/src/components/whiteboard/PhotoWidget.tsx',
+);
+const sharedUploadHelperPath = path.resolve(
+  scriptDir,
+  '../packages/api/src/whiteboardPhotos.ts',
+);
 const source = readFileSync(editItemSheetPath, 'utf8');
+const webSource = readFileSync(photoWidgetPath, 'utf8');
+const helperSource = readFileSync(sharedUploadHelperPath, 'utf8');
 
 assert.match(
   source,
@@ -46,4 +56,52 @@ assert.match(
   'Save should be disabled while a photo upload is running.',
 );
 
-console.log('Whiteboard photo upload guard is wired correctly.');
+assert.match(
+  source,
+  /const\s+uploadPhoto\s*=\s*async\s*\(asset:\s*ImagePicker\.ImagePickerAsset\):\s*Promise<string\s*\|\s*null>\s*=>/,
+  'Photo uploads should use the picked asset metadata directly instead of only a raw URI string.',
+);
+
+assert.match(
+  source,
+  /const\s+base64Payload\s*=\s*asset\.base64\s*\?\?\s*null;/,
+  'Photo uploads should require picker-provided base64 data so the native upload body is reliable on mobile.',
+);
+
+assert.match(
+  source,
+  /uploadWhiteboardPhotoBuffer\(/,
+  'Mobile photo uploads should go through the shared whiteboard photo upload helper.',
+);
+
+assert.match(
+  webSource,
+  /uploadWhiteboardPhotoBuffer\(/,
+  'Web photo uploads should go through the shared whiteboard photo upload helper too.',
+);
+
+assert.match(
+  helperSource,
+  /export\s+async\s+function\s+uploadWhiteboardPhotoBuffer\(/,
+  'The shared whiteboard photo upload helper should exist in the API package.',
+);
+
+assert.match(
+  helperSource,
+  /\.from\(WHITEBOARD_PHOTO_BUCKET\)\s*\.upload\(/,
+  'The shared helper should own the Supabase storage upload call.',
+);
+
+assert.match(
+  source,
+  /launchCameraAsync\([\s\S]*?base64:\s*true,/,
+  'Camera photo picking should request base64 data for upload.',
+);
+
+assert.match(
+  source,
+  /launchImageLibraryAsync\([\s\S]*?base64:\s*true,/,
+  'Library photo picking should request base64 data for upload.',
+);
+
+console.log('Whiteboard photo upload flow is wired correctly.');

@@ -2,7 +2,7 @@
 
 import { useRef, useCallback, useState } from 'react';
 import type { WhiteboardItem, WhiteboardPhotoContent } from '@realestate-crm/types';
-import { supabase } from '@realestate-crm/api';
+import { uploadWhiteboardPhotoBuffer } from '@realestate-crm/api';
 import { useAuthStore } from '@realestate-crm/hooks';
 
 interface Props {
@@ -66,24 +66,18 @@ export function PhotoWidget({ item, editable, onPhotoUpdate }: Props) {
 
       // Upload to Supabase storage
       try {
-        const ext = file.name.split('.').pop() ?? 'jpg';
-        const path = `whiteboard-photos/${Date.now()}-${crypto.randomUUID()}.${ext}`;
-        const { data, error } = await supabase.storage
-          .from('whiteboard-photos')
-          .upload(path, file, { upsert: false });
+        const fileBuffer = await file.arrayBuffer();
+        const publicUrl = await uploadWhiteboardPhotoBuffer({
+          data: fileBuffer,
+          mimeType: file.type,
+          fileName: file.name,
+        });
 
-        if (error) {
-          setUploadError('Upload failed — preview only');
-        } else if (data) {
-          const { data: urlData } = supabase.storage
-            .from('whiteboard-photos')
-            .getPublicUrl(data.path);
-          onPhotoUpdate({
-            url: urlData.publicUrl,
-            local_uri: undefined,
-            caption: content?.caption,
-          });
-        }
+        onPhotoUpdate({
+          url: publicUrl,
+          local_uri: undefined,
+          caption: content?.caption,
+        });
       } catch {
         setUploadError('Upload failed — preview only');
       }
