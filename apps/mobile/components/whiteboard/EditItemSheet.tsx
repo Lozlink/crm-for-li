@@ -240,7 +240,17 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
 
   if (!item) return null;
 
+  const photoUploadLocked = item.type === 'photo' && photoUploading;
+  const photoPreviewUri = photoLocalUri || photoUrl;
+
+  const handleDialogDismiss = () => {
+    if (photoUploadLocked) return;
+    onDismiss();
+  };
+
   const handleSave = () => {
+    if (item.type === 'photo' && photoUploadLocked) return;
+
     if (item.type === 'sticky') {
       onSave(item.id, {
         content: { text: stickyText } as WhiteboardStickyContent,
@@ -459,7 +469,13 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
 
   return (
     <Portal>
-      <Dialog visible={!!item} onDismiss={onDismiss} style={styles.dialog}>
+      <Dialog
+        visible={!!item}
+        onDismiss={handleDialogDismiss}
+        dismissable={!photoUploadLocked}
+        dismissableBackButton={!photoUploadLocked}
+        style={styles.dialog}
+      >
         <Dialog.Title>{titleByType[item.type] ?? 'Edit'}</Dialog.Title>
 
         <Dialog.ScrollArea style={styles.scrollArea}>
@@ -593,9 +609,9 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
                     {photoError}
                   </Text>
                 )}
-                {(photoLocalUri || photoUrl) && !photoUploading && (
+                {photoPreviewUri && (
                   <Image
-                    source={{ uri: photoUrl || photoLocalUri! }}
+                    source={{ uri: photoPreviewUri }}
                     style={styles.photoPreview}
                     resizeMode="cover"
                   />
@@ -811,8 +827,8 @@ export function EditItemSheet({ item, onDismiss, onSave }: Props) {
 
         {/* Dialog.Actions: NO fragment wrappers — Paper crashes on them. */}
         <Dialog.Actions>
-          <Button onPress={onDismiss}>Cancel</Button>
-          <Button mode="contained" onPress={handleSave}>Save</Button>
+          <Button onPress={handleDialogDismiss} disabled={photoUploadLocked}>Cancel</Button>
+          <Button mode="contained" onPress={handleSave} disabled={photoUploadLocked}>Save</Button>
         </Dialog.Actions>
       </Dialog>
     </Portal>
