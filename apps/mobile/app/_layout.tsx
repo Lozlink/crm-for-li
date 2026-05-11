@@ -146,6 +146,10 @@ function SafeStack({ theme }: { theme: typeof MD3DarkTheme }) {
       <Stack.Screen name="route/new" options={{ title: 'New Route', presentation: 'modal' }} />
       <Stack.Screen name="settings/caller-id" options={{ title: 'Caller ID' }} />
       <Stack.Screen name="settings/custom-fields" options={{ title: 'Custom Fields' }} />
+      <Stack.Screen
+        name="settings/customize-tabs"
+        options={{ title: 'Customize tabs', presentation: 'modal' }}
+      />
       <Stack.Screen name="tracking/[id]" options={{ title: 'Tracking Session' }} />
       <Stack.Screen name="prospecting" options={{ headerShown: false }} />
       <Stack.Screen name="whiteboard" options={{ headerShown: false, contentStyle: { paddingBottom: 0 } }} />

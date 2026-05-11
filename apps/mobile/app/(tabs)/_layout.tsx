@@ -1,11 +1,25 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
-import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, Pressable } from 'react-native';
 import { useTheme, Text } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useAuthStore, useTrackingStore } from '@realestate-crm/hooks';
+import {
+  useAuthStore,
+  useTrackingStore,
+  useTabPreferencesStore,
+  ALL_TAB_KEYS,
+  type TabKey,
+} from '@realestate-crm/hooks';
 import { TrackingBanner } from '@realestate-crm/ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Tab-bar button props come from `@react-navigation/bottom-tabs` (a
+// transitive dep of expo-router) and have a complex GestureResponderEvent
+// shape that doesn't simplify cleanly when re-typed. We only forward
+// well-known fields to Pressable, so use `any` for the prop bag — the
+// runtime shape is well-tested by React Navigation itself.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TabBarButtonProps = any;
 
 const TopHeader = memo(function TopHeader() {
   const theme = useTheme();
@@ -102,9 +116,94 @@ const TopHeader = memo(function TopHeader() {
 // Stable reference for Tabs screenOptions.header
 const renderHeader = () => <TopHeader />;
 
+/**
+ * Tab metadata — single source of truth for icon + title + special `href`
+ * overrides (the Whiteboard tab redirects to the fullscreen /whiteboard
+ * stack route instead of rendering inside the tab tree, so it has a
+ * non-standard href even when "pinned").
+ */
+const TAB_META: Record<
+  TabKey,
+  { title: string; icon: string; hrefOverride?: string }
+> = {
+  index: { title: 'Today', icon: 'lightning-bolt' },
+  map: { title: 'Map', icon: 'map-outline' },
+  prospecting: { title: 'Prospecting', icon: 'chart-timeline-variant' },
+  'whiteboard-tab': {
+    title: 'Whiteboard',
+    icon: 'sticker-text-outline',
+    // Redirects out of the tab tree into the fullscreen whiteboard stack.
+    hrefOverride: '/whiteboard',
+  },
+  more: { title: 'More', icon: 'view-grid-outline' },
+  contacts: { title: 'Contacts', icon: 'account-group' },
+  pipeline: { title: 'Pipeline', icon: 'view-column' },
+  properties: { title: 'Properties', icon: 'home-city' },
+  tasks: { title: 'Tasks', icon: 'checkbox-marked-circle-outline' },
+  notes: { title: 'Notes', icon: 'note-text' },
+  stats: { title: 'Reports', icon: 'chart-bar' },
+  settings: { title: 'Settings', icon: 'cog' },
+};
+
+/**
+ * Custom tab-bar button that adds long-press → open Customize Tabs screen.
+ * Preserves the default press behavior (Pressable forwards `onPress`) and
+ * passes through accessibility props from React Navigation. Long-press is
+ * intentionally available on every tab so the user discovers customization
+ * regardless of which tab they're currently on.
+ */
+function makeTabBarButton(onLongPress: () => void) {
+  return function CustomTabBarButton(props: TabBarButtonProps) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        accessibilityState={props.accessibilityState as any}
+        accessibilityLabel={props.accessibilityLabel}
+        testID={props.testID}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onPress={props.onPress as any}
+        onLongPress={onLongPress}
+        // Mimic default tab-bar button geometry.
+        style={({ pressed }) => [
+          styles.tabBarButton,
+          props.style,
+          pressed ? { opacity: 0.7 } : null,
+        ]}
+      >
+        {props.children}
+      </Pressable>
+    );
+  };
+}
+
 export default function TabLayout() {
   const theme = useTheme();
+  const router = useRouter();
   const activeSession = useTrackingStore(s => s.activeSession);
+
+  // Per-user tab preferences. Reloaded whenever the auth user changes so
+  // signing into a different account picks up that account's pins.
+  const pinned = useTabPreferencesStore((s) => s.pinned);
+  const loadForUser = useTabPreferencesStore((s) => s.loadForUser);
+  const authUserId = useAuthStore((s) => s.user?.id ?? null);
+  const isDemoMode = useAuthStore((s) => s.isDemoMode);
+  useEffect(() => {
+    // Use a stable key per identity — real user id, or "demo" for demo mode.
+    const key = isDemoMode ? 'demo' : authUserId;
+    void loadForUser(key);
+  }, [authUserId, isDemoMode, loadForUser]);
+
+  // Render order: pinned tabs first (in user-chosen order), then every other
+  // tab with `href: null` (still mounted, just invisible in the bar).
+  const orderedKeys: TabKey[] = [
+    ...pinned,
+    ...ALL_TAB_KEYS.filter((k) => !pinned.includes(k)),
+  ];
+
+  const TabBarButton = makeTabBarButton(() => {
+    router.push('/settings/customize-tabs' as never);
+  });
 
   return (
     <View style={styles.root}>
@@ -120,102 +219,32 @@ export default function TabLayout() {
             fontSize: 10,
             fontWeight: '600',
           },
+          tabBarButton: (props) => <TabBarButton {...props} />,
           header: renderHeader,
         }}
       >
-        {/* ─── Visible tabs ─── */}
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: 'Today',
-            tabBarIcon: ({ color, size }) => (
-              <Icon name="lightning-bolt" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="map"
-          options={{
-            title: 'Map',
-            tabBarIcon: ({ color, size }) => (
-              <Icon name="map-outline" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="prospecting"
-          options={{
-            title: 'Prospecting',
-            tabBarIcon: ({ color, size }) => (
-              <Icon name="chart-timeline-variant" size={size} color={color} />
-            ),
-          }}
-        />
-        {/* Whiteboard tab — navigates to the fullscreen /whiteboard stack route
-            (header hidden, no tab bar shown inside) so it feels immersive. */}
-        <Tabs.Screen
-          name="whiteboard-tab"
-          options={{
-            title: 'Whiteboard',
-            href: '/whiteboard',
-            tabBarIcon: ({ color, size }) => (
-              <Icon name="sticker-text-outline" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="more"
-          options={{
-            title: 'More',
-            tabBarIcon: ({ color, size }) => (
-              <Icon name="view-grid-outline" size={size} color={color} />
-            ),
-          }}
-        />
-
-        {/* ─── Hidden tabs — accessible via More grid or deep links ─── */}
-        <Tabs.Screen
-          name="contacts"
-          options={{ title: 'Contacts', href: null,
-            tabBarIcon: ({ color, size }) => <Icon name="account-group" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="pipeline"
-          options={{ title: 'Pipeline', href: null,
-            tabBarIcon: ({ color, size }) => <Icon name="view-column" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="properties"
-          options={{ title: 'Properties', href: null,
-            tabBarIcon: ({ color, size }) => <Icon name="home-city" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="tasks"
-          options={{ title: 'Tasks', href: null,
-            tabBarIcon: ({ color, size }) => <Icon name="checkbox-marked-circle-outline" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="notes"
-          options={{ title: 'Notes', href: null,
-            tabBarIcon: ({ color, size }) => <Icon name="note-text" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="stats"
-          options={{ title: 'Reports', href: null,
-            tabBarIcon: ({ color, size }) => <Icon name="chart-bar" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="settings"
-          options={{ title: 'Settings', href: null,
-            tabBarIcon: ({ color, size }) => <Icon name="cog" size={size} color={color} />,
-          }}
-        />
+        {orderedKeys.map((key) => {
+          const meta = TAB_META[key];
+          const isPinned = pinned.includes(key);
+          // Unpinned tabs hide from the bar via `href: null`. They remain
+          // valid routes — accessible from More, deep links, programmatic
+          // navigation — but don't take up a tab slot.
+          const hrefOption =
+            isPinned ? (meta.hrefOverride ? { href: meta.hrefOverride as any } : {}) : { href: null as any };
+          return (
+            <Tabs.Screen
+              key={key}
+              name={key}
+              options={{
+                title: meta.title,
+                tabBarIcon: ({ color, size }) => (
+                  <Icon name={meta.icon} size={size} color={color} />
+                ),
+                ...hrefOption,
+              }}
+            />
+          );
+        })}
       </Tabs>
       {activeSession && <TrackingBanner />}
     </View>
@@ -265,6 +294,11 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBarButton: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

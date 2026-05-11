@@ -35,3 +35,12 @@ export { useSmartSuggestions } from './useSmartSuggestions';
 export type { SmartSuggestion, SmartSuggestionKind } from './useSmartSuggestions';
 
 export { useGeocodedAddress } from './useGeocodedAddress';
+
+export {
+  useTabPreferencesStore,
+  ALL_TAB_KEYS,
+  DEFAULT_PINNED_TABS,
+  MAX_PINNED,
+  MIN_PINNED,
+} from './useTabPreferencesStore';
+export type { TabKey } from './useTabPreferencesStore';
