@@ -33,3 +33,7 @@ export type { PendingCallOutcome } from './callActivity';
 
 export { optimizeRoute } from './routeOptimizer';
 export type { RouteCandidate, OptimizedRoute } from './routeOptimizer';
+
+export { getPropertyPipelineValue, sumPipelineValue } from './propertyPricing';
+
+export { formatRelativeDate } from './relativeDate';

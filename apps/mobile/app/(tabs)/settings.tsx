@@ -2,6 +2,7 @@ import { StyleSheet, View, ScrollView, Alert, TextInput as RNTextInput } from 'r
 import { List, Divider, useTheme, Text, Surface, Button, Avatar, TextInput, Dialog, Portal, RadioButton } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
+import Constants from 'expo-constants';
 import { useCRMStore, useAuthStore, usePermissions, useOrganisationStore } from '@realestate-crm/hooks';
 import { isDemoMode } from '@realestate-crm/api';
 import { TagManager, RoleBadge } from '@realestate-crm/ui';
@@ -312,12 +313,20 @@ export default function SettingsScreen() {
         <Text variant="titleMedium" style={styles.sectionTitle}>About</Text>
         <List.Item
           title="Mode"
-          description={isDemo ? 'Demo (Local Storage)' : isDemoMode ? 'Demo (Local Storage)' : 'Connected to Supabase'}
+          // `isDemo` (auth-store flag) and `isDemoMode` (api-package flag, set
+          // when Supabase env vars are missing) historically branched
+          // separately; in practice they agree. Combine into a single
+          // boolean so the displayed mode and the demo-note guard can't
+          // disagree.
+          description={isDemo || isDemoMode ? 'Demo (Local Storage)' : 'Connected to Supabase'}
           left={props => <List.Icon {...props} icon="database" />}
         />
         <List.Item
           title="Version"
-          description="1.0.0"
+          // Pull from app config so the version doesn't drift from app.json
+          // / EAS build version. Falls back to '—' if Constants is unavailable
+          // (shouldn't happen in a running app, but defensive).
+          description={Constants.expoConfig?.version ?? '—'}
           left={props => <List.Icon {...props} icon="information" />}
         />
         {(isDemo || isDemoMode) && (

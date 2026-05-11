@@ -7,6 +7,7 @@ import {
   useTaskStore, usePropertyStore, useCRMStore, useAuthStore, useInspectionStore, useTrackingStore,
   useProspectingMetrics,
 } from '@realestate-crm/hooks';
+import { sumPipelineValue } from '@realestate-crm/utils';
 import type { Task, Property, Contact, Inspection, TrackingSession } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -155,7 +156,9 @@ export default function TodayScreen() {
     const appraisals = active.filter(p => p.status === 'appraisal').length;
     const listed = active.filter(p => p.status === 'available').length;
     const underOffer = active.filter(p => p.status === 'under_offer' || p.status === 'exchanged').length;
-    const totalValue = active.reduce((sum, p) => sum + (p.advertised_price ?? p.appraisal_price ?? 0), 0);
+    // Use the shared pipeline-value helper so this total agrees with the
+    // Pipeline board and Stats screen — see packages/utils/propertyPricing.
+    const totalValue = sumPipelineValue(active);
     return { appraisals, listed, underOffer, totalValue, total: active.length };
   }, [properties]);
 
@@ -447,7 +450,13 @@ export default function TodayScreen() {
             <View style={[styles.pipelineDivider, { backgroundColor: theme.colors.outlineVariant }]} />
             <PipelineStat label="Listed" count={pipelineStats.listed} color="#16a34a" />
             <View style={[styles.pipelineDivider, { backgroundColor: theme.colors.outlineVariant }]} />
-            <PipelineStat label="Under Offer" count={pipelineStats.underOffer} color="#f59e0b" />
+            {/* Combined under_offer + exchanged count — Today's snapshot
+                deliberately lumps them as "deals in progress" to keep the
+                three-cell layout tidy. The Pipeline board shows them as
+                separate columns. Label updated 2026-05-11 to make the
+                combination explicit so users don't see a different "Under
+                Offer" number here vs. on the Pipeline board. */}
+            <PipelineStat label="Under Offer / Exchanged" count={pipelineStats.underOffer} color="#f59e0b" />
           </View>
           <View style={[styles.pipelineTotal, { borderTopColor: theme.colors.outlineVariant }]}>
             <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>

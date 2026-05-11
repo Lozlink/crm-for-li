@@ -145,7 +145,6 @@ export default function ProspectingScreen() {
 
   // Build suburb intelligence rows
   const suburbIntelligence = useMemo(() => {
-    console.log('[SuburbIntel] suburbStats:', suburbStats.length, 'suburbContactCounts size:', suburbContactCounts.size);
     if (suburbStats.length === 0) return [];
 
     const rows: {
@@ -1131,11 +1130,23 @@ function TerritoryView({
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, fontWeight: '600' }}>
-                    {building.totalUnitsVisited} units
+                    {/* Show `visited / total` to match the map's
+                        BuildingActivityDialog. Earlier this just showed a
+                        bare "12 units" with no denominator, so the same
+                        building looked like 12/12 here but "12/80 (15%)" on
+                        the map. When the declared total is unknown, fall
+                        back to the previous bare-number presentation. */}
+                    {building.estimatedUnits != null
+                      ? `${building.totalUnitsVisited}/${building.estimatedUnits} units`
+                      : `${building.totalUnitsVisited} units`}
                   </Text>
                   {building.lastVisited && (
                     <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, fontSize: 10 }}>
-                      {new Date(building.lastVisited).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                      {/* Match the format used by BuildingActivityDialog on the
+                          map (`day numeric, month short, year numeric`) so the
+                          same building displays "5 May 2026" everywhere
+                          instead of "5 May" here and "5 May 2026" there. */}
+                      {new Date(building.lastVisited).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </Text>
                   )}
                 </View>

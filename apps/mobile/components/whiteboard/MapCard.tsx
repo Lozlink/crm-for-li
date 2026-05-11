@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useRouter } from 'expo-router';
-import { reverseGeocode, buildMapDeepLink } from '@realestate-crm/api';
+import { reverseGeocode } from '@realestate-crm/api';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
 import type { WhiteboardItem, WhiteboardMapContent } from '@realestate-crm/types';
 
@@ -34,7 +33,6 @@ interface Props {
  */
 export function MapCard({ item }: Props) {
   const theme = useTheme();
-  const router = useRouter();
   const content = item.content as WhiteboardMapContent;
   const { lat, lng, zoom } = content.viewport;
   const updateItem = useWhiteboardStore((s) => s.updateItem);
@@ -70,15 +68,10 @@ export function MapCard({ item }: Props) {
   const displayLine2 = resolvedSuburb || null;
   const fallbackCoords = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
-  const handlePress = () => {
-    const deepLink = buildMapDeepLink({ lat, lng, tileZoom: zoom });
-    router.push(`/(tabs)/map${deepLink}` as never);
-  };
-
   return (
-    <TouchableOpacity
-      activeOpacity={0.85}
-      onPress={handlePress}
+    // Plain View (was TouchableOpacity). Navigation moved up to
+    // WhiteboardItemView's tap handler — see ContactCard note.
+    <View
       style={[
         styles.root,
         {
@@ -86,8 +79,7 @@ export function MapCard({ item }: Props) {
           borderColor: theme.colors.outlineVariant,
         },
       ]}
-      accessibilityRole="button"
-      accessibilityLabel="Open territory map at this location"
+      accessibilityLabel="Territory pin card"
     >
       <View style={styles.header}>
         <Icon name="map-marker-radius-outline" size={18} color={theme.colors.primary} />
@@ -134,7 +126,7 @@ export function MapCard({ item }: Props) {
       <Text variant="bodySmall" style={[styles.hint, { color: theme.colors.primary }]}>
         Tap to open
       </Text>
-    </TouchableOpacity>
+    </View>
   );
 }
 

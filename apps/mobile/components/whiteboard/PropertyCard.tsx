@@ -1,7 +1,6 @@
-import { StyleSheet, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useRouter } from 'expo-router';
 import { usePropertyStore } from '@realestate-crm/hooks';
 import type { WhiteboardItem, WhiteboardPropertyContent, PropertyType } from '@realestate-crm/types';
 
@@ -18,7 +17,6 @@ const TYPE_ICON: Partial<Record<PropertyType, string>> = {
 
 export function PropertyCard({ item }: Props) {
   const theme = useTheme();
-  const router = useRouter();
   const content = item.content as WhiteboardPropertyContent;
   const propertyId = content.propertyId;
 
@@ -52,9 +50,9 @@ export function PropertyCard({ item }: Props) {
   const icon = TYPE_ICON[property.property_type] ?? 'home-outline';
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.85}
-      onPress={() => router.push(`/property/${property.id}`)}
+    // Plain View (was TouchableOpacity). Navigation moved up to
+    // WhiteboardItemView's tap handler — see ContactCard note.
+    <View
       style={[
         styles.root,
         {
@@ -62,8 +60,7 @@ export function PropertyCard({ item }: Props) {
           borderColor: theme.colors.outlineVariant,
         },
       ]}
-      accessibilityRole="button"
-      accessibilityLabel={`Open property ${property.address}`}
+      accessibilityLabel={`${property.address} property card`}
     >
       <View style={styles.header}>
         <Icon name={icon} size={20} color={theme.colors.primary} />
@@ -89,7 +86,7 @@ export function PropertyCard({ item }: Props) {
         </Text>
         <Icon name="chevron-right" size={18} color={theme.colors.onSurfaceVariant} />
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 

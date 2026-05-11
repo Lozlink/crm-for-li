@@ -8,6 +8,7 @@ import {
   useTaskStore,
   useCRMStore,
 } from '@realestate-crm/hooks';
+import { sumPipelineValue } from '@realestate-crm/utils';
 import type { PropertyStatus } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -126,7 +127,11 @@ export default function StatsScreen() {
 
   const activeListingsCount = activeListings.length;
   const activeListingsValue = useMemo(() => {
-    return activeListings.reduce((sum, p) => sum + (p.advertised_price || 0), 0);
+    // Use the shared pipeline-value helper so this total agrees with the
+    // Today screen and Pipeline board. Earlier rev used `(p.advertised_price
+    // || 0)` which ignored properties whose price came from `appraisal_price`,
+    // making this number lower than the Pipeline board's total.
+    return sumPipelineValue(activeListings);
   }, [activeListings]);
 
   // 2. Conversion Rate
@@ -274,20 +279,14 @@ export default function StatsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Date Range Filter */}
-        <View style={styles.filterRow}>
-          {DATE_RANGE_FILTERS.map(filter => (
-            <Chip
-              key={filter.value}
-              selected={dateRange === filter.value}
-              onPress={() => setDateRange(filter.value)}
-              style={styles.filterChip}
-              compact
-            >
-              {filter.label}
-            </Chip>
-          ))}
-        </View>
+        {/* Date Range Filter intentionally hidden 2026-05-11: the chip row
+            was rendered + stateful but no metric below actually consumed
+            `dateRange`, so the UI was lying about what it was showing. The
+            state, `DateRange` type, `DATE_RANGE_FILTERS` constant, and
+            `getDateRangeBounds()` helper are deliberately retained as the
+            scaffolding for when someone wires it through.
+            TODO(stats-date-range): thread `dateRange` into each metric's
+            useMemo, then re-render this chip row. */}
 
         {/* Metric Cards */}
         {renderMetricCard(
@@ -312,7 +311,9 @@ export default function StatsScreen() {
           'clock-outline',
           '#f59e0b',
           'Avg Days on Market',
-          avgDaysOnMarket !== null ? `${avgDaysOnMarket} days` : '\u2014 days',
+          // Avoid "\u2014 days" \u2014 the em-dash with a trailing unit reads like a
+          // broken render. Show "No data" when there's nothing to average.
+          avgDaysOnMarket !== null ? `${avgDaysOnMarket} days` : 'No data',
           avgDaysOnMarket !== null
             ? 'Settled/leased properties'
             : 'No settled properties yet',

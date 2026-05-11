@@ -4,6 +4,7 @@ import { useTheme, Text, Chip, ActivityIndicator, Surface } from 'react-native-p
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import { usePropertyStore } from '@realestate-crm/hooks';
+import { getPropertyPipelineValue } from '@realestate-crm/utils';
 import type { Property, PropertyForType, PropertyStatus } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -43,9 +44,10 @@ function getDisplayPrice(property: Property): string {
   return '';
 }
 
-function getRawPrice(property: Property): number {
-  return property.advertised_price ?? property.appraisal_price ?? 0;
-}
+// Now delegates to the shared helper so this screen, Today, and Stats all
+// compute pipeline value the same way. Kept as a thin alias because the
+// callsite below reads more clearly as `getRawPrice(p)` than fully qualified.
+const getRawPrice = getPropertyPipelineValue;
 
 function getDaysInStage(property: Property): number {
   const now = new Date();

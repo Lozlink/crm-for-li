@@ -65,9 +65,14 @@ export const DEFAULT_WORLD_BOUNDS: ContentBounds = {
  * existing items — enough to pan to empty space and drop new items there.
  */
 export function padBounds(b: ContentBounds, pad: number): ContentBounds {
+  // Allow bounds to extend NEGATIVE down to -WORLD_* — earlier rev clamped
+  // minX/Y to ≥ 0, which made it impossible to use the canvas region above
+  // and to the left of the world origin. Users hit an invisible wall when
+  // dragging cards toward the top of the screen at any zoom level.
+  // Symmetric world range: items can live in [-WORLD_*, +WORLD_*].
   return {
-    minX: Math.max(0, b.minX - pad),
-    minY: Math.max(0, b.minY - pad),
+    minX: Math.max(-WORLD_WIDTH, b.minX - pad),
+    minY: Math.max(-WORLD_HEIGHT, b.minY - pad),
     maxX: Math.min(WORLD_WIDTH, b.maxX + pad),
     maxY: Math.min(WORLD_HEIGHT, b.maxY + pad),
   };
@@ -111,49 +116,28 @@ export function clampCameraAxis(
   scale: number,
 ): number {
   'worklet';
-  // ── Branch 1: bounds STRICTLY covers viewport ───────────────────────────
-  // When bounds×scale > viewport (strict inequality), use the cover rule:
-  // bounds must always cover viewport entirely → prevents empty canvas at
-  // the edges when items are big OR the user is zoomed in.
+  // ── Single rule: bounds must intersect viewport with ≥ MIN_VISIBLE_PX overlap ──
   //
-  // STRICT inequality is important. At exact equality (coverLower ==
-  // coverUpper), the cover range degenerates to a single value — any
-  // proposed `value` gets clamped to that one point, which is a force-pin
-  // in disguise. Symptom: zoom-out where bounds*scale happens to equal
-  // viewport (common when bounds ≈ items + pad and pad ≈ ½ viewport) pins
-  // cameraY to 0 regardless of focal point, manifesting as a downward pan.
-  // The fix is to fall through to intersect+margin at equality.
-  const coverUpper = -boundsMin * scale;
-  const coverLower = viewport - boundsMax * scale;
-  if (coverLower < coverUpper) {
-    if (value < coverLower) return coverLower;
-    if (value > coverUpper) return coverUpper;
-    return value;
-  }
-
-  // ── Branch 2: bounds smaller than viewport ──────────────────────────────
-  // Cover rule can't be satisfied (zoomed out, OR small board). Earlier
-  // revisions tried two wrong things here:
+  // Earlier revs had a two-branch design: strict cover when bounds covers
+  // viewport, intersect+margin otherwise. The cover branch was too strict
+  // in the common case where bounds×scale is JUST barely > viewport (e.g.
+  // scale=0.625 with default padding gives only ~9pt of vertical pan room).
+  // Users hit an invisible wall and couldn't pan into empty canvas above
+  // their items to drop new ones.
   //
-  //   (a) Force-center the bounds in viewport. Override broke the focal-
-  //       anchor math in cameraPinch.onUpdate — the camera lurched
-  //       mid-pinch ("zoom out pans"). What you saw in the 8:18 video.
+  // Unified rule: regardless of bounds-vs-viewport sizing, require the
+  // bounds rect to overlap the viewport by at least MIN_VISIBLE_PX
+  // (~80pt — roughly 10% of phone viewport). The user gets ~80pt of
+  // overscroll past the strict cover edges, so there's always a bit of
+  // headroom for adding items in open space, even when zoomed in.
   //
-  //   (b) Return value unchanged. Removed all clamping at low zoom →
-  //       cameraY drifted to ±1400+ values, items entirely off-screen,
-  //       minimap rect fell off the minimap surface. What you saw in the
-  //       8:31 video.
+  // What this loses: at high zoom, users can pan items mostly off-screen
+  // (only MIN_VISIBLE_PX visible). Acceptable because:
+  //   1. Minimap rect still tells you where you are relative to items
+  //   2. Home button brings you back instantly
+  //   3. Spring snap-back resists going past the rule's boundary
   //
-  // Right answer: require the bounds rect to *intersect* the viewport
-  // with at least MIN_VISIBLE_PX of overlap. This:
-  //   • never triggers a force-center, so focal-anchor is preserved during
-  //     pinch (no "zoom-pan");
-  //   • prevents the user from wandering to cameraY=1400, since the bounds
-  //     rect can never fully exit the viewport;
-  //   • guarantees the minimap rect always overlaps the items cluster by
-  //     at least MIN_VISIBLE_PX × scale projected onto the minimap.
-  //
-  // Constraints on a single axis:
+  // Constraints:
   //   bounds-RIGHT must stay ≥ MIN_VISIBLE_PX from screen-LEFT:
   //     camera + boundsMax*scale ≥ MIN_VISIBLE_PX
   //     → camera ≥ MIN_VISIBLE_PX - boundsMax*scale
@@ -186,22 +170,11 @@ export function rubberbandCameraAxis(
   rubber: number = 0.4,
 ): number {
   'worklet';
-  // Mirrors the two-branch logic in clampCameraAxis: cover rule when bounds
-  // covers viewport, intersect+min-visible rule otherwise. Past either
-  // boundary, motion proceeds with reduced sensitivity (rubber=0.4 → 100pt
-  // of finger drag past the edge produces 40pt of camera move). Trailing
-  // snap-back is the gesture's `.onEnd` job (uses clampCameraAxis directly).
-  const coverUpper = -boundsMin * scale;
-  const coverLower = viewport - boundsMax * scale;
-  // Strict inequality — see clampCameraAxis for the rationale. At equality
-  // the cover range degenerates to a single value and the rubberband would
-  // try to pull the user back to that pinned point during a gesture, which
-  // is the force-pin behavior we want to avoid.
-  if (coverLower < coverUpper) {
-    if (value > coverUpper) return coverUpper + (value - coverUpper) * rubber;
-    if (value < coverLower) return coverLower - (coverLower - value) * rubber;
-    return value;
-  }
+  // Single rule matching clampCameraAxis: require MIN_VISIBLE_PX of bounds
+  // overlap with viewport. Past either boundary, motion proceeds with
+  // reduced sensitivity (rubber=0.4 → 100pt of finger drag past the edge
+  // produces 40pt of camera move). Trailing snap-back is the gesture's
+  // `.onEnd` job (uses clampCameraAxis directly).
   const min = MIN_VISIBLE_PX - boundsMax * scale;
   const max = viewport - MIN_VISIBLE_PX - boundsMin * scale;
   if (value > max) return max + (value - max) * rubber;
@@ -240,8 +213,16 @@ export function clampItemPosition(
   worldDim: number,
 ): number {
   'worklet';
+  // Symmetric world: items can be placed in [-worldDim, worldDim - itemDim].
+  // Earlier rev had `min = 0` which created an invisible upper-edge wall at
+  // world Y=0 — users could pan the camera up to see empty canvas above
+  // their items but couldn't actually drag cards into that area
+  // (reported 2026-05-11 — "menhel+empty photo box is the max I can take
+  // cards"). Symmetric bound doubles the usable canvas without changing
+  // any single safety ceiling.
+  const min = -worldDim;
   const max = worldDim - itemDim;
-  if (value < 0) return 0;
+  if (value < min) return min;
   if (value > max) return max;
   return value;
 }

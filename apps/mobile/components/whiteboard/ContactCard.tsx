@@ -1,7 +1,6 @@
-import { StyleSheet, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Text, Avatar, useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useRouter } from 'expo-router';
 import { useCRMStore, useLeadScoringEngine } from '@realestate-crm/hooks';
 import type { LeadTier, WhiteboardContactContent, WhiteboardItem } from '@realestate-crm/types';
 
@@ -38,7 +37,6 @@ function timeAgo(iso?: string | null): string {
 
 export function ContactCard({ item }: Props) {
   const theme = useTheme();
-  const router = useRouter();
   const content = item.content as WhiteboardContactContent;
   const contactId = content.contactId;
 
@@ -78,9 +76,10 @@ export function ContactCard({ item }: Props) {
   const tierColor = TIER_COLORS[tier];
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.85}
-      onPress={() => router.push(`/contact/${contact.id}`)}
+    // Plain View (was TouchableOpacity). Navigation moved up to
+    // WhiteboardItemView's tap handler — the inner Touchable was stealing
+    // touches from the parent's drag/long-press gesture composition.
+    <View
       style={[
         styles.root,
         {
@@ -89,8 +88,7 @@ export function ContactCard({ item }: Props) {
           borderLeftColor: tierColor,
         },
       ]}
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${fullName}`}
+      accessibilityLabel={`${fullName} contact card`}
     >
       <View style={styles.row}>
         <Avatar.Text size={36} label={initials(fullName)} />
@@ -112,7 +110,7 @@ export function ContactCard({ item }: Props) {
         </View>
         <Icon name="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 

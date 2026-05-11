@@ -4,6 +4,7 @@ import { Searchbar, FAB, useTheme, Text, Card, Chip, Surface, SegmentedButtons, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useCRMStore, useTrackingStore, useWhiteboardStore } from '@realestate-crm/hooks';
+import { formatRelativeDate } from '@realestate-crm/utils';
 import { Contact, Activity, TrackingAnnotation, ActivitySource } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -54,7 +55,8 @@ export default function NotesScreen() {
     void fetchAllAnnotations();
   }, [fetchRecentActivities, fetchAllAnnotations]);
 
-  // Unlinked field notes (tracking annotations without contact_id)
+  // Unlinked field notes (tracking annotations without contact_id), filtered
+  // by the current search query.
   const unlinkedAnnotations = useMemo(() => {
     const items = allAnnotations.filter(a => !a.contact_id);
     if (searchQuery) {
@@ -63,6 +65,15 @@ export default function NotesScreen() {
     }
     return items;
   }, [allAnnotations, searchQuery]);
+
+  // Total unlinked count, search-independent — used for the tab badge so
+  // typing in the search box doesn't make the "Unlinked (N)" number drop
+  // (which read as if notes had disappeared from the store rather than been
+  // hidden by filtering).
+  const unlinkedTotal = useMemo(
+    () => allAnnotations.filter(a => !a.contact_id).length,
+    [allAnnotations],
+  );
 
   // Filtered contacts for the link dialog
   const filteredContacts = useMemo(() => {
@@ -138,17 +149,9 @@ export default function NotesScreen() {
     void fetchAllAnnotations();
   };
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return date.toLocaleDateString();
-  };
+  // Use the shared formatter so notes, map annotation pins, and contact
+  // detail all show the same relative date for the same timestamp.
+  const formatDate = formatRelativeDate;
 
   const getNextWhiteboardPosition = useCallback(() => {
     const offset = (whiteboardItemsCount % 6) * 24;
@@ -424,7 +427,7 @@ export default function NotesScreen() {
           onValueChange={setTab}
           buttons={[
             { value: 'all', label: 'All Notes' },
-            { value: 'unlinked', label: `Unlinked (${unlinkedAnnotations.length})` },
+            { value: 'unlinked', label: `Unlinked (${unlinkedTotal})` },
           ]}
           density="small"
         />

@@ -307,6 +307,7 @@ export function WhiteboardCanvas({
             <WhiteboardItemView
               key={it.id}
               item={it}
+              cameraScale={cameraScale}
               onRequestEdit={onRequestEdit}
               onRequestContext={onRequestContext}
               onToggleChecklistEntry={onToggleChecklistEntry}

@@ -6,9 +6,17 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   runOnJS,
+  type SharedValue,
 } from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
-import type { WhiteboardItem } from '@realestate-crm/types';
+import { buildMapDeepLink } from '@realestate-crm/api';
+import type {
+  WhiteboardItem,
+  WhiteboardContactContent,
+  WhiteboardPropertyContent,
+  WhiteboardMapContent,
+} from '@realestate-crm/types';
 import { WORLD_WIDTH, WORLD_HEIGHT, clampItemPosition } from './whiteboardWorld';
 
 // --- Spring configs (DESIGN.md §4) ---
@@ -39,6 +47,14 @@ import type { WhiteboardSuggestionItem } from './types';
 
 interface Props {
   item: WhiteboardItem;
+  /**
+   * Camera scale shared value from the canvas. The item drag gesture reads
+   * this on the UI thread to convert finger-pixel translation into world-pt
+   * translation — without it, drags at scale != 1 feel sluggish (zoomed-out)
+   * or twitchy (zoomed-in) and the user hits the screen edge before the item
+   * has moved far enough, manifesting as "the drag stopped early".
+   */
+  cameraScale: SharedValue<number>;
   /** Open the structured editor for this item (long-press). */
   onRequestEdit: (id: string) => void;
   /** Open the context menu for this item (unused path — kept for OverviewSheet / future use). */
@@ -63,12 +79,14 @@ interface Props {
  */
 export function WhiteboardItemView({
   item,
+  cameraScale,
   onRequestEdit,
   onRequestContext,
   onToggleChecklistEntry,
   onCompleteChecklist,
   onDelete,
 }: Props) {
+  const router = useRouter();
   const updateItemLocal = useWhiteboardStore(s => s.updateItemLocal);
   const commitItem = useWhiteboardStore(s => s.commitItem);
   const bringToFront = useWhiteboardStore(s => s.bringToFront);
@@ -113,6 +131,44 @@ export function WhiteboardItemView({
 
   const handleSingleTap = () => {
     void bringToFront(item.id);
+    // Type-specific navigation on tap. Previously each card (ContactCard,
+    // PropertyCard, MapCard) wrapped itself in TouchableOpacity to handle
+    // this, but that inner Touchable intercepted the parent's pan gesture —
+    // pressing then dragging a card had the Touchable cancel its press
+    // mid-drag, releasing the touch to the canvas's `movePan` layer which
+    // then panned the camera instead of moving the card. (Verified via
+    // user's 2026-05-11 11:40 drag-test recording.)
+    //
+    // Hoisting navigation up here lets the parent's gesture composition own
+    // the touch end-to-end: Race(pan, Exclusive(longPress, tap)) decides
+    // cleanly between drag (pan), edit (longPress), and navigate (tap).
+    switch (item.type) {
+      case 'contact': {
+        const content = item.content as WhiteboardContactContent;
+        if (content?.contactId) {
+          router.push(`/contact/${content.contactId}` as never);
+        }
+        break;
+      }
+      case 'property': {
+        const content = item.content as WhiteboardPropertyContent;
+        if (content?.propertyId) {
+          router.push(`/property/${content.propertyId}` as never);
+        }
+        break;
+      }
+      case 'map': {
+        const content = item.content as WhiteboardMapContent;
+        if (content?.viewport) {
+          const { lat, lng, zoom } = content.viewport;
+          const deepLink = buildMapDeepLink({ lat, lng, tileZoom: zoom });
+          router.push(`/(tabs)/map${deepLink}` as never);
+        }
+        break;
+      }
+      // sticky / photo / checklist / goal / suggestion: tap-to-bring-to-front
+      // only. Edit via long-press; details inline.
+    }
   };
 
   const handleLongPress = () => {
@@ -144,9 +200,22 @@ export function WhiteboardItemView({
       scale.value = withSpring(1.04, SPRING_LIFT);
     })
     .onUpdate((e) => {
-      // Free movement during drag — snap only on drop so motion feels fluid
-      translateX.value = startX.value + e.translationX;
-      translateY.value = startY.value + e.translationY;
+      // CRITICAL: `e.translationX/Y` is finger-pixel movement on screen, but
+      // `startX/Y` and `translateX/Y` are in WORLD coordinates (the values
+      // get applied as a `transform: translate(x,y)` INSIDE the camera-
+      // scaled world layer). Adding pixels to world-pt without scaling
+      // means at scale=0.4 the item moves 0.4 world-pt per finger pixel —
+      // visually 0.4 × 0.4 = 0.16 screen-px per finger pixel. The finger
+      // hits the screen edge long before the item has moved as far as the
+      // user expected, manifesting as "the drag stopped early" (reported
+      // 2026-05-11).
+      //
+      // Divide by camera scale to convert finger pixels → world pixels.
+      // After the parent's scale transform applies, the item moves exactly
+      // 1 screen-px per 1 finger-px, regardless of zoom level.
+      const s = cameraScale.value || 1;
+      translateX.value = startX.value + e.translationX / s;
+      translateY.value = startY.value + e.translationY / s;
     })
     .onEnd(() => {
       // Snap to 16pt grid with spring bounce — brief overshoot = note "lands" (DESIGN.md §4)

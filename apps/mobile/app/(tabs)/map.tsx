@@ -12,6 +12,7 @@ import { useCRMStore, useStreetStats, usePropertyStore, useTrackingStore, useBuy
 import type { MultiDwellingBuilding, NearbyContact } from '@realestate-crm/hooks';
 import type { Contact, Property, ActivityWithContact, ContactRequirement, OSMBuilding, DeclaredBuilding } from '@realestate-crm/types';
 import { fetchSuburbByName, decodePolyline, fetchMultiDwellingBuildings } from '@realestate-crm/api';
+import { formatRelativeDate } from '@realestate-crm/utils';
 import type { SuburbBoundary } from '@realestate-crm/types';
 import { FilterSheet, ContactPreview, MapSearchBar, PropertyPreview, BuildingActivityDialog } from '@realestate-crm/ui';
 import TerritoryBriefingCard from '../../components/TerritoryBriefingCard';
@@ -301,7 +302,12 @@ export default function MapScreen() {
     return properties.filter(p => p.latitude != null && p.longitude != null);
   }, [properties]);
 
-  const windowedSessions = useMemo(() => {
+  // Sessions filtered by time window, sorted newest-first, NOT yet capped at
+  // 10. The "X more" hint below compares against this count so it shows the
+  // true overflow within the current window — earlier rev compared against
+  // the unfiltered total `sessions.length`, which produced misleading
+  // counts (e.g. "8 more" when the time window only had 3 hidden).
+  const windowedSessionsAll = useMemo(() => {
     const now = Date.now();
     const cutoffs: Record<FieldActivityWindow, number | null> = {
       '7d': now - 7 * 24 * 60 * 60 * 1000,
@@ -311,9 +317,13 @@ export default function MapScreen() {
     const cutoff = cutoffs[fieldActivityWindow];
     return sessions
       .filter(s => cutoff === null || new Date(s.started_at).getTime() >= cutoff)
-      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
-      .slice(0, 10);
+      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
   }, [sessions, fieldActivityWindow]);
+
+  const windowedSessions = useMemo(
+    () => windowedSessionsAll.slice(0, 10),
+    [windowedSessionsAll],
+  );
 
   // Auto-select all sessions when the time window changes
   useEffect(() => {
@@ -698,7 +708,7 @@ export default function MapScreen() {
             key={`a-${annotation.id}`}
             coordinate={{ latitude: annotation.latitude, longitude: annotation.longitude }}
             title={annotation.note}
-            description={annotation.created_at ? new Date(annotation.created_at).toLocaleDateString() : ''}
+            description={formatRelativeDate(annotation.created_at)}
             pinColor="#f59e0b"
           />
         ))}
@@ -831,6 +841,8 @@ export default function MapScreen() {
         style={[styles.gpsButton, { backgroundColor: theme.colors.surface }]}
         onPress={handleCenterOnUser}
         activeOpacity={0.8}
+        accessibilityLabel="Center map on my location"
+        accessibilityRole="button"
       >
         <Icon name="crosshairs-gps" size={20} color={theme.colors.primary} />
       </TouchableOpacity>
@@ -840,6 +852,8 @@ export default function MapScreen() {
         style={[styles.layersPill, { backgroundColor: theme.colors.surface, bottom: insets.bottom + 90 }]}
         onPress={() => setLayerSheetVisible(true)}
         activeOpacity={0.8}
+        accessibilityLabel="Open map layers"
+        accessibilityRole="button"
       >
         <Icon name="layers-outline" size={18} color={theme.colors.onSurface} />
         <Text variant="labelMedium" style={{ color: theme.colors.onSurface, marginLeft: 6 }}>
@@ -961,9 +975,9 @@ export default function MapScreen() {
                           </TouchableOpacity>
                         );
                       })}
-                      {sessions.length > 10 && (
+                      {windowedSessionsAll.length > 10 && (
                         <Text variant="labelSmall" style={[styles.sessionOverflow, { color: theme.colors.onSurfaceVariant }]}>
-                          {sessions.length - 10} more — narrow time window
+                          {windowedSessionsAll.length - 10} more — narrow time window
                         </Text>
                       )}
                     </ScrollView>

@@ -12,6 +12,12 @@ function formatPrice(price: number): string {
   if (price >= 1_000_000) {
     return `$${(price / 1_000_000).toFixed(1)}M`;
   }
+  // Add the K-suffix branch so prices like $500k display consistently with
+  // the prospecting tab's formatter (which had this branch). Without it,
+  // a $500,000 median rendered as `$500,000` here but `$500K` elsewhere.
+  if (price >= 1_000) {
+    return `$${(price / 1_000).toFixed(0)}K`;
+  }
   return `$${price.toLocaleString()}`;
 }
 
@@ -48,7 +54,7 @@ export default function TerritoryBriefingCard({ visible, onDismiss, briefing }: 
                 Days on Market
               </Text>
               <Text variant="titleMedium" style={{ color: theme.colors.onSurface }}>
-                {briefing.avgDaysOnMarket}
+                {briefing.avgDaysOnMarket > 0 ? `${briefing.avgDaysOnMarket} days` : 'No data'}
               </Text>
             </View>
 
