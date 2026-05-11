@@ -31,7 +31,9 @@ export type TabKey =
   | 'tasks'
   | 'notes'
   | 'stats'
-  | 'settings';
+  | 'settings'
+  | 'dialer-tab'
+  | 'campaigns-tab';
 
 /** Every available tab key — the union of pinned + unpinned at any time. */
 export const ALL_TAB_KEYS: readonly TabKey[] = [
@@ -47,6 +49,10 @@ export const ALL_TAB_KEYS: readonly TabKey[] = [
   'notes',
   'stats',
   'settings',
+  // Redirect-style tabs (placeholder file in (tabs)/, actual route at root).
+  // Follow the whiteboard-tab pattern.
+  'dialer-tab',
+  'campaigns-tab',
 ];
 
 /** What new users see before they customize. */

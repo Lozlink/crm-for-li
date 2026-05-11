@@ -1,5 +1,141 @@
 # Changelog
 
+## [Unreleased] - 2026-05-11
+
+A long session driven mostly by two threads that branched into many. First thread: whiteboard pan/zoom and minimap kept "almost working" — items vanished at non-1× zoom, the minimap rect drifted off the surface, drags felt sluggish. Second thread: a full visual + data audit across the rest of the app, then live-simulator polish of every tab. Closing thread: features the user asked for in the same sitting (customizable bottom tabs, geocoded field notes, Android photo upload, route-exit affordances).
+
+### Fixed — Whiteboard canvas (the actual root cause)
+
+- **`transformOrigin: '0% 0%'` on the world layer** (`apps/mobile/components/whiteboard/WhiteboardCanvas.tsx`). React Native's default `transformOrigin` for a transformed `<View>` is the element's center. The world layer is `4000 × 4000`, so its center is `(2000, 2000)`. At `scale=0.4` the `scale()` transform shifted every child by `(1 - 0.4) × 2000 = 720pt`, pushing items entirely off the viewport. Every formula in this module — `clampCameraAxis`, the minimap projection, `WhiteboardItemView` placement — was written as `screen = camera + world * scale`, which only matches reality when origin is top-left. One line fix, but underneath it were a series of compounding "fixes" that hid the real bug: bounds-relaxing clamps, force-centering branches, no-clamp fall-throughs — each masking a different symptom of the wrong `transformOrigin`. Items rendered correctly at `scale=1.0` only because at scale 1 the origin doesn't matter.
+
+- **Bounds-aware camera clamp** (`apps/mobile/components/whiteboard/whiteboardWorld.ts`). Replaced `clampCameraTranslate(value, viewport, worldDim, scale)` with `clampCameraAxis(value, viewport, boundsMin, boundsMax, scale)`. The clamp target is now the items' bounding box (`itemBounds`) padded by half a viewport rather than the abstract `[0, WORLD_*]` rect, so users can't pan into the 80%+ of empty world that contains no content. After several false starts, the final rule is: **bounds rect must overlap viewport with at least `MIN_VISIBLE_PX = 80pt`**, applied uniformly at every zoom. Earlier two-branch designs ("cover when bounds > viewport, intersect when bounds < viewport") produced edge cases at `bounds*scale ≈ viewport` where the camera force-pinned to a single value and zoom-out felt like a pan. The unified intersect+min-visible rule never triggers a force-center, so focal-anchor preservation during pinch is intact.
+
+- **`rubberbandCameraAxis` + spring snap-back** (`whiteboardWorld.ts`, `WhiteboardCanvas.tsx`). During pan/pinch the new helper allows overshoot past the clamp boundary with reduced sensitivity (`rubber = 0.4` → 100pt finger drag past edge = 40pt camera movement). On `.onEnd` the camera springs back to the strict `clampCameraAxis` boundary via `withSpring(_, SNAP_BACK_SPRING)`. No more hard walls.
+
+- **Item drag scale-compensation** (`WhiteboardItemView.tsx`). `pan.onUpdate` was setting `translateY.value = startY.value + e.translationY`, but `startY` is in world coords while `e.translationY` is in finger pixels. At `scale=0.4` the item moved 0.4 world-pt per finger pixel, rendering as 0.16 screen-pt per finger pixel — the finger hit the screen edge before the item had moved as far as the user expected, manifesting as "the drag stopped early." Now divides by `cameraScale.value` (threaded through from `WhiteboardCanvas`) so finger:screen movement is 1:1 at every zoom.
+
+- **Symmetric world: items can be placed in `[-WORLD, +WORLD]`** (`whiteboardWorld.ts`). `clampItemPosition`'s lower bound moved from `0` to `-worldDim`, and `padBounds` now allows `minX/Y` to go negative (was `Math.max(0, ...)`, now `Math.max(-WORLD_*, ...)`). Previously the camera could pan to reveal empty canvas above the items via padding, but cards couldn't actually be placed in that area — invisible upper-edge wall.
+
+- **Union-bounds minimap projection** (`Minimap.tsx`). Minimap projects against `union(itemBounds, currentVisibleWorld)` recomputed per frame via `useDerivedValue`. Both items cluster AND viewport rect always fit fully inside the minimap; when the user pans far past items the minimap dynamically rescales to keep both visible (Figma/Miro pattern). Each item dot is now its own `<MinimapDot>` component with `useAnimatedStyle` so projection changes propagate per-frame without re-rendering the parent.
+
+- **Pinch focal-point preservation under axis clamp** (`WhiteboardCanvas.tsx`). Replaced the cover/intersect two-branch with the strict-inequality `coverLower < coverUpper` fall-through so equality cases (where bounds×scale exactly equals viewport) don't pin the camera to a single value mid-pinch. Pinch-out now keeps the world point under the user's fingers fixed on screen regardless of zoom level.
+
+- **Nested `TouchableOpacity` was stealing drag from item gesture** (`ContactCard.tsx`, `PropertyCard.tsx`, `MapCard.tsx`, `WhiteboardItemView.tsx`). The three card types wrapped themselves in `TouchableOpacity` with `onPress = router.push(...)`. The legacy RN touch responder captured initial press, cancelled mid-drag when the finger moved beyond Touchable's threshold, and released the touch to the responder chain — at which point the canvas's `movePan` layer picked it up and panned the camera instead of moving the card. Hoisted navigation into `WhiteboardItemView.handleSingleTap` (`switch (item.type)` → `/contact/:id` | `/property/:id` | `/(tabs)/map?lat=...`) and replaced the inner Touchables with plain `<View>` so the parent gesture handler owns the touch end-to-end.
+
+- **Reanimated strict-mode warning + Surface shadow warning** (`WhiteboardCanvas.tsx`, `Minimap.tsx`). Cleared "Writing to `value` during component render" by dropping a SharedValue-shadow of `bounds` prop and letting the gesture worklets capture the plain numbers from closure (same pattern as `viewportW`). Cleared "When setting overflow to hidden on Surface the shadow will not be displayed correctly" by moving `overflow: hidden` off the `Surface` and onto an inner `<View>` wrapper.
+
+- **World-anchored coarse grid** (`WhiteboardCanvas.tsx`). Added a 21×21 grid of 4pt orientation dots at 200pt world-spacing inside the camera-transformed world layer. Translates and scales with the camera, providing motion parallax when panning across empty canvas — previously the viewport-fixed fine grid looked identical at every position so panning felt motionless.
+
+- **Home button distinct from Fit-All** (`apps/mobile/components/shared/CanvasViewControls.tsx`). Fit-All zooms to frame all items with 10% padding. Home now resets to `scale=1.0` centered on the items cluster — a distinct "back to normal working zoom" destination instead of duplicating Fit-All.
+
+### Fixed — Android photo upload (Supabase Storage + RN OkHttp incompatibility)
+
+- **`uploadWhiteboardPhotoFile`** (`packages/api/src/whiteboardPhotos.ts`). The old `uploadWhiteboardPhotoBuffer` decoded the picker's base64 to an `ArrayBuffer` and called `supabase.storage.from(...).upload(path, arrayBuffer, ...)`. The Supabase JS SDK wraps that in a `fetch()` with the ArrayBuffer as request body. iOS's URLSession-backed fetch handles ArrayBuffer bodies; **Android's OkHttp-backed fetch does not** — the request goes out with zero bytes (or hangs to timeout) and the SDK reports no error. New function POSTs the picker's local `file://` URI to `${SUPABASE_URL}/storage/v1/object/${bucket}/${path}` as multipart `FormData` (RN's idiomatic `{uri, name, type}` shape), with the user's session token in `Authorization`. Works identically on both platforms. Old buffer function kept and marked `@deprecated` for the web `PhotoWidget` (browsers handle ArrayBuffer fetch bodies fine).
+- **`EditItemSheet.tsx`** switched to the new path: passes `asset.uri` instead of decoding base64. Removed `base64: true` from picker options (saved ~5MB JS-heap per photo on Android — the OOM during big captures likely contributed to the silent failure). Removed the now-unused `decodeBase64ToArrayBuffer` helper.
+
+### Added — Customizable bottom tabs (per-user)
+
+- **`useTabPreferencesStore`** (`packages/hooks/src/useTabPreferencesStore.ts`). Zustand store with per-user AsyncStorage persistence (keyed `tabPrefs:v1:<userId>` or `:demo` in demo mode). Actions: `togglePin`, `moveTabUp`, `moveTabDown`, `setPinned`, `resetToDefaults`. Constraints: minimum 1 pinned, maximum 5 pinned, dedupe + sanitize stale storage payloads. Defaults to the existing `[index, map, prospecting, whiteboard-tab, more]` set.
+- **Dynamic `(tabs)/_layout.tsx`**. All 12 tab routes are still mounted; pinned ones render with their normal `href`, unpinned with `href: null` (invisible in the bar but reachable from More, deep links, or programmatic nav). Render order = user's pinned order first, then unpinned at the end. The Whiteboard tab's `href: '/whiteboard'` redirect is preserved when pinned.
+- **`CustomTabBarButton`**. Custom `tabBarButton` in `screenOptions` wraps each native button in a `Pressable` with `onLongPress` that navigates to `/settings/customize-tabs`. Long-press is uniform across all tabs (no need to remember which tab opens settings).
+- **`app/settings/customize-tabs.tsx`**. Modal editor with two sections: **Pinned (N/5)** with up/down/unpin per row, **Available** with tap-to-pin (greyed at the 5-tab ceiling). Helper text at min/max boundaries. "Reset to defaults" with Alert confirm. "Done" header button.
+
+### Added — Reverse-geocoded note/annotation display
+
+- **`useGeocodedAddress(lat, lng)`** (`packages/hooks/src/useGeocodedAddress.ts`). React adapter on top of the existing in-memory-cached `reverseGeocode` API. Returns `{ address, loading }`; null inputs short-circuit to "no data" without firing a request. Used to render notes/annotations as readable street addresses instead of bare lat/lng pairs.
+- **Notes tab unlinked annotations** (`apps/mobile/app/(tabs)/notes.tsx`) — extracted a small `<AnnotationLocationLabel>` component (hooks can't live in `renderItem` callbacks) that resolves coords to `"7/46 Coronation Rd, Baulkham Hills"` with the raw coords as fallback during loading / on geocode failure.
+- **Pinned field-note stickies** — `buildPinnedFieldNoteText` is now `async` and awaits `reverseGeocode` before composing the sticky body. New stickies say `"Field note @ <street address>"`.
+- **Legacy sticky self-healing** (`apps/mobile/components/whiteboard/StickyNote.tsx`). On render, regex-matches the legacy `Field note @ <lat>, <lng>` header pattern. If matched, fires a one-shot reverse-geocode and `updateItem`s the sticky in place — preserving the date line and user-written body. Guarded by a `useRef` so it runs at most once per item per session. Existing pre-2026-05-11 stickies now upgrade themselves the next time they render.
+
+### Changed — Guided session no longer "active" until walking starts
+
+- **`useGuidedProspectingStore`** (`packages/hooks/src/useGuidedProspectingStore.ts`). Split the route-prep step from the activation flag:
+  - `startGuidedSession(lat, lng, scoresMap)` now *only* computes the optimized stops list and seeds the store. `isActive` stays false.
+  - New `activateGuidedSession()` flips `isActive=true`. Called from `handleStartWalking` so the active-session banner on the Prospecting tab only appears when the user has actually started walking.
+  - New `cancelGuidedSession()` wipes prepared stops and clears `isActive`. Called from the editing-phase Cancel button so backing out leaves the store clean.
+- **`guided.tsx` mount effect** now reads `stops.length === 0` as the "prepare a route" gate instead of `!isActive`, since `isActive` no longer indicates "stops have been prepared."
+- **Walking phase header** now has a `headerLeft` `End` button that triggers the same Alert-confirmed `handleEndSession` flow as the existing bottom button. Two visible exits instead of one.
+
+### Added — Route/guided modal exits
+
+- **`route/new` Cancel button** (`apps/mobile/app/route/new.tsx`). The "New Route" modal had no visible exit on Android (iOS-only swipe-down dismiss). Added a `<Stack.Screen options={{ headerLeft: () => <Button>Cancel</Button> }} />` override.
+- **Guided Edit Route Cancel button** (`apps/mobile/app/prospecting/guided.tsx`). The parent `prospecting/_layout` sets `headerShown: false`; the editing phase's override to `headerShown: true` didn't guarantee a back arrow. Added explicit `headerLeft` Cancel that also calls `cancelGuidedSession` so the store is wiped.
+- **Whiteboard close routes to Today** (`apps/mobile/app/whiteboard.tsx`). `handleClose` used `router.replace('/(tabs)')` which defaulted to the currently-active tab. If the user entered via the Whiteboard tab's redirect, `/(tabs)` resolved back to the Whiteboard tab placeholder — a blank screen. Now explicitly targets `/(tabs)/index`.
+
+### Fixed — Visual / data inconsistencies (audit pass)
+
+- **Pipeline value computed three different ways** (`apps/mobile/app/(tabs)/index.tsx`, `pipeline.tsx`, `stats.tsx`). Today used `advertised_price ?? appraisal_price ?? 0`, Pipeline matched, Stats used `advertised_price || 0` with no appraisal fallback. Same set of properties summed to three different "total active value" numbers across screens. Extracted to a shared helper:
+  - New `packages/utils/src/propertyPricing.ts` — `getPropertyPipelineValue(p)` + `sumPipelineValue(properties)`.
+  - Today (`pipelineStats.totalValue`), Pipeline (`getRawPrice` now aliases the shared helper), Stats (`activeListingsValue`) all wired through.
+
+- **Shared `formatRelativeDate`** (`packages/utils/src/relativeDate.ts`). The Notes tab and Map annotation marker descriptions used different formatters for the same `created_at` timestamp — same field rendered as "Today" in one place and "5/11/2026" in another. New shared helper buckets to `Today` / `Yesterday` / `N days ago` / locale date. Notes `formatDate` is now a thin alias. Map annotation marker `description` switched from `toLocaleDateString()` to `formatRelativeDate`.
+
+- **Stats date-range chips removed** (`apps/mobile/app/(tabs)/stats.tsx`). The chip row was rendered and stateful (`useState<DateRange>`) but no metric below actually consumed `dateRange`. The screen showed lifetime totals while the chips implied filtering. Hidden with a `TODO(stats-date-range)` comment; state/types/helpers retained as scaffolding for when someone wires the filter through.
+
+- **Today "Under Offer" relabel** (`index.tsx`). The Today snapshot's "Under Offer" count summed `under_offer + exchanged` but the Pipeline board showed them as separate columns — user saw `3 Under Offer` on Today and `1 + 2` on the Pipeline. Relabelled the Today cell to `"Under Offer / Exchanged"` so the combination is explicit.
+
+- **Notes "Unlinked" badge search-independent** (`notes.tsx`). The badge counted *filtered* unlinked annotations, so typing in the search box dropped the number — reading as "notes vanished from the store." Now derived from `allAnnotations.filter(a => !a.contact_id).length`. The filtered list itself still respects search.
+
+- **Map sessions "X more" hint uses correct base** (`apps/mobile/app/(tabs)/map.tsx`). The hint compared `sessions.length` (unfiltered total) to 10, so a 7-day window with only 3 hidden sessions showed "8 more — narrow time window." Split `windowedSessionsAll` (filtered, not sliced) from `windowedSessions` (filtered + sliced to 10) and based the hint on the former.
+
+- **Map a11y labels** (`map.tsx`). Added `accessibilityLabel` + `accessibilityRole="button"` to the icon-only GPS-center and Layers buttons.
+
+- **Stats "— days" empty state** (`stats.tsx`). `avgDaysOnMarket === null` rendered `"— days"` which read as a half-loaded value. Changed to `"No data"`. Subtitle "No settled properties yet" already explains it.
+
+- **TerritoryBriefingCard polish** (`apps/mobile/components/TerritoryBriefingCard.tsx`). Added a K-suffix branch to `formatPrice` so `$500K` matches the prospecting tab's formatter (`$500,000` was the diverging output). Added "days" unit to the bare `avgDaysOnMarket` so it has a unit like its siblings ($M, %).
+
+- **Settings hardcoded version + redundant demo branch** (`apps/mobile/app/(tabs)/settings.tsx`). `description="1.0.0"` was static; now reads from `Constants.expoConfig?.version`. Mode line `isDemo ? 'X' : isDemoMode ? 'X' : 'Y'` had two branches returning the same string; collapsed to `(isDemo || isDemoMode) ? 'X' : 'Y'`.
+
+- **`more.tsx` campaigns route trailing slash** (`/campaigns/` → `/campaigns`).
+
+- **Production console.log in prospecting render** (`prospecting.tsx`). Removed `console.log('[SuburbIntel] ...)` that fired every render.
+
+- **Prospecting building coverage denominator** (`prospecting.tsx`). Was rendering `{totalUnitsVisited} units` while the map's BuildingActivityDialog showed `12 / 80 — 15% coverage` for the same building. Now `${visited}/${estimated} units` when `estimatedUnits` is known, bare number otherwise.
+
+- **Prospecting "last visited" date format consistency** (`prospecting.tsx`). Unified to `'day numeric, month short, year numeric'` matching the map dialog (was missing the year).
+
+### Fixed —
+
+- **Prospecting top tabs (Daily / Weekly / Funnel / Territory / Sessions) all truncated** (`prospecting.tsx`). RN Paper's `SegmentedButtons` divides width evenly across N items; at 5 items even "Daily" couldn't fit. Replaced with a horizontally-scrollable `<ScrollView><Chip>...</Chip></ScrollView>` row so each chip sizes to its label, and the row scrolls when content overflows.
+
+- **More tab Field Work labels wrap mid-word** (`more.tsx`). 5-column grid with `flex: 1` per card squeezed `"Sessions" → "Session/s"`, `"Whiteboard" → "Whitebo/ard"`, `"Campaigns" → "Campai/gns"`. Switched to `flexWrap: 'wrap'` with `width: '31%'` per card so 5 items flow into 3+2 rows with full labels intact. Added `numberOfLines={1}` for defense.
+
+- **Territory "Penetration" column header wraps to "Penetratio/n"** (`prospecting.tsx`). Shortened to `"Pen %"` with `numberOfLines={1}`.
+
+- **`"1 attendees"` pluralization** (`prospecting.tsx`). Inspections summary card now switches between `attendee` and `attendees` based on count.
+
+- **Stat-cell trend chip "WoW" suffix** (`prospecting.tsx`). `metrics.trends.doors.changePercent` is a week-over-week comparison, but the Daily card displays today's count — `▼ -100%` read as "down 100% from yesterday" (wrong). Added `WoW` suffix to make the comparison period explicit. Em-dash fallback when both periods are 0 commented to explain intent.
+
+- **Recent sessions chips on Today now labeled** (`apps/mobile/app/(tabs)/index.tsx`). Three pill chips under "Start Prospecting" floated with no section header — read as ambiguous repeated `0 km · 0m` pills. Added a "Recent sessions" caption above them.
+
+- **Chip text descender clipping** — eight Chip styles had explicit `height: 20–28` that squashed Paper's natural text line-box, clipping descenders ("notes" / "to-dos" / "Warm" / "Cold"). Removed fixed heights in: `prospecting.tierChipOnPrimary`, prospecting session-list status chips (`Tracking` / `Guided` / `Planned` / `In Progress`), `OverviewSheet.countChip`, `OverviewSheet.filterChip`, `notes.sourceBadge`, `map.tagChip`, `map.editFilterChip`, `map.buildingUnitChip`, `property.matchFieldChip`. Paper's `compact` prop on each `<Chip>` handles padding correctly; let the chip size to content vertically.
+
+### Dead code identified (couldn't `rm` from sandbox)
+
+Eight component files under `apps/mobile/components/` have zero imports anywhere in the repo and should be `git rm`'d at convenience:
+
+```
+ContactCard.tsx
+ContactPreview.tsx
+FilterSheet.tsx
+ActivityFeed.tsx
+AddActivityDialog.tsx
+MapSearchBar.tsx
+TagPicker.tsx
+TagManager.tsx
+```
+
+All eight import a non-existent `../lib/store` path. They appear to be pre-extraction copies of components now living in `@realestate-crm/ui` / `@realestate-crm/hooks`. If anything ever accidentally imports them, the app picks up a parallel `useCRMStore` and state will silently desync between screens.
+
+### Verified
+
+- `pnpm --filter mobile type-check` ✓ (also `apps/web`, `packages/api`, `packages/utils`, `packages/hooks`).
+- **Live simulator verification** of the whiteboard fixes — drove the simulator via computer-use to confirm `cameraY` actually moves now (was getting force-pinned to 0 in cover-rule branch); confirmed items render correctly at `scale=0.4`–`1.0`+ after `transformOrigin` fix; confirmed dynamic minimap projection follows pan/zoom honestly.
+- **Audit findings doc** at `audit-2026-05-11.md` (root of repo) — the code-only audit produced by a subagent sweep, plus a separate live-simulator pass log.
+- **Native build state**: no new native modules in this batch; the existing pending EAS build (still ongoing from 2026-05-06 for `expo-image-picker` + `caller-id`) covers everything here. The Android photo-upload fix in particular needs the next EAS build to take effect since RN networking is native.
+
+---
+
 ## [Unreleased] - 2026-05-07
 
 ### Added — Smart Whiteboard canvas v3: viewport navigation, world boundaries, quick arrange

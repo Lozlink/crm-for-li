@@ -143,6 +143,18 @@ const TAB_META: Record<
   notes: { title: 'Notes', icon: 'note-text' },
   stats: { title: 'Reports', icon: 'chart-bar' },
   settings: { title: 'Settings', icon: 'cog' },
+  'dialer-tab': {
+    title: 'Dialer',
+    icon: 'dialpad',
+    // Redirects to the root /dialer route (the placeholder under (tabs)/
+    // returns null). Same pattern as whiteboard-tab → /whiteboard.
+    hrefOverride: '/dialer',
+  },
+  'campaigns-tab': {
+    title: 'Campaigns',
+    icon: 'email-multiple-outline',
+    hrefOverride: '/campaigns',
+  },
 };
 
 /**

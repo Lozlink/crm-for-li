@@ -40,6 +40,8 @@ const TAB_LABELS: Record<TabKey, { title: string; icon: string; subtitle?: strin
   notes: { title: 'Notes', icon: 'note-text', subtitle: 'Field notes' },
   stats: { title: 'Reports', icon: 'chart-bar', subtitle: 'Stats & charts' },
   settings: { title: 'Settings', icon: 'cog', subtitle: 'Account & app' },
+  'dialer-tab': { title: 'Dialer', icon: 'dialpad', subtitle: 'Call any number' },
+  'campaigns-tab': { title: 'Campaigns', icon: 'email-multiple-outline', subtitle: 'Email & SMS blasts' },
 };
 
 export default function CustomizeTabsScreen() {
