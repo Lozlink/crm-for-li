@@ -45,6 +45,11 @@ export default function MoreScreen() {
           <Text variant="labelMedium" style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
             {section.title}
           </Text>
+          {/* Grid wraps when a section has more than 3 items (Field Work has
+              5). Previously a single flex-row with flex:1 cardWrapper crammed
+              all 5 into one row, which broke "Sessions/Whiteboard/Campaigns"
+              into mid-word splits. With flex-wrap and a fixed-percent card
+              width, each card stays wide enough for the full label. */}
           <View style={styles.row}>
             {section.items.map((item) => (
               <TouchableOpacity
@@ -57,13 +62,15 @@ export default function MoreScreen() {
                   <View style={[styles.iconCircle, { backgroundColor: item.color + '14' }]}>
                     <Icon name={item.icon} size={24} color={item.color} />
                   </View>
-                  <Text variant="labelMedium" style={{ marginTop: 8 }}>{item.label}</Text>
+                  <Text
+                    variant="labelMedium"
+                    numberOfLines={1}
+                    style={{ marginTop: 8 }}
+                  >
+                    {item.label}
+                  </Text>
                 </Surface>
               </TouchableOpacity>
-            ))}
-            {/* Fill empty slots */}
-            {section.items.length < 3 && Array.from({ length: 3 - section.items.length }).map((_, i) => (
-              <View key={`spacer-${i}`} style={styles.cardWrapper} />
             ))}
           </View>
         </View>
@@ -77,8 +84,11 @@ const styles = StyleSheet.create({
   content: { padding: 12, paddingBottom: 40 },
   sectionBlock: { marginBottom: 16 },
   sectionTitle: { marginBottom: 8, marginLeft: 4, fontWeight: '600' },
-  row: { flexDirection: 'row', gap: 10 },
-  cardWrapper: { flex: 1 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  // 31% width gives 3 cards per row at iPhone widths (3×31% = 93% + 2 gaps).
+  // Sections with 5 items (Field Work) wrap onto a second row with 3+2 layout.
+  // Sections with fewer than 3 (Insights = 2) flow naturally without spacers.
+  cardWrapper: { width: '31%' },
   card: {
     borderRadius: 12,
     paddingVertical: 16,

@@ -14,7 +14,7 @@ import {
   Searchbar,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, LongPressEvent } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
@@ -408,6 +408,21 @@ export default function NewRouteScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
+      {/* Explicit Cancel button in the modal header. The parent _layout
+          declares this screen as `presentation: 'modal'`; on iOS users can
+          swipe-down to dismiss, but on Android (or for anyone who doesn't
+          know the iOS sheet gesture) there was no visible way out unless
+          they saved a route. Forcing a `headerLeft` Cancel makes the exit
+          obvious on every platform. */}
+      <Stack.Screen
+        options={{
+          headerLeft: () => (
+            <Button onPress={() => router.back()} compact>
+              Cancel
+            </Button>
+          ),
+        }}
+      />
       {/* Map section - top portion */}
       <View style={styles.mapContainer}>
         <MapView

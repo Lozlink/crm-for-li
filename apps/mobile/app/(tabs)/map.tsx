@@ -1279,10 +1279,11 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   tagChip: {
-    height: 28,
+    // No fixed height — Paper's Chip sizes to its content + padding.
+    // Fixed-height clipped text descenders on tags ("Friendly", "Hot", etc).
   },
   editFilterChip: {
-    height: 28,
+    // Same — no fixed height.
   },
 
   // GPS button
@@ -1461,7 +1462,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   buildingUnitChip: {
-    height: 26,
+    // No fixed height — was clipping text.
   },
   buildingLastVisited: {
     marginTop: 8,

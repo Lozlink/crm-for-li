@@ -3,7 +3,8 @@ import { StyleSheet, View, FlatList, Pressable } from 'react-native';
 import { Searchbar, FAB, useTheme, Text, Card, Chip, Surface, SegmentedButtons, Portal, Dialog, Button, ActivityIndicator, Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useCRMStore, useTrackingStore, useWhiteboardStore } from '@realestate-crm/hooks';
+import { useCRMStore, useTrackingStore, useWhiteboardStore, useGeocodedAddress } from '@realestate-crm/hooks';
+import { reverseGeocode } from '@realestate-crm/api';
 import { formatRelativeDate } from '@realestate-crm/utils';
 import { Contact, Activity, TrackingAnnotation, ActivitySource } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -21,6 +22,33 @@ interface NoteEntry {
   contact: Contact;
   notes: Activity[];
   latestNote: Activity | null;
+}
+
+/**
+ * Inline label that reverse-geocodes lat/lng to a street address with raw
+ * coordinates as fallback. Extracted as a component because the geocode
+ * lookup is per-row and hooks can't live inside a `renderItem` callback.
+ */
+function AnnotationLocationLabel({
+  latitude,
+  longitude,
+  color,
+}: {
+  latitude: number;
+  longitude: number;
+  color: string;
+}) {
+  const { address } = useGeocodedAddress(latitude, longitude);
+  const text = address ?? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+  return (
+    <Text
+      variant="labelSmall"
+      numberOfLines={1}
+      style={{ color, marginLeft: 4, flexShrink: 1 }}
+    >
+      {text}
+    </Text>
+  );
 }
 
 export default function NotesScreen() {
@@ -174,10 +202,17 @@ export default function NotesScreen() {
     return lines.join('\n');
   }, []);
 
-  const buildPinnedFieldNoteText = useCallback((annotation: TrackingAnnotation) => {
-    const lines = [
-      `Field note @ ${annotation.latitude.toFixed(4)}, ${annotation.longitude.toFixed(4)}`,
-    ];
+  const buildPinnedFieldNoteText = useCallback(async (annotation: TrackingAnnotation) => {
+    // Reverse-geocode the pin location so the sticky reads as a street
+    // address ("Field note @ 7/46 Coronation Rd, Baulkham Hills") rather
+    // than raw coords. `reverseGeocode` is in-memory cached so this is
+    // essentially free on the second pin of the same point. Falls back to
+    // coords when geocoding fails (rate-limit, no result, offline).
+    const geocoded = await reverseGeocode(annotation.latitude, annotation.longitude).catch(() => null);
+    const locationText =
+      geocoded?.address ??
+      `${annotation.latitude.toFixed(4)}, ${annotation.longitude.toFixed(4)}`;
+    const lines = [`Field note @ ${locationText}`];
     if (annotation.created_at) {
       lines.push(formatDate(annotation.created_at));
     }
@@ -214,13 +249,16 @@ export default function NotesScreen() {
     setPinningKey(pinKey);
     try {
       const { x, y } = getNextWhiteboardPosition();
+      // buildPinnedFieldNoteText is now async — it reverse-geocodes the
+      // pin location so the sticky shows an address rather than raw coords.
+      const text = await buildPinnedFieldNoteText(annotation);
       const created = await createWhiteboardItem({
         type: 'sticky',
         position_x: x,
         position_y: y,
         width: 240,
         height: 180,
-        content: { text: buildPinnedFieldNoteText(annotation) },
+        content: { text },
       });
       if (created) {
         setPinSnackbarVisible(true);
@@ -341,9 +379,11 @@ export default function NotesScreen() {
           <View style={styles.addressContainer}>
             <View style={styles.unlinkedHeader}>
               <Icon name="map-marker" size={16} color="#F59E0B" />
-              <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginLeft: 4 }}>
-                {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}
-              </Text>
+              <AnnotationLocationLabel
+                latitude={item.latitude}
+                longitude={item.longitude}
+                color={theme.colors.onSurfaceVariant}
+              />
             </View>
           </View>
           <Chip
@@ -586,7 +626,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   sourceBadge: {
-    height: 20,
+    // No explicit height — Paper's Chip with `compact` sizes to content;
+    // `height: 20` was clipping the text descenders on labels like "Field"
+    // and "Inspection".
   },
   unlinkedHeader: {
     flexDirection: 'row',

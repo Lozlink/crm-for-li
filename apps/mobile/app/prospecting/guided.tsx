@@ -79,6 +79,8 @@ export default function GuidedProspectingScreen() {
   const proximityAlertContactIds = useGuidedProspectingStore(s => s.proximityAlertContactIds);
   const buildingCoverage = useGuidedProspectingStore(s => s.buildingCoverage);
   const startGuidedSession = useGuidedProspectingStore(s => s.startGuidedSession);
+  const activateGuidedSession = useGuidedProspectingStore(s => s.activateGuidedSession);
+  const cancelGuidedSession = useGuidedProspectingStore(s => s.cancelGuidedSession);
   const addStop = useGuidedProspectingStore(s => s.addStop);
   const removeStop = useGuidedProspectingStore(s => s.removeStop);
   const reorderStops = useGuidedProspectingStore(s => s.reorderStops);
@@ -138,8 +140,12 @@ export default function GuidedProspectingScreen() {
       };
       setUserLocation(coords);
 
-      // Generate initial stops and enter editing phase
-      if (!isActive) {
+      // Generate initial stops and enter editing phase. `startGuidedSession`
+      // only prepares the route now — it doesn't flip `isActive`, so opening
+      // this screen and immediately backing out won't leave a phantom session
+      // showing as active on the Prospecting tab. The flip happens later in
+      // `handleStartWalking` once the user commits.
+      if (stops.length === 0) {
         startGuidedSession(coords.latitude, coords.longitude, scores);
       }
       setPhase('editing');
@@ -382,13 +388,18 @@ export default function GuidedProspectingScreen() {
       Alert.alert('No Stops', 'Add at least one stop before starting.');
       return;
     }
+    // Flip guided-session `isActive` only now. Before this point the
+    // store has stops prepared but isActive stays false, so the
+    // Prospecting tab doesn't show an "in progress" banner just because
+    // the user opened the editing screen.
+    activateGuidedSession();
     // Start tracking session if none active
     if (!activeSession) {
       await startSession();
     }
     setSessionStartMs(Date.now());
     setPhase('walking');
-  }, [stops.length, activeSession, startSession]);
+  }, [stops.length, activeSession, startSession, activateGuidedSession]);
 
   // ── Walking phase handlers ──────────────────────────────────────────
 
@@ -485,7 +496,32 @@ export default function GuidedProspectingScreen() {
   if (phase === 'editing') {
     return (
       <>
-        <Stack.Screen options={{ title: 'Edit Route', headerShown: true }} />
+        {/* Explicit Cancel button — the parent `prospecting/_layout` sets
+            `headerShown: false`, and the override here only turns the header
+            back on without guaranteeing a back arrow. Some users reached
+            this screen via the "Start Guided Session" CTA on Today/Prospecting
+            and reported they couldn't get out. Forcing a `headerLeft` Cancel
+            makes the exit obvious. */}
+        <Stack.Screen
+          options={{
+            title: 'Edit Route',
+            headerShown: true,
+            headerLeft: () => (
+              <Button
+                onPress={() => {
+                  // Clear any prepared-but-not-activated route so the
+                  // Prospecting tab doesn't show a phantom in-progress
+                  // session next time we land there.
+                  cancelGuidedSession();
+                  router.back();
+                }}
+                compact
+              >
+                Cancel
+              </Button>
+            ),
+          }}
+        />
         <KeyboardAvoidingView
           style={styles.container}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -744,7 +780,20 @@ export default function GuidedProspectingScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Guided Prospecting', headerShown: true }} />
+      <Stack.Screen
+        options={{
+          title: 'Guided Prospecting',
+          headerShown: true,
+          // Visible End button in the header — gives the user a second way
+          // to exit (the bigger End Session button at the bottom of the
+          // screen is still there). Same Alert.alert confirmation flow.
+          headerLeft: () => (
+            <Button onPress={handleEndSession} compact>
+              End
+            </Button>
+          ),
+        }}
+      />
       <View style={[styles.container, { paddingBottom: insets.bottom }]}>
         {/* Header */}
         <Surface style={styles.header} elevation={2}>

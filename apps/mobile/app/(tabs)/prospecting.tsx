@@ -204,21 +204,36 @@ export default function ProspectingScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
-        {/* View Selector */}
-        <View style={styles.segmentContainer}>
-          <SegmentedButtons
-            value={view}
-            onValueChange={(val) => setView(val as ViewMode)}
-            buttons={[
+        {/* View Selector — horizontally scrollable chip row.
+            Previously a paper SegmentedButtons with 5 items at density="small";
+            even "Daily" truncated at iPhone 17 width because Paper distributes
+            buttons evenly. Chips give us natural width per label and scroll
+            on overflow, so longer labels (Territory, Sessions) read clearly. */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.viewSelectorRow}
+        >
+          {(
+            [
               { value: 'daily', label: 'Daily' },
               { value: 'weekly', label: 'Weekly' },
               { value: 'funnel', label: 'Funnel' },
               { value: 'territory', label: 'Territory' },
               { value: 'sessions', label: 'Sessions' },
-            ]}
-            density="small"
-          />
-        </View>
+            ] as const
+          ).map((opt) => (
+            <Chip
+              key={opt.value}
+              selected={view === opt.value}
+              showSelectedCheck={false}
+              onPress={() => setView(opt.value as ViewMode)}
+              style={styles.viewSelectorChip}
+            >
+              {opt.label}
+            </Chip>
+          ))}
+        </ScrollView>
 
         {/* Start actions or active session status */}
         {activeSession || guidedIsActive ? (
@@ -622,7 +637,7 @@ function DailyView({
               <Text variant="titleSmall" style={{ fontWeight: '600' }}>Inspections</Text>
             </View>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
-              {metrics.inspectionMetrics.totalCompleted} completed, avg {metrics.inspectionMetrics.avgAttendees} attendees
+              {metrics.inspectionMetrics.totalCompleted} completed, avg {metrics.inspectionMetrics.avgAttendees} {metrics.inspectionMetrics.avgAttendees === 1 ? 'attendee' : 'attendees'}
             </Text>
           </View>
         </Surface>
@@ -1061,8 +1076,14 @@ function TerritoryView({
                 <Text variant="labelSmall" style={[styles.suburbCol, { color: theme.colors.onSurfaceVariant, textAlign: 'right' }]}>
                   Contacts
                 </Text>
-                <Text variant="labelSmall" style={[styles.suburbCol, { color: theme.colors.onSurfaceVariant, textAlign: 'right' }]}>
-                  Penetration
+                <Text
+                  variant="labelSmall"
+                  numberOfLines={1}
+                  style={[styles.suburbCol, { color: theme.colors.onSurfaceVariant, textAlign: 'right' }]}
+                >
+                  {/* Shortened from "Penetration" — the longer label wrapped
+                      awkwardly to "Penetratio/n" at iPhone column widths. */}
+                  Pen %
                 </Text>
               </View>
 
@@ -1321,7 +1342,7 @@ function SessionsView({
                 </Text>
                 <Chip
                   compact
-                  style={{ backgroundColor: badgeColor, height: 24 }}
+                  style={{ backgroundColor: badgeColor }}
                   textStyle={{ color: badgeTextColor, fontSize: 10 }}
                 >
                   {isTracking ? 'Tracking' : 'Guided'}
@@ -1329,7 +1350,7 @@ function SessionsView({
                 {item.status && item.status !== 'completed' && (
                   <Chip
                     compact
-                    style={{ backgroundColor: theme.colors.surfaceVariant, height: 24 }}
+                    style={{ backgroundColor: theme.colors.surfaceVariant }}
                     textStyle={{ color: theme.colors.onSurfaceVariant, fontSize: 10 }}
                   >
                     {item.status === 'planned' ? 'Planned' : 'In Progress'}
@@ -1417,14 +1438,21 @@ function StatCell({
   let trendText = '';
   let trendColor = theme.colors.onSurfaceVariant;
   if (trend && trend.changePercent !== null) {
+    // "WoW" suffix because metrics.trends are weekly comparisons, but
+    // these cells display TODAY's value \u2014 without the period label
+    // "\u25BC -100%" reads like "down 100% from yesterday" which is wrong.
     if (trend.changePercent >= 0) {
-      trendText = `\u25B2 +${trend.changePercent}%`;
+      trendText = `\u25B2 +${trend.changePercent}% WoW`;
       trendColor = '#16a34a';
     } else {
-      trendText = `\u25BC ${trend.changePercent}%`;
+      trendText = `\u25BC ${trend.changePercent}% WoW`;
       trendColor = '#dc2626';
     }
   } else if (trend) {
+    // null changePercent means previous period was 0 AND current is 0 \u2014
+    // no meaningful comparison. Show em-dash to indicate "no change /
+    // no baseline" rather than nothing (avoids the "is data missing?"
+    // ambiguity).
     trendText = '\u2014';
   }
 
@@ -1492,7 +1520,9 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   tierChipOnPrimary: {
-    height: 26,
+    // No explicit height — `height: 26` was clipping the text bottom-edge
+    // ("Warm" / "Cold" lost their descenders). Letting the chip size to its
+    // content avoids that. Padding kept tight via Paper's `compact` prop.
     backgroundColor: 'rgba(255,255,255,0.85)',
   },
   // Active session card
@@ -1508,6 +1538,16 @@ const styles = StyleSheet.create({
   },
   segmentContainer: {
     marginBottom: 16,
+  },
+  viewSelectorRow: {
+    paddingHorizontal: 2,
+    gap: 8,
+    marginBottom: 16,
+  },
+  viewSelectorChip: {
+    // Compact horizontal scroll chips for view selection — see prop site
+    // for migration rationale (replaced 5-button SegmentedButtons that
+    // truncated all labels at iPhone widths).
   },
 
   // Stat grid (shared by Daily)

@@ -20,6 +20,17 @@ interface GuidedProspectingState {
   proximityAlertContactIds: string[];
   buildingCoverage: Map<string, { visited: number; total: number }>;
 
+  /**
+   * Computes the optimized route and seeds the store, but does NOT set
+   * `isActive=true`. Use this on screen-mount to populate stops for the
+   * editing phase. The session only becomes "active" (which makes other
+   * screens like the Prospecting tab show an active-session banner) once
+   * the user explicitly commits via `activateGuidedSession()` below.
+   *
+   * Earlier rev set `isActive=true` here directly, which meant opening
+   * guided.tsx and then backing out without walking left a phantom session
+   * showing as active across the app.
+   */
   startGuidedSession: (
     lat: number,
     lng: number,
@@ -27,6 +38,14 @@ interface GuidedProspectingState {
     radiusMeters?: number,
     maxStops?: number,
   ) => void;
+  /** Flip `isActive=true` once the user taps "Start Walking". */
+  activateGuidedSession: () => void;
+  /**
+   * Clear any prepared-but-not-activated route. Used when the user backs
+   * out of the editing phase via Cancel — wipes stops/coverage so the
+   * Prospecting tab doesn't see stale data.
+   */
+  cancelGuidedSession: () => void;
   addStop: (stop: GuidedStop) => void;
   removeStop: (contactId: string) => void;
   reorderStops: (fromIndex: number, toIndex: number) => void;
@@ -120,7 +139,8 @@ export const useGuidedProspectingStore = create<GuidedProspectingState>()((set, 
 
     if (isDemo) {
       set({
-        isActive: true,
+        // isActive intentionally stays false here — see interface comment.
+        // The user must tap "Start Walking" to flip it via activateGuidedSession.
         stops: DEMO_GUIDED_STOPS,
         currentStopIndex: 0,
         proximityAlertContactIds: [],
@@ -197,11 +217,27 @@ export const useGuidedProspectingStore = create<GuidedProspectingState>()((set, 
     }
 
     set({
-      isActive: true,
+      // isActive stays false — only activateGuidedSession() flips it.
       stops,
       currentStopIndex: 0,
       proximityAlertContactIds: [],
       buildingCoverage,
+    });
+  },
+
+  activateGuidedSession: () => {
+    set({ isActive: true });
+  },
+
+  cancelGuidedSession: () => {
+    // Wipe any prepared route + clear isActive so the Prospecting tab
+    // doesn't see a phantom in-progress session.
+    set({
+      isActive: false,
+      stops: [],
+      currentStopIndex: 0,
+      proximityAlertContactIds: [],
+      buildingCoverage: new Map(),
     });
   },
 

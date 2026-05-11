@@ -1509,7 +1509,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   matchFieldChip: {
-    height: 24,
+    // No fixed height — was clipping descenders.
   },
   soldRecordRow: {
     flexDirection: 'row',

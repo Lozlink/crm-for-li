@@ -357,8 +357,18 @@ export default function TodayScreen() {
             <Icon name="play-circle" size={32} color={theme.colors.onPrimaryContainer} />
           </TouchableOpacity>
           {recentSessions.length > 0 && (
-            <View style={styles.recentSessionsRow}>
-              {recentSessions.map(session => (
+            <>
+              {/* Section caption — previously the chips floated below
+                  "Start Prospecting" with no indication they were past
+                  sessions. Reads ambiguously as `0 km · 0m` repeated. */}
+              <Text
+                variant="labelSmall"
+                style={{ color: theme.colors.onSurfaceVariant, marginTop: 8, marginBottom: 4 }}
+              >
+                Recent sessions
+              </Text>
+              <View style={styles.recentSessionsRow}>
+                {recentSessions.map(session => (
                 <TouchableOpacity
                   key={session.id}
                   style={[styles.sessionChip, { backgroundColor: theme.colors.surfaceVariant }]}
@@ -371,7 +381,8 @@ export default function TodayScreen() {
                   </Text>
                 </TouchableOpacity>
               ))}
-            </View>
+              </View>
+            </>
           )}
         </View>
       )}

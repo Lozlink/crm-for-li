@@ -410,10 +410,17 @@ export default function WhiteboardScreen() {
   );
 
   const handleClose = useCallback(() => {
+    // Prefer history-back so the user returns to wherever they came from.
+    // When there's no back stack (e.g. opened via the Whiteboard tab's
+    // `href` redirect, or after a deep link), the previous behavior
+    // replaced with `/(tabs)` which defaults to the currently-active tab.
+    // That tab is "Whiteboard", whose placeholder screen renders blank —
+    // user closes the whiteboard and sees a blank white screen.
+    // Explicitly target the Today tab as the safe landing spot.
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/index' as never);
     }
   }, [router]);
 

@@ -1,5 +1,8 @@
+import { useEffect, useRef } from 'react';
 import { useColorScheme, StyleSheet, Text, View } from 'react-native';
 import type { WhiteboardItem, WhiteboardStickyContent } from '@realestate-crm/types';
+import { reverseGeocode } from '@realestate-crm/api';
+import { useWhiteboardStore } from '@realestate-crm/hooks';
 import {
   STICKY_COLOR_DEFS,
   stickyColorForScheme,
@@ -14,6 +17,14 @@ interface Props {
 }
 
 /**
+ * Detects the legacy "Field note @ <lat>, <lng>" header pattern that
+ * pre-2026-05-11 pinned field-notes were saved with. The geocode-on-pin
+ * fix only applies to NEW pins; existing stickies kept their raw-coord
+ * header until visited again. Matching it lets us self-heal on render.
+ */
+const LEGACY_FIELD_NOTE_HEADER = /^Field note @ (-?\d+\.\d+),\s*(-?\d+\.\d+)/;
+
+/**
  * Sticky note body widget — always read-only on canvas.
  *
  * Text editing is done via long-press → EditItemSheet. This keeps the
@@ -25,11 +36,44 @@ interface Props {
  * - 15/22 custom font (not a Paper variant — stickies feel handwritten)
  * - Placeholder: "Quick note…" at 40% opacity
  * - Background swaps between light/dark palette from whiteboardColors.ts
+ *
+ * Legacy field-note migration (2026-05-11): if the sticky text starts
+ * with "Field note @ <lat>, <lng>", reverse-geocode and overwrite the
+ * stored text so future renders read as a street address. Runs at most
+ * once per item per session via a local ref guard.
  */
 export function StickyNote({ item }: Props) {
   const colorScheme = useColorScheme();
   const content = item.content as WhiteboardStickyContent | undefined;
   const text = content?.text ?? '';
+
+  // Self-healing migration for legacy field-note stickies. Each rendered
+  // instance attempts the upgrade at most once thanks to the ref guard
+  // (avoids re-running on every re-render even before the network call
+  // completes).
+  const updateItem = useWhiteboardStore((s) => s.updateItem);
+  const migrationAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (migrationAttemptedRef.current) return;
+    const match = LEGACY_FIELD_NOTE_HEADER.exec(text);
+    if (!match) return;
+    migrationAttemptedRef.current = true;
+
+    const lat = parseFloat(match[1]);
+    const lng = parseFloat(match[2]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    void (async () => {
+      const geocoded = await reverseGeocode(lat, lng).catch(() => null);
+      if (!geocoded?.address) return;
+      // Replace just the header line; preserve the rest of the sticky
+      // body (date line, blank line, user-written note).
+      const updatedText = text.replace(LEGACY_FIELD_NOTE_HEADER, `Field note @ ${geocoded.address}`);
+      if (updatedText === text) return;
+      void updateItem(item.id, { content: { ...content, text: updatedText } });
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
 
   // Resolve the correct background for this sticky color in the current scheme.
   const storedColorKey = item.color ?? DEFAULT_STICKY_COLOR_DEF.light;

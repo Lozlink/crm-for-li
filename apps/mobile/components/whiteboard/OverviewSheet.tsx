@@ -534,7 +534,10 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   countChip: {
-    height: 24,
+    // No explicit height — `height: 24` was squashing Paper's Chip below its
+    // text's natural line-box, clipping descenders ("notes" / "to-do" lost
+    // their bottom halves). `compact` on the Chip itself handles the tight
+    // padding; let it size to content vertically.
   },
   searchRow: {
     paddingHorizontal: 12,
@@ -551,7 +554,9 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   filterChip: {
-    height: 28,
+    // No fixed height — `height: 28` was clipping the bottom descenders
+    // on labels like "photos" / "properties" / "suggestions". `compact`
+    // prop handles padding; let the chip size to content.
   },
   filterChipInactive: {
     opacity: 0.45,
