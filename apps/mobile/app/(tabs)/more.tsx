@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { StyleSheet, View, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme, Text, Surface } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useComplianceStore } from '@realestate-crm/hooks';
 
 const SECTIONS = [
   {
@@ -31,16 +33,31 @@ const SECTIONS = [
   },
 ];
 
+// Opt-in Compliance Suite group — only shown while the suite toggle is on
+// (Settings → Compliance Suite), keeping zero compliance footprint otherwise.
+const COMPLIANCE_SECTION = {
+  title: 'Compliance',
+  items: [
+    { label: 'Compliance', icon: 'shield-check', route: '/(tabs)/compliance', color: '#0ea5e9' },
+  ],
+};
+
 export default function MoreScreen() {
   const theme = useTheme();
   const router = useRouter();
+
+  const suiteEnabled = useComplianceStore((s) => s.suiteEnabled);
+  const sections = useMemo(
+    () => (suiteEnabled ? [...SECTIONS.slice(0, 2), COMPLIANCE_SECTION, ...SECTIONS.slice(2)] : SECTIONS),
+    [suiteEnabled],
+  );
 
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       contentContainerStyle={styles.content}
     >
-      {SECTIONS.map((section) => (
+      {sections.map((section) => (
         <View key={section.title} style={styles.sectionBlock}>
           <Text variant="labelMedium" style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
             {section.title}

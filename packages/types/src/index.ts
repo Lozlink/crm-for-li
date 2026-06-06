@@ -49,6 +49,14 @@ export type {
 } from './entities';
 export { SMS_LABEL_SEEDS } from './entities';
 
+// Compliance (IntelliCompli)
+export type {
+  ComplianceRiskLevel, ComplianceAlertSeverity, ComplianceAlertStatus,
+  ComplianceVerificationStatus, ComplianceScreeningKind,
+  ComplianceProfile, ComplianceScreeningMatch, ComplianceScreeningResult,
+  ComplianceAlert, ComplianceAnalytics,
+} from './compliance';
+
 // Map types
 export type { MapRegion, SavedSuburb, SuburbBoundary, OSMBuilding } from './map';
 

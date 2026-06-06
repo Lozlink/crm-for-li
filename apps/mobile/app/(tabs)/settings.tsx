@@ -1,9 +1,9 @@
 import { StyleSheet, View, ScrollView, Alert, TextInput as RNTextInput } from 'react-native';
-import { List, Divider, useTheme, Text, Surface, Button, Avatar, TextInput, Dialog, Portal, RadioButton } from 'react-native-paper';
+import { List, Divider, useTheme, Text, Surface, Button, Avatar, TextInput, Dialog, Portal, RadioButton, Switch, Chip } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import Constants from 'expo-constants';
-import { useCRMStore, useAuthStore, usePermissions, useOrganisationStore } from '@realestate-crm/hooks';
+import { useCRMStore, useAuthStore, usePermissions, useOrganisationStore, useComplianceStore } from '@realestate-crm/hooks';
 import { isDemoMode } from '@realestate-crm/api';
 import { TagManager, RoleBadge } from '@realestate-crm/ui';
 import type { OrgRole } from '@realestate-crm/types';
@@ -22,6 +22,16 @@ export default function SettingsScreen() {
   const isDemo = useAuthStore(s => s.isDemoMode);
   const signOut = useAuthStore(s => s.signOut);
   const { canManageMembers } = usePermissions();
+
+  const suiteEnabled = useComplianceStore(s => s.suiteEnabled);
+  const setSuiteEnabled = useComplianceStore(s => s.setSuiteEnabled);
+  const complianceApiKeySet = useComplianceStore(s => s.apiKeySet);
+  const complianceApiKeyHint = useComplianceStore(s => s.apiKeyHint);
+  const complianceMode = useComplianceStore(s => s.mode);
+  const setComplianceApiKey = useComplianceStore(s => s.setApiKey);
+
+  const [apiKeyDraft, setApiKeyDraft] = useState('');
+  const [savingApiKey, setSavingApiKey] = useState(false);
 
   const organisations = useOrganisationStore(s => s.organisations);
   const orgMemberships = useOrganisationStore(s => s.orgMemberships);
@@ -69,6 +79,30 @@ export default function SettingsScreen() {
     fetchOrgTeams(orgId);
     setShowOrgTeams(true);
   }, [fetchOrgTeams]);
+
+  const handleSaveApiKey = useCallback(async () => {
+    const key = apiKeyDraft.trim();
+    if (!key) return;
+    setSavingApiKey(true);
+    try {
+      await setComplianceApiKey(key);
+      setApiKeyDraft('');
+    } finally {
+      setSavingApiKey(false);
+    }
+  }, [apiKeyDraft, setComplianceApiKey]);
+
+  const handleClearApiKey = useCallback(() => {
+    Alert.alert(
+      'Remove API key',
+      'The Compliance Suite will switch back to demo data.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        // Clearing = saving an empty key; the store flips back to mock mode.
+        { text: 'Remove', style: 'destructive', onPress: () => { void setComplianceApiKey(''); } },
+      ],
+    );
+  }, [setComplianceApiKey]);
 
   const activeOrg = organisations.length > 0 ? organisations[0] : null;
   const activeOrgMembership = activeOrg
@@ -199,6 +233,92 @@ export default function SettingsScreen() {
           onPress={() => router.push('/settings/caller-id')}
           style={styles.listItem}
         />
+      </Surface>
+
+      <Divider style={styles.divider} />
+
+      {/* Compliance Suite — opt-in toggle. Every compliance surface in the
+          app (tab, contact panel, Today section, card badges) hangs off this
+          per-team preference; when off, the CRM has zero compliance footprint. */}
+      <Surface style={styles.complianceCard} elevation={1}>
+        <Text variant="titleMedium" style={styles.sectionTitle}>Compliance Suite</Text>
+        <View style={styles.complianceToggleRow}>
+          <View style={{ flex: 1 }}>
+            <Text variant="bodyMedium">Enable Compliance Suite</Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+              Identity screening and AML compliance for your contacts, powered by IntelliCompli
+            </Text>
+          </View>
+          <Switch
+            value={suiteEnabled}
+            onValueChange={(value) => { void setSuiteEnabled(value); }}
+          />
+        </View>
+
+        {/* Connection mode + API key — only meaningful while the suite is on */}
+        {suiteEnabled && (
+          <>
+            <Divider style={{ marginVertical: 12 }} />
+
+            <View style={styles.complianceModeRow}>
+              <Text variant="bodyMedium" style={{ flex: 1 }}>Connection</Text>
+              <Chip
+                compact
+                icon={complianceMode === 'live' ? 'cloud-check-outline' : 'database-outline'}
+                style={
+                  complianceMode === 'live'
+                    ? { backgroundColor: theme.colors.primaryContainer }
+                    : undefined
+                }
+              >
+                {complianceMode === 'live' ? 'Connected' : 'Demo data'}
+              </Chip>
+            </View>
+
+            {complianceApiKeySet ? (
+              <View style={styles.complianceKeyRow}>
+                <View style={{ flex: 1 }}>
+                  <Text variant="bodyMedium">IntelliCompli API key</Text>
+                  {/* apiKeyHint arrives pre-masked from the store (••••••…last6);
+                      re-trim to the last 4 chars per spec. Short keys mask fully
+                      (the hint is all dots), so the slice stays safe. */}
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {complianceApiKeyHint ? `••••${complianceApiKeyHint.slice(-4)}` : 'Key saved'}
+                  </Text>
+                </View>
+                <Button compact textColor={theme.colors.error} onPress={handleClearApiKey}>
+                  Clear
+                </Button>
+              </View>
+            ) : (
+              <View style={styles.complianceKeyEntry}>
+                <TextInput
+                  label="IntelliCompli API key"
+                  value={apiKeyDraft}
+                  onChangeText={setApiKeyDraft}
+                  mode="outlined"
+                  dense
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Button
+                  mode="contained-tonal"
+                  icon="content-save-outline"
+                  onPress={handleSaveApiKey}
+                  loading={savingApiKey}
+                  disabled={!apiKeyDraft.trim() || savingApiKey}
+                  style={styles.complianceKeySave}
+                >
+                  Save key
+                </Button>
+              </View>
+            )}
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8 }}>
+              Generate a key in your IntelliCompli dashboard.
+            </Text>
+          </>
+        )}
       </Surface>
 
       {/* Organisation Section */}
@@ -400,6 +520,35 @@ const styles = StyleSheet.create({
     marginTop: 8,
     padding: 16,
     borderRadius: 12,
+  },
+  complianceCard: {
+    margin: 16,
+    marginTop: 8,
+    padding: 16,
+    borderRadius: 12,
+  },
+  complianceToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  complianceModeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  complianceKeyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  complianceKeyEntry: {
+    gap: 0,
+  },
+  complianceKeySave: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
   },
   infoCard: {
     margin: 16,

@@ -3,7 +3,9 @@ import { StyleSheet, View, TouchableOpacity, Linking } from 'react-native';
 import { Text, Surface, useTheme, Avatar } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { Contact, LeadScoreBreakdown } from '@realestate-crm/types';
+import { useComplianceStore } from '@realestate-crm/hooks';
 import LeadScoreBadge from './LeadScoreBadge';
+import ComplianceRiskBadge from './ComplianceRiskBadge';
 
 interface ContactCardProps {
   contact: Contact;
@@ -11,6 +13,25 @@ interface ContactCardProps {
   onLongPress?: () => void;
   onMapPress?: (contact: Contact) => void;
   scoreBreakdown?: LeadScoreBreakdown;
+}
+
+/**
+ * Connected compliance badge. Narrow selectors keep FlatList rows from
+ * re-rendering unless this contact's own profile (or the suite toggle)
+ * changes — profiles are batch-hydrated by the contacts screen via
+ * `hydrateProfiles`, never fetched per-row. Renders nothing unless the
+ * suite is enabled, the contact is linked to IntelliCompli, and its profile
+ * is hydrated — zero footprint otherwise.
+ */
+function ContactComplianceBadge({ contact }: { contact: Contact }) {
+  const suiteEnabled = useComplianceStore((s) => s.suiteEnabled);
+  const profile = useComplianceStore((s) => s.profilesByContactId[contact.id]);
+  if (!suiteEnabled || !contact.intellicompli_customer_id || !profile) return null;
+  return (
+    <View style={styles.complianceBadge}>
+      <ComplianceRiskBadge score={profile.riskScore} level={profile.riskLevel} size="small" />
+    </View>
+  );
 }
 
 function ContactCard({ contact, onPress, onLongPress, onMapPress, scoreBreakdown }: ContactCardProps) {
@@ -47,6 +68,7 @@ function ContactCard({ contact, onPress, onLongPress, onMapPress, scoreBreakdown
             {scoreBreakdown && (
               <LeadScoreBadge score={scoreBreakdown.total} tier={scoreBreakdown.tier} size="small" />
             )}
+            <ContactComplianceBadge contact={contact} />
           </View>
 
           {contact.address && (
@@ -146,6 +168,9 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  complianceBadge: {
+    marginLeft: 4,
   },
   infoRow: {
     flexDirection: 'row',

@@ -10,6 +10,9 @@ const Constants = {
       GOOGLE_PLACES_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY || '',
       GOOGLE_MAPS_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
       googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+      // IntelliCompli compliance suite — optional; absence falls through to mock transport
+      INTELLICOMPLI_API_URL: process.env.NEXT_PUBLIC_INTELLICOMPLI_API_URL || '',
+      INTELLICOMPLI_API_KEY: process.env.NEXT_PUBLIC_INTELLICOMPLI_API_KEY || '',
     },
   },
 };

@@ -151,6 +151,9 @@ function SafeStack({ theme }: { theme: typeof MD3DarkTheme }) {
         options={{ title: 'Customize tabs', presentation: 'modal' }}
       />
       <Stack.Screen name="tracking/[id]" options={{ title: 'Tracking Session' }} />
+      {/* Inherits the default contentStyle bottom inset — required for stack
+          screens so the Android nav bar doesn't overlap content. */}
+      <Stack.Screen name="compliance/alert/[id]" options={{ title: 'Compliance Alert' }} />
       <Stack.Screen name="prospecting" options={{ headerShown: false }} />
       <Stack.Screen name="whiteboard" options={{ headerShown: false, contentStyle: { paddingBottom: 0 } }} />
     </Stack>

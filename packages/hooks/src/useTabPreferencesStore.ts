@@ -33,7 +33,8 @@ export type TabKey =
   | 'stats'
   | 'settings'
   | 'dialer-tab'
-  | 'campaigns-tab';
+  | 'campaigns-tab'
+  | 'compliance';
 
 /** Every available tab key — the union of pinned + unpinned at any time. */
 export const ALL_TAB_KEYS: readonly TabKey[] = [
@@ -53,6 +54,9 @@ export const ALL_TAB_KEYS: readonly TabKey[] = [
   // Follow the whiteboard-tab pattern.
   'dialer-tab',
   'campaigns-tab',
+  // Opt-in Compliance Suite tab — never in the defaults; additionally gated
+  // on `useComplianceStore.suiteEnabled` in the tab layout + customize screen.
+  'compliance',
 ];
 
 /** What new users see before they customize. */

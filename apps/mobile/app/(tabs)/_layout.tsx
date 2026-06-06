@@ -7,6 +7,7 @@ import {
   useAuthStore,
   useTrackingStore,
   useTabPreferencesStore,
+  useComplianceStore,
   ALL_TAB_KEYS,
   type TabKey,
 } from '@realestate-crm/hooks';
@@ -155,6 +156,7 @@ const TAB_META: Record<
     icon: 'email-multiple-outline',
     hrefOverride: '/campaigns',
   },
+  compliance: { title: 'Compliance', icon: 'shield-check' },
 };
 
 /**
@@ -206,11 +208,28 @@ export default function TabLayout() {
     void loadForUser(key);
   }, [authUserId, isDemoMode, loadForUser]);
 
+  // Compliance Suite opt-in is a per-team preference — rehydrate alongside
+  // the per-user tab pins whenever the identity/team changes.
+  const suiteEnabled = useComplianceStore((s) => s.suiteEnabled);
+  const loadSuitePreference = useComplianceStore((s) => s.loadSuitePreference);
+  const activeTeamId = useAuthStore((s) => s.activeTeam?.id ?? null);
+  useEffect(() => {
+    const teamKey = isDemoMode ? 'demo' : activeTeamId;
+    if (teamKey) void loadSuitePreference(teamKey);
+  }, [activeTeamId, isDemoMode, loadSuitePreference]);
+
+  // Compliance is opt-in: with the suite off, the tab vanishes from the bar
+  // even if it was pinned before disabling. The route itself stays mounted
+  // (href: null below) so nothing breaks if it's reached another way.
+  const effectivePinned = suiteEnabled
+    ? pinned
+    : pinned.filter((k) => k !== 'compliance');
+
   // Render order: pinned tabs first (in user-chosen order), then every other
   // tab with `href: null` (still mounted, just invisible in the bar).
   const orderedKeys: TabKey[] = [
-    ...pinned,
-    ...ALL_TAB_KEYS.filter((k) => !pinned.includes(k)),
+    ...effectivePinned,
+    ...ALL_TAB_KEYS.filter((k) => !effectivePinned.includes(k)),
   ];
 
   const TabBarButton = makeTabBarButton(() => {
@@ -237,7 +256,7 @@ export default function TabLayout() {
       >
         {orderedKeys.map((key) => {
           const meta = TAB_META[key];
-          const isPinned = pinned.includes(key);
+          const isPinned = effectivePinned.includes(key);
           // Unpinned tabs hide from the bar via `href: null`. They remain
           // valid routes — accessible from More, deep links, programmatic
           // navigation — but don't take up a tab slot.

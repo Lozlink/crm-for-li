@@ -5,10 +5,10 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import {
   useTaskStore, usePropertyStore, useCRMStore, useAuthStore, useInspectionStore, useTrackingStore,
-  useProspectingMetrics,
+  useProspectingMetrics, useComplianceStore,
 } from '@realestate-crm/hooks';
 import { sumPipelineValue } from '@realestate-crm/utils';
-import type { Task, Property, Contact, Inspection, TrackingSession } from '@realestate-crm/types';
+import type { Task, Property, Contact, Inspection, TrackingSession, ComplianceAlertStatus } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -56,6 +56,14 @@ function formatDistance(meters: number | undefined): string {
   return `${(meters / 1000).toFixed(1)} km`;
 }
 
+/** Compliance alert statuses that count as "open" — mirrors the compliance tab. */
+const OPEN_ALERT_STATUSES: readonly ComplianceAlertStatus[] = [
+  'new',
+  'acknowledged',
+  'investigating',
+  'escalated',
+];
+
 // ── Quick Actions ────────────────────────────────────────────────────
 
 const QUICK_ACTIONS = [
@@ -93,19 +101,33 @@ export default function TodayScreen() {
   const fetchSessions = useTrackingStore(s => s.fetchSessions);
   const startSession = useTrackingStore(s => s.startSession);
 
+  const suiteEnabled = useComplianceStore(s => s.suiteEnabled);
+  const complianceAlerts = useComplianceStore(s => s.alerts);
+  const fetchComplianceAlerts = useComplianceStore(s => s.fetchAlerts);
+
   // Staleness guard: skip re-fetching on every focus if data is less than 30 s old.
   // Pull-to-refresh resets the timer so manual overrides always go through.
   const lastFetchAt = useRef<number>(0);
+
+  // Compliance alerts get their own (60 s) guard — fetched fire-and-forget so
+  // they never block Today's initial render or the core data Promise.all.
+  const complianceFetchAt = useRef<number>(0);
 
   // Pull-to-refresh
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = useCallback(async () => {
     lastFetchAt.current = 0; // force re-fetch on next focus too
     setRefreshing(true);
+    // Compliance refresh rides along fire-and-forget — not awaited, so a slow
+    // IntelliCompli call can't hold the refresh spinner hostage.
+    if (suiteEnabled) {
+      complianceFetchAt.current = Date.now();
+      void fetchComplianceAlerts();
+    }
     await Promise.all([fetchTasks(), fetchProperties(), fetchContacts(), fetchInspections(), fetchSessions()]);
     lastFetchAt.current = Date.now();
     setRefreshing(false);
-  }, [fetchTasks, fetchProperties, fetchContacts, fetchInspections, fetchSessions]);
+  }, [fetchTasks, fetchProperties, fetchContacts, fetchInspections, fetchSessions, suiteEnabled, fetchComplianceAlerts]);
 
   useFocusEffect(
     useCallback(() => {
@@ -117,6 +139,15 @@ export default function TodayScreen() {
       fetchInspections();
       fetchSessions();
     }, [fetchTasks, fetchProperties, fetchContacts, fetchInspections, fetchSessions])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!suiteEnabled) return;
+      if (Date.now() - complianceFetchAt.current < 60_000) return;
+      complianceFetchAt.current = Date.now();
+      void fetchComplianceAlerts();
+    }, [suiteEnabled, fetchComplianceAlerts])
   );
 
   // ── Derived data ──────────────────────────────────────────────────
@@ -184,6 +215,19 @@ export default function TodayScreen() {
   }, [sessions]);
 
   const urgentCount = overdueTasks.length;
+
+  // Compliance: only SLA-breached or critical open alerts make the Today cut —
+  // routine triage lives on the compliance tab.
+  const openComplianceAlerts = useMemo(() => {
+    if (!suiteEnabled) return [];
+    return complianceAlerts.filter(a => OPEN_ALERT_STATUSES.includes(a.status));
+  }, [suiteEnabled, complianceAlerts]);
+
+  const actionableComplianceAlerts = useMemo(() => {
+    return openComplianceAlerts
+      .filter(a => a.slaBreached || a.severity === 'critical')
+      .slice(0, 5);
+  }, [openComplianceAlerts]);
 
   const prospecting = useProspectingMetrics();
 
@@ -410,6 +454,57 @@ export default function TodayScreen() {
               onComplete={() => completeTask(task.id)}
             />
           ))}
+        </View>
+      )}
+
+      {/* Compliance — urgent alerts only (SLA breached / critical) */}
+      {suiteEnabled && actionableComplianceAlerts.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Icon name="shield-alert" size={18} color="#dc2626" />
+              <Text variant="titleSmall" style={{ color: '#dc2626', fontWeight: '700', marginLeft: 6 }}>
+                Compliance ({actionableComplianceAlerts.length})
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/compliance' as never)}>
+              <Text variant="labelMedium" style={{ color: theme.colors.primary }}>See All</Text>
+            </TouchableOpacity>
+          </View>
+          {actionableComplianceAlerts.map(alert => (
+            <TouchableOpacity
+              key={alert.id}
+              activeOpacity={0.7}
+              onPress={() => router.push(`/compliance/alert/${alert.id}` as never)}
+            >
+              <Surface
+                style={[styles.taskCard, { borderLeftColor: '#dc2626', borderLeftWidth: 3 }]}
+                elevation={1}
+              >
+                <View style={styles.taskCardInner}>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="bodyMedium" numberOfLines={1} style={{ fontWeight: '600' }}>
+                      {alert.title}
+                    </Text>
+                    <View style={styles.taskMeta}>
+                      <Text variant="bodySmall" style={{ color: '#dc2626' }}>
+                        {alert.slaBreached ? 'SLA breached' : 'Critical'}
+                      </Text>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {alert.alertNumber}
+                      </Text>
+                    </View>
+                  </View>
+                  <Icon name="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
+                </View>
+              </Surface>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity onPress={() => router.push('/(tabs)/compliance' as never)}>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+              {openComplianceAlerts.length} open alert{openComplianceAlerts.length !== 1 ? 's' : ''}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
 

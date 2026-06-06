@@ -46,3 +46,28 @@ export type { MapDeepLinkInput } from './buildMapDeepLink';
 
 // Whiteboard photos
 export { uploadWhiteboardPhotoBuffer, uploadWhiteboardPhotoFile } from './whiteboardPhotos';
+
+// IntelliCompli compliance client
+export {
+  isIntelliCompliConfigured,
+  getIntelliCompliMode,
+  setIntelliCompliCredentials,
+  clearIntelliCompliCredentials,
+  resetIntelliCompliTransport,
+  /** @deprecated Use setIntelliCompliCredentials instead. */
+  setRuntimeApiKey,
+  createComplianceCustomer,
+  getComplianceCustomer,
+  screenCustomer,
+  assessCustomerRisk,
+  listComplianceAlerts,
+  updateComplianceAlert,
+  getComplianceAnalytics,
+  ComplianceValidationError,
+} from './intellicompli';
+export type {
+  CreateComplianceCustomerInput,
+  ScreenCustomerInput,
+  ListComplianceAlertsFilters,
+  UpdateComplianceAlertBody,
+} from './intellicompli';

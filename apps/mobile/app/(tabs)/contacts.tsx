@@ -17,7 +17,7 @@ try { CallerIdModule = require('caller-id').default; } catch { /* Expo Go / web 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { useCRMStore, useSavedSearchStore, useLeadScoringEngine, useSmsTemplateStore, useWhiteboardStore } from '@realestate-crm/hooks';
+import { useCRMStore, useSavedSearchStore, useLeadScoringEngine, useSmsTemplateStore, useWhiteboardStore, useComplianceStore } from '@realestate-crm/hooks';
 import { ContactCard } from '@realestate-crm/ui';
 import type { Contact, ContactSource, ContactType, ContactStatus } from '@realestate-crm/types';
 
@@ -229,6 +229,21 @@ export default function ContactsScreen() {
       fetchSavedSearches('contact');
     }, [fetchContacts, fetchTags, fetchSavedSearches])
   );
+
+  // Compliance profiles for linked contacts are hydrated in one batch here —
+  // per-row fetching from the FlatList would hammer the API. Already-hydrated
+  // profiles are skipped (allContacts gets a new identity on every focus
+  // fetch), and ContactCard's badge only renders once a profile lands.
+  const suiteEnabled = useComplianceStore((s) => s.suiteEnabled);
+  const hydrateProfiles = useComplianceStore((s) => s.hydrateProfiles);
+  useEffect(() => {
+    if (!suiteEnabled || allContacts.length === 0) return;
+    const { profilesByContactId } = useComplianceStore.getState();
+    const needsHydration = allContacts.filter(
+      (c) => c.intellicompli_customer_id && !profilesByContactId[c.id],
+    );
+    if (needsHydration.length > 0) void hydrateProfiles(needsHydration);
+  }, [suiteEnabled, allContacts, hydrateProfiles]);
 
   // Filter contacts in component to avoid selector issues
   // Exclude quick notes (contacts without first_name) - they show in Notes tab

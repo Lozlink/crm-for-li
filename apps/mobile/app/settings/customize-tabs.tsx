@@ -5,6 +5,7 @@ import { useTheme, Text, Surface, Divider, IconButton, Button } from 'react-nati
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {
   useTabPreferencesStore,
+  useComplianceStore,
   ALL_TAB_KEYS,
   MAX_PINNED,
   MIN_PINNED,
@@ -42,6 +43,7 @@ const TAB_LABELS: Record<TabKey, { title: string; icon: string; subtitle?: strin
   settings: { title: 'Settings', icon: 'cog', subtitle: 'Account & app' },
   'dialer-tab': { title: 'Dialer', icon: 'dialpad', subtitle: 'Call any number' },
   'campaigns-tab': { title: 'Campaigns', icon: 'email-multiple-outline', subtitle: 'Email & SMS blasts' },
+  compliance: { title: 'Compliance', icon: 'shield-check', subtitle: 'Screening & alerts' },
 };
 
 export default function CustomizeTabsScreen() {
@@ -54,9 +56,19 @@ export default function CustomizeTabsScreen() {
   const moveTabDown = useTabPreferencesStore((s) => s.moveTabDown);
   const resetToDefaults = useTabPreferencesStore((s) => s.resetToDefaults);
 
+  // The compliance tab only exists while the Compliance Suite is enabled
+  // (Settings → Compliance Suite) — hide it from both lists otherwise so the
+  // editor has zero compliance footprint when the toggle is off.
+  const suiteEnabled = useComplianceStore((s) => s.suiteEnabled);
+
+  const visiblePinned = useMemo(
+    () => pinned.filter((k) => k !== 'compliance' || suiteEnabled),
+    [pinned, suiteEnabled],
+  );
+
   const available = useMemo(
-    () => ALL_TAB_KEYS.filter((k) => !pinned.includes(k)),
-    [pinned],
+    () => ALL_TAB_KEYS.filter((k) => !pinned.includes(k) && (k !== 'compliance' || suiteEnabled)),
+    [pinned, suiteEnabled],
   );
 
   const handleConfirmReset = () => {
@@ -89,13 +101,13 @@ export default function CustomizeTabsScreen() {
       >
         {/* Pinned section */}
         <Text variant="labelMedium" style={[styles.sectionLabel, { color: theme.colors.onSurfaceVariant }]}>
-          Pinned ({pinned.length}/{MAX_PINNED})
+          Pinned ({visiblePinned.length}/{MAX_PINNED})
         </Text>
         <Surface style={styles.section} elevation={1}>
-          {pinned.map((key, idx) => {
+          {visiblePinned.map((key, idx) => {
             const meta = TAB_LABELS[key];
             const canMoveUp = idx > 0;
-            const canMoveDown = idx < pinned.length - 1;
+            const canMoveDown = idx < visiblePinned.length - 1;
             const canUnpin = pinned.length > MIN_PINNED;
             return (
               <View key={key}>
@@ -136,7 +148,7 @@ export default function CustomizeTabsScreen() {
                     accessibilityLabel={`Unpin ${meta.title}`}
                   />
                 </View>
-                {idx < pinned.length - 1 ? <Divider /> : null}
+                {idx < visiblePinned.length - 1 ? <Divider /> : null}
               </View>
             );
           })}

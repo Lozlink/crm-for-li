@@ -18,5 +18,6 @@ export { default as CustomFieldRenderer } from './CustomFieldRenderer';
 export { default as CustomFieldAdmin } from './CustomFieldAdmin';
 export { default as PropertyPreview } from './PropertyPreview';
 export { default as LeadScoreBadge, TIER_COLORS } from './LeadScoreBadge';
+export { default as ComplianceRiskBadge } from './ComplianceRiskBadge';
 export { default as BuildingActivityDialog } from './BuildingActivityDialog';
 export type { BuildingActivityDialogProps } from './BuildingActivityDialog';

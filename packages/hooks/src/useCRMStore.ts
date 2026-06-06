@@ -12,6 +12,8 @@ const CONTACT_DB_COLUMNS = new Set([
   'source', 'contact_type', 'company_name', 'title',
   'preferred_contact_method', 'do_not_contact', 'notes',
   'status', 'lead_score', 'last_contacted_at', 'next_follow_up_at',
+  // Compliance suite link — set by useComplianceStore.enableCompliance()
+  'intellicompli_customer_id',
 ]);
 
 function pickContactColumns(data: Record<string, unknown>): Record<string, unknown> {

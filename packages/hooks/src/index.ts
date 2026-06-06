@@ -44,3 +44,6 @@ export {
   MIN_PINNED,
 } from './useTabPreferencesStore';
 export type { TabKey } from './useTabPreferencesStore';
+
+export { useComplianceStore } from './useComplianceStore';
+export type { ComplianceStoreState } from './useComplianceStore';

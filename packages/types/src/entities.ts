@@ -42,6 +42,8 @@ export interface Contact {
   next_follow_up_at?: string;
   created_at?: string;
   updated_at?: string;
+  // Compliance — IntelliCompli customer link (nullable; set when suite is enabled for this contact)
+  intellicompli_customer_id?: string | null;
 }
 
 export type ActivitySource = 'office' | 'field' | 'call' | 'tracking' | 'inspection' | 'import';

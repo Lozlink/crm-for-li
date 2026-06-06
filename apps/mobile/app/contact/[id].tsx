@@ -18,11 +18,12 @@ import {
 } from 'react-native-paper';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useCRMStore, useEmailCampaignStore, useBuyerMatchStore, usePropertyStore, useInspectionStore, useCustomFieldStore, useLeadScoringEngine, useWhiteboardStore } from '@realestate-crm/hooks';
-import { geocodeAddress } from '@realestate-crm/utils';
+import { useCRMStore, useEmailCampaignStore, useBuyerMatchStore, usePropertyStore, useInspectionStore, useCustomFieldStore, useLeadScoringEngine, useWhiteboardStore, useComplianceStore } from '@realestate-crm/hooks';
+import { geocodeAddress, formatRelativeDate } from '@realestate-crm/utils';
 import type {
   Contact, ContactFormData, ContactSource, ContactType as CType,
   ContactStatus, PreferredContactMethod, ContactRequirement, Property,
+  ComplianceScreeningKind, ComplianceScreeningResult,
 } from '@realestate-crm/types';
 import { Switch } from 'react-native';
 import { ContactForm } from '@realestate-crm/ui';
@@ -30,6 +31,7 @@ import { ActivityFeed } from '@realestate-crm/ui';
 import { AddActivityDialog } from '@realestate-crm/ui';
 import { CustomFieldRenderer } from '@realestate-crm/ui';
 import LeadScoreBadge from '../../components/LeadScoreBadge';
+import ComplianceRiskBadge from '../../components/ComplianceRiskBadge';
 import ScoreBreakdownSheet from '../../components/ScoreBreakdownSheet';
 
 // --- Constants ---
@@ -243,6 +245,24 @@ export default function ContactDetailScreen() {
   const createWhiteboardItem = useWhiteboardStore((s) => s.createItem);
   const [pinSnackbar, setPinSnackbar] = useState(false);
 
+  // Compliance (IntelliCompli) — narrow selectors so unrelated store churn
+  // doesn't re-render this screen
+  const suiteEnabled = useComplianceStore(s => s.suiteEnabled);
+  const complianceProfile = useComplianceStore(s => (id ? s.profilesByContactId[id] : undefined));
+  const complianceLoading = useComplianceStore(s => (id ? !!s.profileLoading[id] : false));
+  const enableCompliance = useComplianceStore(s => s.enableCompliance);
+  const hydrateProfiles = useComplianceStore(s => s.hydrateProfiles);
+  const runScreening = useComplianceStore(s => s.runScreening);
+  const assessRisk = useComplianceStore(s => s.assessRisk);
+  const [enablingCompliance, setEnablingCompliance] = useState(false);
+  const [screeningKind, setScreeningKind] = useState<ComplianceScreeningKind | null>(null);
+  const [screeningResult, setScreeningResult] = useState<ComplianceScreeningResult | null>(null);
+  const [reassessingRisk, setReassessingRisk] = useState(false);
+  const [eddSnackbar, setEddSnackbar] = useState(false);
+  // One hydration attempt per contact id — a failed fetch shows the retry
+  // affordance instead of looping on the loading flag.
+  const complianceHydratedFor = useRef<string | null>(null);
+
   // Contact state
   const [contact, setContact] = useState<Contact | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -307,6 +327,17 @@ export default function ContactDetailScreen() {
     });
     return () => sub.remove();
   }, []);
+
+  // Hydrate the compliance profile for an already-linked contact. Uses
+  // hydrateProfiles (which reads intellicompli_customer_id off the contact)
+  // rather than refreshProfile, which requires the profile to be in the
+  // store already.
+  useEffect(() => {
+    if (!suiteEnabled || !id || !contact?.intellicompli_customer_id) return;
+    if (complianceProfile || complianceHydratedFor.current === id) return;
+    complianceHydratedFor.current = id;
+    void hydrateProfiles([contact]);
+  }, [suiteEnabled, id, contact, complianceProfile, hydrateProfiles]);
 
   // --- Linked properties for this contact ---
   const linkedProperties = useMemo(() => {
@@ -516,6 +547,59 @@ export default function ContactDetailScreen() {
     const matched = findMatchingProperties(requirement, properties);
     setMatchResults(prev => ({ ...prev, [requirement.id]: matched }));
   };
+
+  // --- Compliance handlers ---
+
+  const handleEnableCompliance = useCallback(async () => {
+    if (!contact) return;
+    setEnablingCompliance(true);
+    try {
+      const profile = await enableCompliance(contact);
+      if (!profile) {
+        Alert.alert('Error', 'Could not enable compliance for this contact. Please try again.');
+      }
+    } finally {
+      setEnablingCompliance(false);
+    }
+  }, [contact, enableCompliance]);
+
+  const handleRunScreening = useCallback(async (kind: ComplianceScreeningKind) => {
+    if (!id) return;
+    setScreeningKind(kind);
+    try {
+      const result = await runScreening(id, kind);
+      if (result) {
+        setScreeningResult(result);
+      } else {
+        Alert.alert('Error', 'Screening failed. Please try again.');
+      }
+    } finally {
+      setScreeningKind(null);
+    }
+  }, [id, runScreening]);
+
+  const handleDismissScreeningResult = useCallback(() => {
+    // Screening hits auto-create an EDD follow-up task (store-side) — confirm
+    // that to the user once they've read the match list, since a snackbar
+    // under an open dialog would go unseen.
+    if (screeningResult && screeningResult.matchCount > 0) setEddSnackbar(true);
+    setScreeningResult(null);
+  }, [screeningResult]);
+
+  const handleReassessRisk = useCallback(async () => {
+    if (!id) return;
+    setReassessingRisk(true);
+    try {
+      await assessRisk(id);
+    } finally {
+      setReassessingRisk(false);
+    }
+  }, [id, assessRisk]);
+
+  const handleRetryComplianceHydration = useCallback(() => {
+    if (!contact) return;
+    void hydrateProfiles([contact]);
+  }, [contact, hydrateProfiles]);
 
   // --- Render ---
 
@@ -1071,6 +1155,133 @@ export default function ContactDetailScreen() {
                 )}
               </CollapsibleCard>
 
+              {/* ===== COMPLIANCE CARD ===== */}
+              {suiteEnabled && (
+                <CollapsibleCard
+                  title="Compliance"
+                  defaultExpanded={!!(contact.intellicompli_customer_id || complianceProfile)}
+                >
+                  {!(contact.intellicompli_customer_id || complianceProfile) ? (
+                    <View>
+                      <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
+                        Run identity screening and AML checks on this contact, powered by IntelliCompli.
+                      </Text>
+                      <Button
+                        mode="contained"
+                        icon="shield-plus"
+                        onPress={handleEnableCompliance}
+                        loading={enablingCompliance}
+                        disabled={enablingCompliance}
+                      >
+                        Enable compliance
+                      </Button>
+                    </View>
+                  ) : !complianceProfile ? (
+                    complianceLoading ? (
+                      <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+                        <ActivityIndicator size="small" />
+                      </View>
+                    ) : (
+                      <View>
+                        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
+                          Couldn't load the compliance profile.
+                        </Text>
+                        <Button mode="outlined" icon="refresh" compact onPress={handleRetryComplianceHydration} style={{ alignSelf: 'flex-start' }}>
+                          Retry
+                        </Button>
+                      </View>
+                    )
+                  ) : (
+                    <View>
+                      {/* Risk badge + warning chips */}
+                      <View style={styles.chipRow}>
+                        <ComplianceRiskBadge
+                          score={complianceProfile.riskScore}
+                          level={complianceProfile.riskLevel}
+                          size="medium"
+                        />
+                        {complianceProfile.isPep && (
+                          <Chip
+                            compact
+                            icon="account-alert"
+                            style={{ backgroundColor: theme.colors.errorContainer }}
+                            textStyle={{ color: theme.colors.error }}
+                          >
+                            PEP
+                          </Chip>
+                        )}
+                        {complianceProfile.isSanctioned && (
+                          <Chip
+                            compact
+                            icon="alert-octagon"
+                            style={{ backgroundColor: theme.colors.errorContainer }}
+                            textStyle={{ color: theme.colors.error }}
+                          >
+                            Sanctioned
+                          </Chip>
+                        )}
+                      </View>
+
+                      <View style={styles.twoCol}>
+                        <View style={styles.colItem}>
+                          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>Verification</Text>
+                          <Text variant="bodyMedium">{capitalizeFirst(complianceProfile.verificationStatus)}</Text>
+                        </View>
+                        <View style={styles.colItem}>
+                          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>CDD Level</Text>
+                          <Text variant="bodyMedium">
+                            {complianceProfile.cddLevel === 'enhanced' ? 'Enhanced' : 'Standard'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {complianceProfile.lastScreenedAt && (
+                        <View style={styles.twoCol}>
+                          <View style={styles.colItem}>
+                            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>Last Screened</Text>
+                            <Text variant="bodyMedium">{formatRelativeDate(complianceProfile.lastScreenedAt)}</Text>
+                          </View>
+                        </View>
+                      )}
+
+                      {/* Screening + risk actions — per-action loading, others disabled while one runs */}
+                      <View style={[styles.chipRow, { marginTop: 8 }]}>
+                        <Button
+                          mode="outlined"
+                          icon="shield-search"
+                          compact
+                          loading={screeningKind === 'sanctions'}
+                          disabled={screeningKind !== null || reassessingRisk}
+                          onPress={() => handleRunScreening('sanctions')}
+                        >
+                          Screen sanctions
+                        </Button>
+                        <Button
+                          mode="outlined"
+                          icon="account-search"
+                          compact
+                          loading={screeningKind === 'pep'}
+                          disabled={screeningKind !== null || reassessingRisk}
+                          onPress={() => handleRunScreening('pep')}
+                        >
+                          Screen PEP
+                        </Button>
+                        <Button
+                          mode="outlined"
+                          icon="shield-sync"
+                          compact
+                          loading={reassessingRisk}
+                          disabled={screeningKind !== null || reassessingRisk}
+                          onPress={handleReassessRisk}
+                        >
+                          Reassess risk
+                        </Button>
+                      </View>
+                    </View>
+                  )}
+                </CollapsibleCard>
+              )}
+
               {/* ===== ACTIVITY CARD ===== */}
               <CollapsibleCard
                 title="Activity"
@@ -1578,6 +1789,40 @@ export default function ContactDetailScreen() {
           </Dialog.Actions>
         </Dialog>
 
+        {/* Screening results dialog */}
+        <Dialog visible={screeningResult !== null} onDismiss={handleDismissScreeningResult}>
+          <Dialog.Title>
+            {screeningResult?.kind === 'pep' ? 'PEP screening' : 'Sanctions screening'}
+          </Dialog.Title>
+          <Dialog.Content>
+            {screeningResult && screeningResult.matchCount > 0 ? (
+              <View style={{ gap: 12 }}>
+                <Text variant="bodyMedium" style={{ color: theme.colors.error, fontWeight: '600' }}>
+                  {screeningResult.matchCount} potential match{screeningResult.matchCount !== 1 ? 'es' : ''} found
+                </Text>
+                {screeningResult.matches.map((match, idx) => (
+                  <View key={`${match.name}-${idx}`}>
+                    <Text variant="bodyMedium" style={{ fontWeight: '600' }}>{match.name}</Text>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      {match.details}
+                    </Text>
+                    <Text variant="labelSmall" style={{ color: theme.colors.error }}>
+                      Match score: {Math.round(match.matchScore * 100)}%
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text variant="bodyMedium">
+                No matches found — this contact is clear on this screening.
+              </Text>
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={handleDismissScreeningResult}>Done</Button>
+          </Dialog.Actions>
+        </Dialog>
+
         {/* Add custom field definition dialog */}
         <Dialog visible={addFieldDialogVisible} onDismiss={() => setAddFieldDialogVisible(false)}>
           <Dialog.Title>Add Custom Field</Dialog.Title>
@@ -1639,6 +1884,14 @@ export default function ContactDetailScreen() {
         action={{ label: 'Open', onPress: () => router.push('/whiteboard') }}
       >
         Pinned to whiteboard
+      </Snackbar>
+
+      <Snackbar
+        visible={eddSnackbar}
+        onDismiss={() => setEddSnackbar(false)}
+        duration={3500}
+      >
+        EDD task created
       </Snackbar>
     </>
   );
