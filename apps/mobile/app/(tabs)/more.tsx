@@ -12,6 +12,7 @@ const SECTIONS = [
       { label: 'Pipeline', icon: 'view-column', route: '/(tabs)/pipeline', color: '#6366f1' },
       { label: 'Properties', icon: 'home-city', route: '/(tabs)/properties', color: '#3b82f6' },
       { label: 'Tasks', icon: 'checkbox-marked-circle-outline', route: '/(tabs)/tasks', color: '#f59e0b' },
+      { label: 'Contacts', icon: 'account-group', route: '/(tabs)/contacts', color: '#10b981' }
     ],
   },
   {

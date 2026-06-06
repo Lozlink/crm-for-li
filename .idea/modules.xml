@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/../Compli/.idea/compli.iml" filepath="$PROJECT_DIR$/../Compli/.idea/compli.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/realestate-crm.iml" filepath="$PROJECT_DIR$/.idea/realestate-crm.iml" />
     </modules>
   </component>

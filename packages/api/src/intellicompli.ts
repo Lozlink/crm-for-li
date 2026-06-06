@@ -431,6 +431,15 @@ class MockTransport implements Transport {
   }
 
   private _createCustomer(body: Record<string, unknown>): MockCustomer {
+    // Mirror the live API's strictness: dateOfBirth lands in a Postgres `date`
+    // column, where '' fails with 22007. The mock previously accepted '' —
+    // which is exactly how the empty-string payload bug reached production.
+    if (body.dateOfBirth === '') {
+      throw new Error(
+        'IntelliCompli API error 500: invalid input syntax for type date: "" ' +
+        '(omit dateOfBirth instead of sending an empty string)',
+      );
+    }
     const id = `cus_mock_${String(Date.now()).slice(-6)}`;
     const customer: MockCustomer = {
       id, object: 'customer', customerType: 'individual',
@@ -736,21 +745,32 @@ export async function createComplianceCustomer(input: CreateComplianceCustomerIn
     );
   }
 
+  // Optional fields must be OMITTED when empty, never sent as ''. The live API
+  // inserts dateOfBirth into a Postgres `date` column — an empty string passes
+  // API validation but fails the insert with 22007 ("invalid input syntax for
+  // type date"), surfacing to us as an opaque 500. `undefined` keys are dropped
+  // by JSON.stringify, so conditional spreads are the safe shape here.
+  const phone = input.phone?.trim();
+  const dateOfBirth = input.dateOfBirth?.trim();
+  const addressFields = {
+    ...(input.address?.line1 ? { line1: input.address.line1 } : {}),
+    ...(input.address?.city ? { city: input.address.city } : {}),
+    ...(input.address?.state ? { state: input.address.state } : {}),
+    ...(input.address?.postcode ? { postcode: input.address.postcode } : {}),
+  };
+  const hasAddress = Object.keys(addressFields).length > 0;
+
   const raw = await getTransport().request<ApiCustomer>('POST', ENDPOINTS.customers, {
     customerType: 'individual',
     externalId: input.contactId,
     firstName: input.firstName,
     lastName: input.lastName ?? '',
     email: input.email.trim(),
-    phone: input.phone ?? '',
-    dateOfBirth: input.dateOfBirth ?? '',
-    address: {
-      line1: input.address?.line1 ?? '',
-      city: input.address?.city ?? '',
-      state: input.address?.state ?? '',
-      postcode: input.address?.postcode ?? '',
-      country: input.address?.country ?? 'AU',
-    },
+    ...(phone ? { phone } : {}),
+    ...(dateOfBirth ? { dateOfBirth } : {}),
+    // Only send an address when the contact actually has one — a bag of empty
+    // strings with a defaulted country is noise in the compliance record.
+    ...(hasAddress ? { address: { ...addressFields, country: input.address?.country ?? 'AU' } } : {}),
   });
   return mapCustomerToProfile(raw, input.contactId);
 }
@@ -811,10 +831,13 @@ export async function screenCustomer(
 
   if (kind === 'sanctions') {
     // POST /v1/sanctions/screen — body: { firstName (req), lastName (req), country?, dateOfBirth? }
+    // dateOfBirth omitted when absent — '' fails Postgres date columns downstream
+    // (same 22007 failure mode as customer create).
+    const dateOfBirth = input.dateOfBirth?.trim();
     raw = await getTransport().request<ApiScreeningResult>('POST', ENDPOINTS.screenSanctions, {
       firstName: input.firstName,
       lastName: input.lastName ?? '',
-      dateOfBirth: input.dateOfBirth ?? '',
+      ...(dateOfBirth ? { dateOfBirth } : {}),
       country: 'AU',
     });
   } else {
