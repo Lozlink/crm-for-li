@@ -35,6 +35,7 @@ export { useSmartSuggestions } from './useSmartSuggestions';
 export type { SmartSuggestion, SmartSuggestionKind } from './useSmartSuggestions';
 
 export { useGeocodedAddress } from './useGeocodedAddress';
+export { useWeather } from './useWeather';
 
 export {
   useTabPreferencesStore,

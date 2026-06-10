@@ -24,8 +24,8 @@ import {
  *   2. "Available" — everything not currently pinned. Tap the pin button
  *      to add it to the tab bar (greyed out at the 5-tab ceiling).
  *
- * Reset button restores the default Today / Map / Prospecting / Whiteboard /
- * More layout in case the user gets stuck somewhere weird.
+ * Reset button restores the default Today / Map / Prospecting / More layout
+ * in case the user gets stuck somewhere weird.
  */
 
 const TAB_LABELS: Record<TabKey, { title: string; icon: string; subtitle?: string }> = {
@@ -74,7 +74,7 @@ export default function CustomizeTabsScreen() {
   const handleConfirmReset = () => {
     Alert.alert(
       'Reset tabs?',
-      'Restores the default Today / Map / Prospecting / Whiteboard / More layout.',
+      'Restores the default Today / Map / Prospecting / More layout.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Reset', style: 'destructive', onPress: () => void resetToDefaults() },

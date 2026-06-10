@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Snackbar, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -44,9 +43,10 @@ import { DEFAULT_STICKY_COLOR_DEF, stickyColorKey } from '../components/whiteboa
 /**
  * Phase 1 Smart Whiteboard route.
  *
- * Composes:
+ * Presented as a fullscreen `Stack` modal (root `_layout.tsx`); the native
+ * modal header owns the title + close. Composes:
  *  - WhiteboardCanvas       (camera-pan + items)
- *  - WhiteboardToolbar      (close + mode pill + add menu)
+ *  - WhiteboardToolbar      (overview / suggestions / add)
  *  - EditItemSheet          (structured edit for checklist/photo)
  *  - ItemContextMenu        (long-press: bring-to-front / change color / delete)
  *
@@ -54,7 +54,6 @@ import { DEFAULT_STICKY_COLOR_DEF, stickyColorKey } from '../components/whiteboa
  * useDeclaredBuildingsStore optimistic-write pattern.
  */
 export default function WhiteboardScreen() {
-  const router = useRouter();
   const theme = useTheme();
 
   const items = useWhiteboardStore((s) => s.items);
@@ -409,21 +408,6 @@ export default function WhiteboardScreen() {
     [updateItem],
   );
 
-  const handleClose = useCallback(() => {
-    // Prefer history-back so the user returns to wherever they came from.
-    // When there's no back stack (e.g. opened via the Whiteboard tab's
-    // `href` redirect, or after a deep link), the previous behavior
-    // replaced with `/(tabs)` which defaults to the currently-active tab.
-    // That tab is "Whiteboard", whose placeholder screen renders blank —
-    // user closes the whiteboard and sees a blank white screen.
-    // Explicitly target the Today tab as the safe landing spot.
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/(tabs)/index' as never);
-    }
-  }, [router]);
-
   // Quick-arrange: tidy all items into a clean grid laid out top-left in the
   // world, then animate the camera to fit-all the new layout. Items are
   // ordered by `updated_at` desc so the freshest land in the top-left.
@@ -492,8 +476,12 @@ export default function WhiteboardScreen() {
   }, [items, updateItem, cameraX, cameraY, cameraScale, screenW, screenH, effectiveBounds]);
 
   return (
+    // No top edge: the fullscreen-modal's native header (registered in the
+    // root Stack) already sits below the status bar / notch, so padding the
+    // top here would double the gap. The bottom inset is owned by
+    // WhiteboardToolbar, which pads the Android nav bar itself.
     <SafeAreaView
-      edges={['top']}
+      edges={[]}
       style={[styles.root, { backgroundColor: theme.colors.background }]}
     >
       <View style={styles.canvasArea}>
@@ -552,7 +540,6 @@ export default function WhiteboardScreen() {
         onRequestAdd={() => setAddSheetVisible(true)}
         onRequestSuggestions={() => setIntelligenceSidebarVisible(true)}
         onRequestOverview={() => setOverviewVisible(true)}
-        onClose={handleClose}
       />
 
       <AddWidgetSheet

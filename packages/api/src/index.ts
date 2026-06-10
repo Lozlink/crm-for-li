@@ -40,6 +40,10 @@ export type { SendEmailParams, SendBulkEmailParams } from './email';
 export { reverseGeocode } from './geocoding';
 export type { GeocodeResult } from './geocoding';
 
+// Weather (door-knock prospecting)
+export { fetchWeatherForecast, assessDoorKnock, rateHour, weatherCodeInfo, KNOCK_WINDOW } from './weather';
+export type { WeatherForecast, CurrentWeather, HourlyWeather, DoorKnockAssessment, DoorKnockRating } from './weather';
+
 // Map deep-link builder
 export { buildMapDeepLink } from './buildMapDeepLink';
 export type { MapDeepLinkInput } from './buildMapDeepLink';

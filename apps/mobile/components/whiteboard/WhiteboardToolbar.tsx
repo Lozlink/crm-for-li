@@ -15,7 +15,14 @@ interface Props {
   onRequestSuggestions: () => void;
   /** Opens the OverviewSheet — a searchable list of all items on the board. */
   onRequestOverview: () => void;
-  onClose: () => void;
+  /**
+   * Optional in-toolbar close affordance. The whiteboard is now a fullscreen
+   * modal whose native header owns the close button, so the canonical screen
+   * leaves this undefined and the close IconButton is not rendered. Kept on the
+   * contract (optional) so a future non-modal embedding could supply its own
+   * close without re-plumbing the toolbar.
+   */
+  onClose?: () => void;
 }
 
 /**
@@ -50,14 +57,18 @@ export function WhiteboardToolbar({ onRequestAdd, onRequestSuggestions, onReques
         },
       ]}
     >
-      {/* Close — back to Hub */}
-      <IconButton
-        icon="close"
-        size={24}
-        onPress={onClose}
-        accessibilityLabel="Close whiteboard"
-        style={styles.sideButton}
-      />
+      {/* Close — only rendered when a consumer supplies onClose. The canonical
+          fullscreen-modal screen omits it because the native modal header owns
+          the close affordance (avoids a duplicate ✕). */}
+      {onClose ? (
+        <IconButton
+          icon="close"
+          size={24}
+          onPress={onClose}
+          accessibilityLabel="Close whiteboard"
+          style={styles.sideButton}
+        />
+      ) : null}
 
       {/* Spacer — fills center so action buttons stay right-aligned */}
       <View style={styles.spacer} />

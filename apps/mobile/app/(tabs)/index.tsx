@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { useTheme, Text, Surface, ProgressBar } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -10,6 +10,7 @@ import {
 import { sumPipelineValue } from '@realestate-crm/utils';
 import type { Task, Property, Contact, Inspection, TrackingSession, ComplianceAlertStatus } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import WeatherStrip from '../../components/WeatherStrip';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -99,7 +100,6 @@ export default function TodayScreen() {
   const activeSession = useTrackingStore(s => s.activeSession);
   const sessions = useTrackingStore(s => s.sessions);
   const fetchSessions = useTrackingStore(s => s.fetchSessions);
-  const startSession = useTrackingStore(s => s.startSession);
 
   const suiteEnabled = useComplianceStore(s => s.suiteEnabled);
   const complianceAlerts = useComplianceStore(s => s.alerts);
@@ -251,56 +251,10 @@ export default function TodayScreen() {
           : 'You\'re all caught up. Time to prospect!'}
       </Text>
 
-      {/* Streak Banner */}
-      <View style={styles.section}>
-        {prospecting.streak.currentDays > 0 || prospecting.streak.isActiveToday ? (
-          <Surface
-            style={[
-              styles.streakBanner,
-              {
-                backgroundColor: prospecting.streak.currentDays > 3
-                  ? theme.colors.primaryContainer
-                  : theme.colors.surfaceVariant,
-              },
-            ]}
-            elevation={1}
-          >
-            <View style={styles.streakBannerInner}>
-              <Icon name="fire" size={28} color="#f59e0b" />
-              <View style={styles.streakBannerCenter}>
-                <Text variant="titleSmall" style={{ fontWeight: '700', color: theme.colors.onSurface }}>
-                  {prospecting.streak.currentDays}-day streak
-                </Text>
-                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  Best: {prospecting.streak.longestDays} days
-                </Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text variant="labelMedium" style={{ fontWeight: '700', color: theme.colors.onSurface }}>
-                  {prospecting.thisWeek.doors}/50
-                </Text>
-                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  this week
-                </Text>
-              </View>
-            </View>
-          </Surface>
-        ) : (
-          <Surface
-            style={[styles.streakBanner, { backgroundColor: theme.colors.surfaceVariant }]}
-            elevation={1}
-          >
-            <View style={styles.streakBannerInner}>
-              <Icon name="fire" size={28} color={theme.colors.onSurfaceVariant} style={{ opacity: 0.5 }} />
-              <View style={styles.streakBannerCenter}>
-                <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                  Start a streak! Prospect today to begin.
-                </Text>
-              </View>
-            </View>
-          </Surface>
-        )}
-      </View>
+      {/* Door-knock weather — answers "is now a good time to head out?".
+          The streak banner that used to sit here was a duplicate of the one
+          on the Prospecting tab; streak detail lives there now. */}
+      <WeatherStrip />
 
       {/* Today's Prospecting */}
       <View style={styles.section}>
@@ -373,18 +327,14 @@ export default function TodayScreen() {
       {/* Tracking / Field Activity */}
       {!activeSession && (
         <View style={styles.section}>
+          {/* Routes to the Prospecting tab's session chooser (guided vs free
+              tracking) instead of silently starting a bare GPS session here —
+              one entry point, one mental model. The confirm Alert that used
+              to gate this is now a one-time disclosure at the actual start
+              sites on the Prospecting tab. */}
           <TouchableOpacity
             style={[styles.startTrackingCard, { backgroundColor: theme.colors.primaryContainer }]}
-            onPress={() => {
-              Alert.alert(
-                'Start Tracking',
-                'This will record your location in the background for field prospecting. Continue?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Start', onPress: () => startSession() },
-                ],
-              );
-            }}
+            onPress={() => router.push('/(tabs)/prospecting' as never)}
             activeOpacity={0.8}
           >
             <View style={styles.startTrackingLeft}>
@@ -394,7 +344,7 @@ export default function TodayScreen() {
                   Start Prospecting
                 </Text>
                 <Text variant="bodySmall" style={{ color: theme.colors.onPrimaryContainer, opacity: 0.7 }}>
-                  Track your field activity, drop notes, add contacts
+                  Guided session or free tracking — your call
                 </Text>
               </View>
             </View>
@@ -785,9 +735,9 @@ function ProspectingStatCell({
       trendText = `\u25BC ${trend.changePercent}%`;
       trendColor = '#dc2626';
     }
-  } else if (trend) {
-    trendText = '\u2014';
   }
+  // No comparison data (e.g. first week of use): render nothing rather than
+  // an em-dash. Four dashes under fresh stats read as a broken screen.
 
   return (
     <Surface style={[styles.prospectingCell, { backgroundColor: theme.colors.surface }]} elevation={1}>
@@ -972,21 +922,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  // Streak banner
-  streakBanner: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  streakBannerInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    gap: 12,
-  },
-  streakBannerCenter: {
-    flex: 1,
   },
 
   // Recommended areas

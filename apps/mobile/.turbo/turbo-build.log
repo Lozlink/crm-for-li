@@ -4,10 +4,10 @@
 
 [38;2;236;213;63m⟐ injected env (4) from .env · dotenvx@1.61.0[39m
 [2mStarting Metro Bundler[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1824/1824)[22m
-[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 92.3% [22m[2m(1557/1621)[22m
-[32m[1miOS[22m Bundled [39m[2m3863ms[22m[0m[2m apps/mobile/index.ts (1621 modules)[22m[0m
-[32m[1mAndroid[22m Bundled [39m[2m5932ms[22m[0m[2m apps/mobile/index.ts (1824 modules)[22m[0m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 94.4% [22m[2m(1695/1745)[22m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1832/1832)[22m
+[32m[1mAndroid[22m Bundled [39m[2m3970ms[22m[0m[2m apps/mobile/index.ts (1745 modules)[22m[0m
+[32m[1miOS[22m Bundled [39m[2m6099ms[22m[0m[2m apps/mobile/index.ts (1832 modules)[22m[0m
 
 [1m› Assets (33):[22m
 ../../node_modules/.pnpm/@expo+vector-icons@15.1.1_expo-font@14.0.11_expo@54.0.33_react-native@0.81.5_@babel+cor_578ada966b57244f0fb5b55de8754f09/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf [90m(1.31 MB)[39m
@@ -25,11 +25,11 @@
 ../../node_modules/.pnpm/expo-router@6.0.23_@expo+metro-runtime@6.1.2_@types+react-dom@19.2.3_@types+react@19.1._09997682c55368699a9f1578e9ef87ee/node_modules/expo-router/assets/unmatched.png [90m(4.75 kB)[39m
 ../../node_modules/.pnpm/react-native-paper@5.15.0_react-native-safe-area-context@5.6.2_react-native@0.81.5_@bab_41d9b5c0467b7e446469252509ed76ee/node_modules/react-native-paper/src/assets/back-chevron.png [90m(489 B)[39m
 
-[1m› ios bundles (1):[22m
-_expo/static/js/ios/index-5deed4312bc7301f901e5d5c179012cc.hbc [90m(6.54 MB)[39m
-
 [1m› android bundles (1):[22m
-_expo/static/js/android/index-eb29fc50aa4d3b310c8899ba00b776bb.hbc [90m(6.53 MB)[39m
+_expo/static/js/android/index-9f547e8db943c513e7ecda93ddc0ac93.hbc [90m(6.55 MB)[39m
+
+[1m› ios bundles (1):[22m
+_expo/static/js/ios/index-3f10a2614439a1e1228cf40ca21bb33c.hbc [90m(6.56 MB)[39m
 
 [1m› Files (1):[22m
 metadata.json [90m(3.71 kB)[39m

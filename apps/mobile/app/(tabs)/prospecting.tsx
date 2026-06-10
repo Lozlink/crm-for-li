@@ -15,6 +15,7 @@ import {
 } from '@realestate-crm/hooks';
 import type { Route } from '@realestate-crm/types';
 import type { TrackingSession } from '@realestate-crm/types';
+import { ensureTrackingDisclosure } from '../../lib/trackingDisclosure';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { BuildingActivityDialog } from '@realestate-crm/ui';
 import { TIER_COLORS } from '../../components/LeadScoreBadge';
@@ -323,6 +324,7 @@ export default function ProspectingScreen() {
               activeOpacity={0.7}
               disabled={isStartingTracking}
               onPress={async () => {
+                if (!(await ensureTrackingDisclosure())) return;
                 setIsStartingTracking(true);
                 await startSession();
                 setIsStartingTracking(false);

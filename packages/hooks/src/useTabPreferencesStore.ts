@@ -59,12 +59,21 @@ export const ALL_TAB_KEYS: readonly TabKey[] = [
   'compliance',
 ];
 
-/** What new users see before they customize. */
+/**
+ * What new users see before they customize.
+ *
+ * `whiteboard-tab` is intentionally NOT in the defaults: the Whiteboard is a
+ * fullscreen modal route (`/whiteboard`), reachable from the More grid, the
+ * top-header sticky-note icon, deep links, and entity "Pin to whiteboard"
+ * snackbars. It stays in `ALL_TAB_KEYS` so the customize-tabs screen still
+ * lists it as pinnable for users who want a one-tap tab-bar shortcut — when
+ * pinned, its tab button redirects into the same `/whiteboard` modal via
+ * `hrefOverride` (the tab bar stays visible behind the modal).
+ */
 export const DEFAULT_PINNED_TABS: TabKey[] = [
   'index',
   'map',
   'prospecting',
-  'whiteboard-tab',
   'more',
 ];
 

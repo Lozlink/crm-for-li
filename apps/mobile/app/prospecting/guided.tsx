@@ -36,6 +36,7 @@ import {
 } from '@realestate-crm/hooks';
 import type { GuidedStop, ProspectingOutcome, PlacePrediction } from '@realestate-crm/types';
 import LeadScoreBadge from '../../components/LeadScoreBadge';
+import { ensureTrackingDisclosure } from '../../lib/trackingDisclosure';
 
 const GOOGLE_PLACES_API_KEY =
   Constants.expoConfig?.extra?.GOOGLE_PLACES_API_KEY || '';
@@ -392,8 +393,12 @@ export default function GuidedProspectingScreen() {
     // store has stops prepared but isActive stays false, so the
     // Prospecting tab doesn't show an "in progress" banner just because
     // the user opened the editing screen.
+    // Start tracking session if none active — first-ever start shows the
+    // one-time background-location disclosure before anything records.
+    if (!activeSession) {
+      if (!(await ensureTrackingDisclosure())) return;
+    }
     activateGuidedSession();
-    // Start tracking session if none active
     if (!activeSession) {
       await startSession();
     }

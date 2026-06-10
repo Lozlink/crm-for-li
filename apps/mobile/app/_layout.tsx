@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, Component, type ReactNode } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { PaperProvider, MD3DarkTheme, MD3LightTheme, ActivityIndicator } from 'react-native-paper';
+import { PaperProvider, MD3DarkTheme, MD3LightTheme, ActivityIndicator, IconButton } from 'react-native-paper';
 import { useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -117,6 +117,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 function SafeStack({ theme }: { theme: typeof MD3DarkTheme }) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   return (
     <Stack
@@ -155,7 +156,38 @@ function SafeStack({ theme }: { theme: typeof MD3DarkTheme }) {
           screens so the Android nav bar doesn't overlap content. */}
       <Stack.Screen name="compliance/alert/[id]" options={{ title: 'Compliance Alert' }} />
       <Stack.Screen name="prospecting" options={{ headerShown: false }} />
-      <Stack.Screen name="whiteboard" options={{ headerShown: false, contentStyle: { paddingBottom: 0 } }} />
+      {/* Whiteboard is a fullscreen modal, not a tab. A standard native header
+          (title + close) replaces the in-canvas close button; presenting it as
+          a `fullScreenModal` over the (tabs) navigator keeps the tab bar mounted
+          underneath, so re-pinning `whiteboard-tab` opens this same modal
+          without ever hiding the bar. `paddingBottom: 0` because the screen's
+          WhiteboardToolbar already pads the Android nav-bar inset itself —
+          letting the default inset apply too would double up the bottom gap. */}
+      <Stack.Screen
+        name="whiteboard"
+        options={{
+          presentation: 'fullScreenModal',
+          headerShown: true,
+          title: 'Whiteboard',
+          contentStyle: { paddingBottom: 0 },
+          headerLeft: () => (
+            <IconButton
+              icon="close"
+              size={24}
+              onPress={() => {
+                // Prefer history-back. With no back stack (cold deep-link into
+                // /whiteboard, or opened via the pinned whiteboard-tab redirect),
+                // target the Today tab explicitly. The bare `/(tabs)` group lands
+                // on the currently-active tab, which could be a re-pinned
+                // whiteboard-tab whose placeholder renders null → blank screen.
+                if (router.canGoBack()) router.back();
+                else router.replace('/(tabs)/index' as never);
+              }}
+              accessibilityLabel="Close whiteboard"
+            />
+          ),
+        }}
+      />
     </Stack>
   );
 }
