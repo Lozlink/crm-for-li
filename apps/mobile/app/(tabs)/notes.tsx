@@ -276,14 +276,12 @@ export default function NotesScreen() {
     if (!source) return null;
     const config = SOURCE_BADGE_CONFIG[source];
     if (!config) return null;
+    // Plain View+Text badge — Paper's Chip clips 9px labels into a near-blank
+    // pill (same fix as packages/ui ActivityFeed).
     return (
-      <Chip
-        compact
-        style={[styles.sourceBadge, { backgroundColor: config.color }]}
-        textStyle={{ color: '#fff', fontSize: 9 }}
-      >
-        {config.label}
-      </Chip>
+      <View style={[styles.sourceBadge, { backgroundColor: config.color }]}>
+        <Text style={styles.sourceBadgeText}>{config.label}</Text>
+      </View>
     );
   };
 
@@ -386,13 +384,9 @@ export default function NotesScreen() {
               />
             </View>
           </View>
-          <Chip
-            compact
-            style={[styles.sourceBadge, { backgroundColor: '#F59E0B' }]}
-            textStyle={{ color: '#fff', fontSize: 9 }}
-          >
-            Field
-          </Chip>
+          <View style={[styles.sourceBadge, { backgroundColor: '#F59E0B' }]}>
+            <Text style={styles.sourceBadgeText}>Field</Text>
+          </View>
         </View>
 
         <Surface style={[styles.notePreview, { backgroundColor: theme.colors.surfaceVariant }]} elevation={0}>
@@ -626,9 +620,18 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   sourceBadge: {
-    // No explicit height — Paper's Chip with `compact` sizes to content;
-    // `height: 20` was clipping the text descenders on labels like "Field"
-    // and "Inspection".
+    // Plain View badge (was Paper Chip). At 9px the Chip label rendered as a
+    // near-blank pill; a centred View+Text sizes to content and stays legible.
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    alignSelf: 'flex-start',
+  },
+  sourceBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    lineHeight: 14,
   },
   unlinkedHeader: {
     flexDirection: 'row',

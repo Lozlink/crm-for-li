@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import {
   useTheme, Text, Button, Surface, Chip, TextInput, IconButton,
   Portal, Dialog, ActivityIndicator, Switch, Divider,
 } from 'react-native-paper';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEmailCampaignStore, useCRMStore } from '@realestate-crm/hooks';
 import type { CampaignStatus, Contact } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -18,6 +19,7 @@ const MERGE_FIELDS = ['{{first_name}}', '{{last_name}}', '{{property_address}}']
 export default function CampaignDetailScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = id === 'new';
 
@@ -127,9 +129,13 @@ export default function CampaignDetailScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
       <Stack.Screen options={{ title: isNew ? 'New Campaign' : name || 'Campaign' }} />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Name & Subject */}
         <Surface style={styles.section} elevation={1}>
           <TextInput
@@ -223,9 +229,13 @@ export default function CampaignDetailScreen() {
         )}
       </ScrollView>
 
-      {/* Action bar */}
+      {/* Action bar — pad past the Android nav bar / home indicator so the
+          Save/Send buttons aren't occluded (fixed footer, not in the ScrollView). */}
       {isDraft && (
-        <Surface style={styles.actionBar} elevation={3}>
+        <Surface
+          style={[styles.actionBar, { paddingBottom: 16 + insets.bottom }]}
+          elevation={3}
+        >
           <Button mode="outlined" onPress={handleSave} icon="content-save">
             Save
           </Button>
@@ -274,7 +284,7 @@ export default function CampaignDetailScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

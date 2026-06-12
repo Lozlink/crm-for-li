@@ -4,10 +4,24 @@
 
 [38;2;236;213;63m⟐ injected env (4) from .env · dotenvx@1.61.0[39m
 [2mStarting Metro Bundler[22m
-[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 94.4% [22m[2m(1695/1745)[22m
-[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1832/1832)[22m
-[32m[1mAndroid[22m Bundled [39m[2m3970ms[22m[0m[2m apps/mobile/index.ts (1745 modules)[22m[0m
-[32m[1miOS[22m Bundled [39m[2m6099ms[22m[0m[2m apps/mobile/index.ts (1832 modules)[22m[0m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░[39m[49m[1m 30.4% [22m[2m( 86/157)[22m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░[39m[49m[1m 27.7% [22m[2m( 65/138)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░[39m[49m[1m 42.0% [22m[2m(350/540)[22m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓[49m[39m[47m[37m░░░░░░░░░░░░[39m[49m[1m 30.7% [22m[2m(286/516)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 47.9% [22m[2m(547/959)[22m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 49.0% [22m[2m(492/703)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░[39m[49m[1m 56.6% [22m[2m( 932/1242)[22m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░░░░[39m[49m[1m 49.0% [22m[2m( 733/1059)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░[39m[49m[1m 76.8% [22m[2m(1235/1421)[22m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░░░░[39m[49m[1m 64.2% [22m[2m(1064/1328)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 88.6% [22m[2m(1480/1572)[22m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░░[39m[49m[1m 83.6% [22m[2m(1409/1541)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░░[39m[49m[1m 93.5% [22m[2m(1723/1792)[22m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 95.2% [22m[2m(1669/1711)[22m
+[1mAndroid[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 96.1% [22m[2m(1785/1821)[22m
+[1miOS[22m [0m[2mapps/mobile/[22m[0m[1mindex.ts[22m [32m[42m▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓[49m[39m[47m[37m░[39m[49m[1m 99.9% [22m[2m(1835/1835)[22m
+[32m[1mAndroid[22m Bundled [39m[2m27961ms[22m[0m[2m apps/mobile/index.ts (1821 modules)[22m[0m
+[32m[1miOS[22m Bundled [39m[2m30393ms[22m[0m[2m apps/mobile/index.ts (1835 modules)[22m[0m
 
 [1m› Assets (33):[22m
 ../../node_modules/.pnpm/@expo+vector-icons@15.1.1_expo-font@14.0.11_expo@54.0.33_react-native@0.81.5_@babel+cor_578ada966b57244f0fb5b55de8754f09/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf [90m(1.31 MB)[39m
@@ -26,10 +40,10 @@
 ../../node_modules/.pnpm/react-native-paper@5.15.0_react-native-safe-area-context@5.6.2_react-native@0.81.5_@bab_41d9b5c0467b7e446469252509ed76ee/node_modules/react-native-paper/src/assets/back-chevron.png [90m(489 B)[39m
 
 [1m› android bundles (1):[22m
-_expo/static/js/android/index-9f547e8db943c513e7ecda93ddc0ac93.hbc [90m(6.55 MB)[39m
+_expo/static/js/android/index-f33eee958c38dfb5ba29a7b9f844dde7.hbc [90m(6.57 MB)[39m
 
 [1m› ios bundles (1):[22m
-_expo/static/js/ios/index-3f10a2614439a1e1228cf40ca21bb33c.hbc [90m(6.56 MB)[39m
+_expo/static/js/ios/index-1e5ec7a1fd20605ec312a7246e353099.hbc [90m(6.58 MB)[39m
 
 [1m› Files (1):[22m
 metadata.json [90m(3.71 kB)[39m

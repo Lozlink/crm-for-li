@@ -1,9 +1,7 @@
-import { StyleSheet, View, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
 import { Modal, Text, Button, useTheme, Surface, Chip } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCRMStore } from '../lib/store';
-
-const { height } = Dimensions.get('window');
 
 interface FilterSheetProps {
   visible: boolean;
@@ -12,6 +10,9 @@ interface FilterSheetProps {
 
 export default function FilterSheet({ visible, onDismiss }: FilterSheetProps) {
   const theme = useTheme();
+  // Live window height so the sheet tracks a Catalyst window resize (module-scope
+  // Dimensions.get captured a stale height).
+  const { height: windowHeight } = useWindowDimensions();
   const tags = useCRMStore(state => state.tags);
   const selectedTagIds = useCRMStore(state => state.selectedTagIds);
   const setSelectedTagIds = useCRMStore(state => state.setSelectedTagIds);
@@ -42,7 +43,14 @@ export default function FilterSheet({ visible, onDismiss }: FilterSheetProps) {
     <Modal
       visible={visible}
       onDismiss={onDismiss}
-      contentContainerStyle={[styles.container, { backgroundColor: theme.colors.surface }]}
+      contentContainerStyle={[
+        styles.container,
+        {
+          backgroundColor: theme.colors.surface,
+          marginTop: windowHeight * 0.2,
+          maxHeight: windowHeight * 0.6,
+        },
+      ]}
     >
       <View style={styles.header}>
         <Text variant="titleLarge">Filter Map</Text>
@@ -64,7 +72,7 @@ export default function FilterSheet({ visible, onDismiss }: FilterSheetProps) {
           No tags available. Create tags in Settings to filter contacts.
         </Text>
       ) : (
-        <ScrollView style={styles.tagList} showsVerticalScrollIndicator={false}>
+        <ScrollView style={[styles.tagList, { maxHeight: windowHeight * 0.3 }]} showsVerticalScrollIndicator={false}>
           {tags.map(tag => {
             const isSelected = selectedTagIds.includes(tag.id);
             const count = getContactCount(tag.id);
@@ -117,10 +125,10 @@ export default function FilterSheet({ visible, onDismiss }: FilterSheetProps) {
 const styles = StyleSheet.create({
   container: {
     margin: 20,
-    marginTop: height * 0.2,
+    // marginTop / maxHeight are set inline from useWindowDimensions
+    // (Catalyst-resize-safe).
     padding: 20,
     borderRadius: 16,
-    maxHeight: height * 0.6,
   },
   header: {
     flexDirection: 'row',
@@ -138,7 +146,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   tagList: {
-    maxHeight: height * 0.3,
+    // maxHeight is set inline from useWindowDimensions (Catalyst-resize-safe).
   },
   tagItem: {
     flexDirection: 'row',

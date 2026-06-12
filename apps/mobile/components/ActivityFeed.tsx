@@ -40,7 +40,9 @@ export default function ActivityFeed({ contactId }: ActivityFeedProps) {
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
 
-    return date.toLocaleDateString();
+    // Explicit en-AU format — bare toLocaleDateString() rendered US-style
+    // "4/5/2026", which reads as 4 May or 5 April depending on the reader.
+    return date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
   if (activities.length === 0) {

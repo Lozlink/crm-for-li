@@ -28,8 +28,8 @@ export type { DedupContact, ParsedContactName } from './validation';
 
 export { geocodeAddress, batchGeocodeAddresses, haversineDistance } from './geocode';
 
-export { generateCallDedupKey, hasRecentCallActivity } from './callActivity';
-export type { PendingCallOutcome } from './callActivity';
+export { generateCallDedupKey, hasRecentCallActivity, findActivitiesForCall } from './callActivity';
+export type { PendingCallOutcome, CallActivityMatch } from './callActivity';
 
 export { optimizeRoute } from './routeOptimizer';
 export type { RouteCandidate, OptimizedRoute } from './routeOptimizer';
@@ -37,3 +37,5 @@ export type { RouteCandidate, OptimizedRoute } from './routeOptimizer';
 export { getPropertyPipelineValue, sumPipelineValue } from './propertyPricing';
 
 export { formatRelativeDate } from './relativeDate';
+
+export { formatDistanceMeters, formatDurationSeconds } from './format';

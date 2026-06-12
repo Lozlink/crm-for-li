@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  react-native-maps@1.20.1:
+    hash: 6218381204007159b069d977218a4b5c4d1942c8d333872cbe2a165cd9ad9b11
+    path: patches/react-native-maps@1.20.1.patch
+
 importers:
 
   .:
@@ -104,10 +109,10 @@ importers:
         version: 2.28.0(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       react-native-map-clustering:
         specifier: ^4.0.0
-        version: 4.0.0(react-native-maps@1.20.1(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))
+        version: 4.0.0(react-native-maps@1.20.1(patch_hash=6218381204007159b069d977218a4b5c4d1942c8d333872cbe2a165cd9ad9b11)(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))
       react-native-maps:
         specifier: 1.20.1
-        version: 1.20.1(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+        version: 1.20.1(patch_hash=6218381204007159b069d977218a4b5c4d1942c8d333872cbe2a165cd9ad9b11)(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       react-native-paper:
         specifier: ^5.14.5
         version: 5.15.0(react-native-safe-area-context@5.6.2(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
@@ -289,6 +294,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@realestate-crm/api':
+        specifier: workspace:*
+        version: link:../api
       '@realestate-crm/config':
         specifier: workspace:*
         version: link:../config
@@ -7903,14 +7911,14 @@ snapshots:
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)
 
-  react-native-map-clustering@4.0.0(react-native-maps@1.20.1(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)):
+  react-native-map-clustering@4.0.0(react-native-maps@1.20.1(patch_hash=6218381204007159b069d977218a4b5c4d1942c8d333872cbe2a165cd9ad9b11)(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)):
     dependencies:
       '@mapbox/geo-viewport': 0.4.1
       react-native: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)
-      react-native-maps: 1.20.1(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+      react-native-maps: 1.20.1(patch_hash=6218381204007159b069d977218a4b5c4d1942c8d333872cbe2a165cd9ad9b11)(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
       supercluster: 8.0.1
 
-  react-native-maps@1.20.1(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
+  react-native-maps@1.20.1(patch_hash=6218381204007159b069d977218a4b5c4d1942c8d333872cbe2a165cd9ad9b11)(react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
     dependencies:
       '@types/geojson': 7946.0.16
       react: 19.1.0

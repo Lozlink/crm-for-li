@@ -11,6 +11,7 @@
     "@realestate-crm/hooks": "workspace:*",
     "@realestate-crm/utils": "workspace:*",
     "@realestate-crm/config": "workspace:*",
+    "@realestate-crm/api": "workspace:*",
     "react": "*",
     "react-native": "*",
     "react-native-paper": "*",

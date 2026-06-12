@@ -2,6 +2,7 @@ import { StyleSheet, View, Linking } from 'react-native';
 import { Modal, Text, Button, useTheme, Surface, Chip, IconButton } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { Contact, ContactRequirement, ActivityWithContact } from '@realestate-crm/types';
+import { useBottomSheetPadding } from './useBottomSheetPadding';
 
 interface ContactPreviewProps {
   contact: Contact | null;
@@ -37,6 +38,9 @@ export default function ContactPreview({
   onNavigate,
 }: ContactPreviewProps) {
   const theme = useTheme();
+  // Bottom-anchored sheet: clear the Android nav bar / home indicator. Keep the
+  // prior 100px gap as the floor so non-inset platforms are unchanged.
+  const bottomGap = useBottomSheetPadding(100);
 
   if (!contact) return null;
 
@@ -75,7 +79,10 @@ export default function ContactPreview({
     <Modal
       visible={visible}
       onDismiss={onDismiss}
-      contentContainerStyle={[styles.container, { backgroundColor: theme.colors.surface }]}
+      contentContainerStyle={[
+        styles.container,
+        { backgroundColor: theme.colors.surface, marginBottom: bottomGap },
+      ]}
     >
       <Surface style={styles.card} elevation={0}>
         {(contact.tags && contact.tags.length > 0) ? (
@@ -204,7 +211,7 @@ const styles = StyleSheet.create({
   container: {
     margin: 20,
     marginTop: 'auto',
-    marginBottom: 100,
+    // marginBottom is set inline (insets-aware) — see useBottomSheetPadding.
     borderRadius: 16,
     overflow: 'hidden',
   },

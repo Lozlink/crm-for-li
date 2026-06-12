@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View, Dimensions, ScrollView, Linking } from 'react-native';
+import { StyleSheet, View, ScrollView, Linking, useWindowDimensions } from 'react-native';
 import {
   useTheme,
   Text,
@@ -21,9 +21,6 @@ import { useRouteStore } from '@realestate-crm/hooks';
 import { decodePolyline } from '@realestate-crm/api';
 import type { RouteStop } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-
-const { width } = Dimensions.get('window');
-const MAP_HEIGHT = Dimensions.get('window').height * 0.45;
 
 type StopMarkerColor = {
   background: string;
@@ -90,6 +87,10 @@ export default function RouteDetailScreen() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // Re-derive the map height on every layout so a Catalyst window resize keeps
+  // the map at 45% of the live window height (module-scope Dimensions.get was stale).
+  const { height: windowHeight } = useWindowDimensions();
+  const mapHeight = windowHeight * 0.45;
   const { id } = useLocalSearchParams<{ id: string }>();
   const mapRef = useRef<MapView>(null);
 
@@ -267,7 +268,7 @@ export default function RouteDetailScreen() {
 
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         {/* Map Section */}
-        <View style={styles.mapContainer}>
+        <View style={[styles.mapContainer, { height: mapHeight }]}>
           <MapView
             ref={mapRef}
             style={styles.map}
@@ -712,7 +713,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   mapContainer: {
-    height: MAP_HEIGHT,
+    // height is set inline from useWindowDimensions (Catalyst-resize-safe).
     width: '100%',
   },
   map: {

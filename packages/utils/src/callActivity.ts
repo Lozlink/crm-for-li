@@ -99,3 +99,64 @@ export function hasRecentCallActivity(
     return false;
   });
 }
+
+/**
+ * Result of matching a detected call from the system call log against
+ * activities already in the store.
+ */
+export interface CallActivityMatch {
+  /** A call activity for this contact that already has an outcome recorded —
+   *  the call is fully logged; auto-detection should skip it entirely. */
+  completed: Activity | undefined;
+  /** A call activity for this contact that was pre-created (no outcome yet,
+   *  e.g. by the contact-detail call button). The outcome modal should still
+   *  appear, but its answer must UPDATE this activity rather than insert a
+   *  new one — otherwise the same call is logged twice. */
+  pending: Activity | undefined;
+}
+
+/**
+ * Find existing call activities that correspond to a call detected in the
+ * system call log.
+ *
+ * Unlike {@link hasRecentCallActivity} (which looks back from "now" and is
+ * meant for manual-entry dedup), this anchors the window to the CALL'S OWN
+ * start timestamp. That matters for long calls: a 10-minute call ends well
+ * outside a 2-minute "now" lookback even though its pre-created activity
+ * was inserted right when dialling started.
+ *
+ * Matches by contact_id (the caller has already resolved the phone number to
+ * a contact), so it works for activities fetched from the DB, where the
+ * in-memory `call_dedup_key` is absent.
+ *
+ * @param activities    Activities currently in the store
+ * @param contactId     The CRM contact matched to the call's phone number
+ * @param callTimestamp Call start time (ms epoch) from the system call log
+ * @param slackMs       How far before the call start an activity may have been
+ *                      created and still count as "this call" (default 2 min)
+ */
+export function findActivitiesForCall(
+  activities: Activity[],
+  contactId: string,
+  callTimestamp: number,
+  slackMs = 2 * 60 * 1000
+): CallActivityMatch {
+  const windowStart = callTimestamp - slackMs;
+
+  let completed: Activity | undefined;
+  let pending: Activity | undefined;
+
+  for (const a of activities) {
+    if (a.type !== 'call' || a.contact_id !== contactId) continue;
+    const ts = a.created_at ? new Date(a.created_at).getTime() : 0;
+    if (ts < windowStart) continue;
+
+    if (a.call_outcome) {
+      completed = completed ?? a;
+    } else {
+      pending = pending ?? a;
+    }
+  }
+
+  return { completed, pending };
+}

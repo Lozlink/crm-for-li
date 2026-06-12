@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
-import { Snackbar, useTheme } from 'react-native-paper';
+import { Portal, Snackbar, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useWhiteboardStore } from '@realestate-crm/hooks';
@@ -480,10 +480,17 @@ export default function WhiteboardScreen() {
     // root Stack) already sits below the status bar / notch, so padding the
     // top here would double the gap. The bottom inset is owned by
     // WhiteboardToolbar, which pads the Android nav bar itself.
+    //
+    // Portal.Host: this screen is presented as a NATIVE fullScreenModal, so
+    // Paper Portals that resolve to the PaperProvider root (AddWidgetSheet,
+    // EditItemSheet, ItemContextMenu) would render BEHIND the modal —
+    // visibly, the + button "did nothing". A local host makes them resolve
+    // inside this screen instead.
     <SafeAreaView
       edges={[]}
       style={[styles.root, { backgroundColor: theme.colors.background }]}
     >
+      <Portal.Host>
       <View style={styles.canvasArea}>
         <WhiteboardCanvas
           items={items}
@@ -611,6 +618,7 @@ export default function WhiteboardScreen() {
       >
         {error ?? ''}
       </Snackbar>
+      </Portal.Host>
     </SafeAreaView>
   );
 }

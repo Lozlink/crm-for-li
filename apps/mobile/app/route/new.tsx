@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { StyleSheet, View, Dimensions, ScrollView, Alert, Platform, KeyboardAvoidingView, TouchableOpacity, Keyboard } from 'react-native';
+import { StyleSheet, View, ScrollView, Alert, Platform, KeyboardAvoidingView, TouchableOpacity, Keyboard, useWindowDimensions } from 'react-native';
 import {
   FAB,
   useTheme,
@@ -37,13 +37,14 @@ interface StopItem {
   longitude: number;
 }
 
-const { width, height } = Dimensions.get('window');
-const MAP_HEIGHT = height * 0.55;
-
 export default function NewRouteScreen() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // Re-derive the map height on every layout so a Catalyst window resize keeps
+  // the map at 55% of the live window height (module-scope Dimensions.get was stale).
+  const { height: windowHeight } = useWindowDimensions();
+  const mapHeight = windowHeight * 0.55;
   const mapRef = useRef<MapView>(null);
 
   // Store data
@@ -424,7 +425,7 @@ export default function NewRouteScreen() {
         }}
       />
       {/* Map section - top portion */}
-      <View style={styles.mapContainer}>
+      <View style={[styles.mapContainer, { height: mapHeight }]}>
         <MapView
           ref={mapRef}
           style={styles.map}
@@ -743,12 +744,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mapContainer: {
-    height: MAP_HEIGHT,
+    // height is set inline from useWindowDimensions (Catalyst-resize-safe).
     position: 'relative',
   },
   map: {
-    width,
-    height: MAP_HEIGHT,
+    width: '100%',
+    height: '100%',
   },
   countBadge: {
     position: 'absolute',

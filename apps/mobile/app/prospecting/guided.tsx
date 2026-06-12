@@ -6,11 +6,11 @@ import {
   Alert,
   Linking,
   TouchableOpacity,
-  Dimensions,
   ScrollView,
   Keyboard,
   Platform,
   KeyboardAvoidingView,
+  useWindowDimensions,
 } from 'react-native';
 import {
   Text,
@@ -41,8 +41,6 @@ import { ensureTrackingDisclosure } from '../../lib/trackingDisclosure';
 const GOOGLE_PLACES_API_KEY =
   Constants.expoConfig?.extra?.GOOGLE_PLACES_API_KEY || '';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const EDIT_MAP_HEIGHT = SCREEN_HEIGHT * 0.45;
 
 const OUTCOME_OPTIONS: { value: ProspectingOutcome; label: string; icon: string }[] = [
   { value: 'no_answer', label: 'No Answer', icon: 'phone-missed' },
@@ -71,6 +69,10 @@ export default function GuidedProspectingScreen() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // Re-derive the edit-map height on every layout so a Catalyst window resize
+  // keeps it at 45% of the live window height (module-scope Dimensions.get was stale).
+  const { height: windowHeight } = useWindowDimensions();
+  const editMapHeight = windowHeight * 0.45;
   const mapRef = useRef<MapView>(null);
 
   // Store state
@@ -533,7 +535,7 @@ export default function GuidedProspectingScreen() {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
           {/* Full-height map with contact markers */}
-          <View style={styles.editMapContainer}>
+          <View style={[styles.editMapContainer, { height: editMapHeight }]}>
             <MapView
               ref={mapRef}
               style={styles.editMap}
@@ -1054,12 +1056,12 @@ const styles = StyleSheet.create({
 
   // ── Editing phase styles ──────────────────────────────────────────
   editMapContainer: {
-    height: EDIT_MAP_HEIGHT,
+    // height is set inline from useWindowDimensions (Catalyst-resize-safe).
     position: 'relative',
   },
   editMap: {
     width: '100%',
-    height: EDIT_MAP_HEIGHT,
+    height: '100%',
   },
   countBadge: {
     position: 'absolute',

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Text, Surface, useTheme, Chip } from 'react-native-paper';
+import { Text, Surface, useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCRMStore } from '@realestate-crm/hooks';
 import { ACTIVITY_TYPES, Activity, ActivitySource } from '@realestate-crm/types';
@@ -49,7 +49,9 @@ export default function ActivityFeed({ contactId }: ActivityFeedProps) {
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
 
-    return date.toLocaleDateString();
+    // Explicit en-AU format — bare toLocaleDateString() rendered US-style
+    // "4/5/2026", which reads as 4 May or 5 April depending on the reader.
+    return date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
   if (activities.length === 0) {
@@ -97,13 +99,13 @@ export default function ActivityFeed({ contactId }: ActivityFeedProps) {
                   {getActivityLabel(activity.type)}
                 </Text>
                 {activity.source && SOURCE_BADGE_CONFIG[activity.source] && (
-                  <Chip
-                    compact
-                    style={[styles.sourceBadge, { backgroundColor: SOURCE_BADGE_CONFIG[activity.source].color }]}
-                    textStyle={{ color: SOURCE_BADGE_CONFIG[activity.source].textColor, fontSize: 9 }}
-                  >
-                    {SOURCE_BADGE_CONFIG[activity.source].label}
-                  </Chip>
+                  // Plain View badge — Paper's Chip clips 9px labels inside its
+                  // fixed 20px height (rendered as an empty coloured pill).
+                  <View style={[styles.sourceBadge, { backgroundColor: SOURCE_BADGE_CONFIG[activity.source].color }]}>
+                    <Text style={[styles.sourceBadgeText, { color: SOURCE_BADGE_CONFIG[activity.source].textColor }]}>
+                      {SOURCE_BADGE_CONFIG[activity.source].label}
+                    </Text>
+                  </View>
                 )}
               </View>
               <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
@@ -170,7 +172,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sourceBadge: {
-    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    alignSelf: 'center',
+  },
+  sourceBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    lineHeight: 14,
   },
   content: {
     marginTop: 4,

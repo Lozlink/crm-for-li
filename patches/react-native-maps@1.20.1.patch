@@ -1,0 +1,83 @@
+diff --git a/ios/AirGoogleMaps/AIRGoogleMap.m b/ios/AirGoogleMaps/AIRGoogleMap.m
+index a1ffe69..aceefe3 100644
+--- a/ios/AirGoogleMaps/AIRGoogleMap.m
++++ b/ios/AirGoogleMaps/AIRGoogleMap.m
+@@ -148,6 +148,13 @@ id regionAsJSON(MKCoordinateRegion region) {
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wobjc-missing-super-calls"
+ - (void)insertReactSubview:(id<RCTComponent>)subview atIndex:(NSInteger)atIndex {
++  // PATCH(crm-for-li): new-arch interop can deliver a nil subview here
++  // (RCTLegacyViewManagerInteropComponentView finalizeUpdates) which crashed
++  // with NSInvalidArgumentException on insertObject:atIndex:. Guard + clamp.
++  // See react-native-maps#5217 / #5345.
++  if (subview == nil) {
++    return;
++  }
+   // Our desired API is to pass up markers/overlays as children to the mapview component.
+   // This is where we intercept them and do the appropriate underlying mapview action.
+   if ([subview isKindOfClass:[AIRGoogleMapMarker class]]) {
+@@ -188,7 +195,8 @@ id regionAsJSON(MKCoordinateRegion region) {
+       [self insertReactSubview:(UIView *)childSubviews[i] atIndex:atIndex];
+     }
+   }
+-  [_reactSubviews insertObject:(UIView *)subview atIndex:(NSUInteger) atIndex];
++  NSUInteger safeIndex = MIN((NSUInteger)MAX(atIndex, 0), _reactSubviews.count);
++  [_reactSubviews insertObject:(UIView *)subview atIndex:safeIndex];
+ }
+ #pragma clang diagnostic pop
+ 
+@@ -196,6 +204,13 @@ id regionAsJSON(MKCoordinateRegion region) {
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wobjc-missing-super-calls"
+ - (void)removeReactSubview:(id<RCTComponent>)subview {
++  // PATCH(crm-for-li): new-arch interop can deliver a nil subview here
++  // (RCTLegacyViewManagerInteropComponentView finalizeUpdates) which crashed
++  // with NSInvalidArgumentException on insertObject:atIndex:. Guard + clamp.
++  // See react-native-maps#5217 / #5345.
++  if (subview == nil) {
++    return;
++  }
+   // similarly, when the children are being removed we have to do the appropriate
+   // underlying mapview action here.
+   if ([subview isKindOfClass:[AIRGoogleMapMarker class]]) {
+diff --git a/ios/AirMaps/AIRMap.m b/ios/AirMaps/AIRMap.m
+index 07a4638..f177f9f 100644
+--- a/ios/AirMaps/AIRMap.m
++++ b/ios/AirMaps/AIRMap.m
+@@ -104,6 +104,13 @@ const NSInteger AIRMapMaxZoomLevel = 20;
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wobjc-missing-super-calls"
+ - (void)insertReactSubview:(id<RCTComponent>)subview atIndex:(NSInteger)atIndex {
++    // PATCH(crm-for-li): new-arch interop can deliver a nil subview here
++    // (RCTLegacyViewManagerInteropComponentView finalizeUpdates) which crashed
++    // with NSInvalidArgumentException on insertObject:atIndex:. Guard + clamp.
++    // See react-native-maps#5217 / #5345.
++    if (subview == nil) {
++      return;
++    }
+     // Our desired API is to pass up markers/overlays as children to the mapview component.
+     // This is where we intercept them and do the appropriate underlying mapview action.
+     if ([subview isKindOfClass:[AIRMapMarker class]]) {
+@@ -135,13 +142,21 @@ const NSInteger AIRMapMaxZoomLevel = 20;
+             [self insertReactSubview:(UIView *)childSubviews[i] atIndex:atIndex];
+         }
+     }
+-    [_reactSubviews insertObject:(UIView *)subview atIndex:(NSUInteger) atIndex];
++    NSUInteger safeIndex = MIN((NSUInteger)MAX(atIndex, 0), _reactSubviews.count);
++    [_reactSubviews insertObject:(UIView *)subview atIndex:safeIndex];
+ }
+ #pragma clang diagnostic pop
+ 
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wobjc-missing-super-calls"
+ - (void)removeReactSubview:(id<RCTComponent>)subview {
++    // PATCH(crm-for-li): new-arch interop can deliver a nil subview here
++    // (RCTLegacyViewManagerInteropComponentView finalizeUpdates) which crashed
++    // with NSInvalidArgumentException on insertObject:atIndex:. Guard + clamp.
++    // See react-native-maps#5217 / #5345.
++    if (subview == nil) {
++      return;
++    }
+     // similarly, when the children are being removed we have to do the appropriate
+     // underlying mapview action here.
+     if ([subview isKindOfClass:[AIRMapMarker class]]) {

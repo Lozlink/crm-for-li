@@ -3,7 +3,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { useCRMStore } from './useCRMStore';
 import type { CallOutcome, Contact } from '@realestate-crm/types';
 import type { RecentCall } from 'caller-id/src/CallerIdModule';
-import { generateCallDedupKey, hasRecentCallActivity } from '@realestate-crm/utils';
+import { generateCallDedupKey, findActivitiesForCall } from '@realestate-crm/utils';
 
 // Lazy-import CallerIdModule to avoid crash when native module is not available
 // (e.g. running in web or Expo Go where native modules aren't linked)
@@ -74,6 +74,14 @@ export interface PendingCallOutcome {
   content: string;
   /** Dedup key to prevent double-logging */
   callKey: string;
+  /**
+   * Id of an activity pre-created for this call (e.g. by the contact-detail
+   * call button) that has no outcome yet. When set, resolving the outcome
+   * UPDATES this activity instead of inserting a new one — the fix for the
+   * duplicate "auto-logged" rows that appeared when both the pre-create path
+   * and call-log detection fired for the same call.
+   */
+  existingActivityId?: string;
 }
 
 /**
@@ -102,6 +110,7 @@ export function useCallLogSync() {
   const contacts = useCRMStore((state) => state.contacts);
   const activities = useCRMStore((state) => state.activities);
   const addActivity = useCRMStore((state) => state.addActivity);
+  const updateActivity = useCRMStore((state) => state.updateActivity);
 
   const [pendingCall, setPendingCall] = useState<PendingCallOutcome | null>(null);
 
@@ -127,11 +136,16 @@ export function useCallLogSync() {
     activitiesRef.current = activities;
   }, [activities]);
 
-  // Same for addActivity
+  // Same for addActivity / updateActivity
   const addActivityRef = useRef(addActivity);
   useEffect(() => {
     addActivityRef.current = addActivity;
   }, [addActivity]);
+
+  const updateActivityRef = useRef(updateActivity);
+  useEffect(() => {
+    updateActivityRef.current = updateActivity;
+  }, [updateActivity]);
 
   /**
    * Show the next pending call from the queue, or clear state if empty.
@@ -160,12 +174,21 @@ export function useCallLogSync() {
       : current.content;
 
     try {
-      await addActivityRef.current({
-        contact_id: current.contact.id,
-        type: 'call',
-        content,
-        call_outcome: outcome,
-      });
+      if (current.existingActivityId) {
+        // A pre-created activity (no outcome yet) already exists for this
+        // call — attach the outcome to it instead of inserting a duplicate.
+        await updateActivityRef.current(current.existingActivityId, {
+          content,
+          call_outcome: outcome,
+        });
+      } else {
+        await addActivityRef.current({
+          contact_id: current.contact.id,
+          type: 'call',
+          content,
+          call_outcome: outcome,
+        });
+      }
     } catch (err) {
       // Remove from logged set so it can be retried next time
       loggedCallKeysRef.current.delete(current.callKey);
@@ -218,15 +241,23 @@ export function useCallLogSync() {
       // Skip if already logged in this session or queued
       if (loggedCallKeysRef.current.has(callKey)) continue;
 
-      // Skip if a matching call activity already exists in the store (prevents
-      // double-logging when auto-detection fires after a manual entry)
-      if (hasRecentCallActivity(currentActivities, call.phone)) continue;
-
       // Find a matching CRM contact by phone number
       const matchedContact = currentContacts.find(
         (c) => c.phone && phonesMatch(c.phone, call.phone)
       );
       if (!matchedContact) continue;
+
+      // Match against activities already in the store, anchored to the CALL'S
+      // start time (not "now") so long calls still dedup correctly:
+      //  - an activity with an outcome → call fully logged, skip entirely
+      //  - an outcome-less pre-created activity (contact-detail call button)
+      //    → still prompt for the outcome, but attach it to that activity
+      const { completed, pending } = findActivitiesForCall(
+        currentActivities,
+        matchedContact.id,
+        call.timestamp
+      );
+      if (completed) continue;
 
       // Build the contact display name for the activity content
       const contactName = [matchedContact.first_name, matchedContact.last_name]
@@ -239,6 +270,7 @@ export function useCallLogSync() {
         contactName,
         content: buildCallContent(call),
         callKey,
+        existingActivityId: pending?.id,
       });
     }
 

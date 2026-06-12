@@ -3,10 +3,10 @@ import {
   StyleSheet,
   View,
   FlatList,
-  Dimensions,
   Pressable,
   ActivityIndicator,
   useColorScheme,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -34,8 +34,7 @@ import {
 } from './whiteboardColors';
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const SIDEBAR_WIDTH = Math.min(300, Math.round(SCREEN_WIDTH * 0.84));
+const MAX_SIDEBAR_WIDTH = 300;
 const BACKDROP_OPACITY = 0.4;
 
 // ─── Animation constants ──────────────────────────────────────────────────────
@@ -79,8 +78,13 @@ export function IntelligenceSidebar({ visible, onDismiss, onAddToBoard }: Props)
   const colorScheme = useColorScheme();
   const { suggestions, isLoading } = useSmartSuggestions();
 
+  // Live window width so the panel tracks a Catalyst window resize (module-scope
+  // Dimensions.get captured a stale width).
+  const { width: windowWidth } = useWindowDimensions();
+  const sidebarWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.round(windowWidth * 0.84));
+
   // ── Slide + backdrop animation ────────────────────────────────────────────
-  const translateX = useSharedValue(SIDEBAR_WIDTH);   // start offscreen right
+  const translateX = useSharedValue(sidebarWidth);   // start offscreen right
   const backdropOpacity = useSharedValue(0);
 
   useEffect(() => {
@@ -89,9 +93,9 @@ export function IntelligenceSidebar({ visible, onDismiss, onAddToBoard }: Props)
       translateX.value = withSpring(0, SLIDE_SPRING);
     } else {
       backdropOpacity.value = withTiming(0, BACKDROP_TIMING);
-      translateX.value = withSpring(SIDEBAR_WIDTH, SLIDE_SPRING);
+      translateX.value = withSpring(sidebarWidth, SLIDE_SPRING);
     }
-  }, [visible, translateX, backdropOpacity]);
+  }, [visible, sidebarWidth, translateX, backdropOpacity]);
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
   const panelStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }] }));
@@ -128,7 +132,7 @@ export function IntelligenceSidebar({ visible, onDismiss, onAddToBoard }: Props)
       </Animated.View>
 
       {/* Sliding panel */}
-      <Animated.View style={[styles.panelWrapper, panelStyle]}>
+      <Animated.View style={[styles.panelWrapper, { width: sidebarWidth }, panelStyle]}>
         <Surface
           elevation={4}
           style={[
@@ -380,7 +384,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   panelWrapper: {
-    width: SIDEBAR_WIDTH,
+    // width is set inline from useWindowDimensions (Catalyst-resize-safe).
     height: '100%',
   },
   panel: {

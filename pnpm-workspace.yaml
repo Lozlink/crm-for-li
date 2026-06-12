@@ -2,3 +2,9 @@ packages:
   - "apps/*"
   - "packages/*"
   - "modules/*"
+
+# Nil-guard for AIRGoogleMap/AIRMap insertReactSubview under the new-arch
+# interop layer — fixes the NSInvalidArgumentException crash when clustering
+# adds/removes markers rapidly (react-native-maps#5217 / #5345).
+patchedDependencies:
+  react-native-maps@1.20.1: patches/react-native-maps@1.20.1.patch

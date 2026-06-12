@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCRMStore, useTrackingStore } from '@realestate-crm/hooks';
+import { fetchGnafBuildings } from '@realestate-crm/api';
 import type { Contact } from '@realestate-crm/types';
 import DropNoteDialog from './DropNoteDialog';
 import BuildingActivityDialog from './BuildingActivityDialog';
@@ -65,6 +66,15 @@ export default function TrackingBanner() {
   const [noteDialogVisible, setNoteDialogVisible] = useState(false);
   const [logUnitsDialogVisible, setLogUnitsDialogVisible] = useState(false);
   const [nearbySheetVisible, setNearbySheetVisible] = useState(false);
+  // Prefill for the Building dialog — populated from the nearest G-NAF
+  // building (address + real unit register) when one is within ~60 m of the
+  // user's position; otherwise falls back to bare GPS coords as before.
+  const [buildingPrefill, setBuildingPrefill] = useState<{
+    address: string;
+    latitude: number | null;
+    longitude: number | null;
+    unitNumbers?: string[];
+  }>({ address: '', latitude: null, longitude: null });
   const [currentPosition, setCurrentPosition] = useState<{
     latitude: number;
     longitude: number;
@@ -181,6 +191,65 @@ export default function TrackingBanner() {
     router.push('/(tabs)/prospecting' as never);
   }, [router]);
 
+  /** Max distance at which a G-NAF building counts as "the one I'm standing at". */
+  const BUILDING_SNAP_RADIUS_M = 60;
+
+  const handleOpenBuilding = useCallback(async () => {
+    let prefill: typeof buildingPrefill = {
+      address: '',
+      latitude: currentPosition?.latitude ?? null,
+      longitude: currentPosition?.longitude ?? null,
+    };
+
+    if (currentPosition) {
+      try {
+        // ~130 m bbox around the user; cached per-bbox so repeat taps are free.
+        // Race against a timeout so a slow network can't delay the dialog.
+        const d = 0.0012;
+        const buildings = await Promise.race([
+          fetchGnafBuildings(
+            currentPosition.latitude - d,
+            currentPosition.longitude - d,
+            currentPosition.latitude + d,
+            currentPosition.longitude + d,
+          ),
+          new Promise<[]>(resolve => setTimeout(() => resolve([]), 1500)),
+        ]);
+
+        let bestDist = Infinity;
+        let best: (typeof buildings)[number] | null = null;
+        for (const b of buildings) {
+          const dist = haversineDistance(
+            currentPosition.latitude,
+            currentPosition.longitude,
+            b.center.latitude,
+            b.center.longitude,
+          );
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = b;
+          }
+        }
+
+        if (best && bestDist <= BUILDING_SNAP_RADIUS_M) {
+          prefill = {
+            address: best.address || best.name || '',
+            // Snap to the building's registered coords so the declared
+            // building and annotations land on the building, not the footpath.
+            latitude: best.center.latitude,
+            longitude: best.center.longitude,
+            unitNumbers: best.unitNumbers,
+          };
+        }
+      } catch {
+        // Lookup is best-effort — fall through to bare GPS prefill.
+      }
+    }
+
+    setBuildingPrefill(prefill);
+    setLogUnitsDialogVisible(true);
+  }, [currentPosition]);
+
   if (!activeSession) return null;
 
   const bottomOffset = 49 + insets.bottom;
@@ -286,7 +355,7 @@ export default function TrackingBanner() {
 
             <TouchableOpacity
               style={[styles.expandedButton, { backgroundColor: theme.colors.surface }]}
-              onPress={() => setLogUnitsDialogVisible(true)}
+              onPress={handleOpenBuilding}
               activeOpacity={0.7}
             >
               <Icon
@@ -334,11 +403,12 @@ export default function TrackingBanner() {
       <BuildingActivityDialog
         visible={logUnitsDialogVisible}
         onDismiss={() => setLogUnitsDialogVisible(false)}
-        initialAddress=""
-        initialLatitude={currentPosition?.latitude ?? null}
-        initialLongitude={currentPosition?.longitude ?? null}
+        initialAddress={buildingPrefill.address}
+        initialLatitude={buildingPrefill.latitude ?? currentPosition?.latitude ?? null}
+        initialLongitude={buildingPrefill.longitude ?? currentPosition?.longitude ?? null}
         sessionId={activeSession.id}
         initialMode="log_visits"
+        knownUnitNumbers={buildingPrefill.unitNumbers}
       />
 
       <Portal>
@@ -346,6 +416,14 @@ export default function TrackingBanner() {
           <Dialog.Title>Nearby Contacts ({nearbyCount})</Dialog.Title>
           <Dialog.ScrollArea style={styles.nearbySheetScroll}>
             <ScrollView>
+              {nearbyContacts.length === 0 && (
+                <View style={styles.nearbyEmpty}>
+                  <Icon name="account-search-outline" size={28} color={theme.colors.onSurfaceVariant} />
+                  <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8 }}>
+                    No contacts within {NEARBY_RADIUS_M} m
+                  </Text>
+                </View>
+              )}
               {nearbyContacts.map(({ contact, distanceMeters }) => (
                 <TouchableOpacity
                   key={contact.id}
@@ -441,10 +519,19 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   nearbySheet: {
-    maxHeight: '60%',
+    maxHeight: '85%',
   },
   nearbySheetScroll: {
     paddingHorizontal: 0,
+    // Explicit pixel cap — an unconstrained ScrollArea inside a Portal'd
+    // Dialog collapses to a near-zero height on first layout, clipping rows
+    // (the "(2) but only half a row visible" bug). Same pattern as
+    // BuildingActivityDialog's scrollArea.
+    maxHeight: 400,
+  },
+  nearbyEmpty: {
+    alignItems: 'center',
+    paddingVertical: 28,
   },
   nearbyRow: {
     flexDirection: 'row',

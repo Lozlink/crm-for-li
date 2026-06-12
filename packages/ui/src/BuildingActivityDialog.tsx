@@ -10,6 +10,8 @@ import {
   useDeclaredBuildingsStore,
   useTrackingStore,
 } from '@realestate-crm/hooks';
+import { searchGnafBuildings } from '@realestate-crm/api';
+import type { GnafBuilding } from '@realestate-crm/types';
 
 export interface BuildingActivityDialogProps {
   visible: boolean;
@@ -19,6 +21,10 @@ export interface BuildingActivityDialogProps {
   initialLongitude: number | null;
   sessionId?: string | null;
   initialMode?: 'declare' | 'log_visits';
+  /** Registered unit numbers from G-NAF. When provided, declare mode creates
+   *  contacts for the real register (e.g. 1A, G01) instead of a generated
+   *  sequential range, and prefills the building's total units. */
+  knownUnitNumbers?: string[];
 }
 
 type Mode = 'declare' | 'log_visits';
@@ -61,6 +67,7 @@ export default function BuildingActivityDialog({
   initialLongitude,
   sessionId,
   initialMode = 'declare',
+  knownUnitNumbers,
 }: BuildingActivityDialogProps) {
   const theme = useTheme();
 
@@ -71,6 +78,13 @@ export default function BuildingActivityDialog({
   const [startingUnit, setStartingUnit] = useState('1');
   const [unitCount, setUnitCount] = useState('');
   const [estimatedUnitsInput, setEstimatedUnitsInput] = useState('');
+  // Units the user has tapped OFF in the G-NAF register — default none, so
+  // the whole register is selected until they choose otherwise.
+  const [deselectedUnits, setDeselectedUnits] = useState<Set<string>>(new Set());
+  // G-NAF address search: lets a building be selected from anywhere — the
+  // GPS snap only helps when physically within ~60 m of the building.
+  const [gnafMatches, setGnafMatches] = useState<GnafBuilding[]>([]);
+  const [gnafPick, setGnafPick] = useState<GnafBuilding | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [createdCount, setCreatedCount] = useState<number | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,7 +109,13 @@ export default function BuildingActivityDialog({
       setMode(initialMode);
       setStartingUnit('1');
       setUnitCount('');
-      setEstimatedUnitsInput('');
+      // Prefill the building total from the G-NAF register when we have it.
+      setEstimatedUnitsInput(
+        knownUnitNumbers && knownUnitNumbers.length > 0 ? String(knownUnitNumbers.length) : '',
+      );
+      setDeselectedUnits(new Set());
+      setGnafMatches([]);
+      setGnafPick(null);
       setIsCreating(false);
       setCreatedCount(null);
       setLoggedUnits([]);
@@ -104,7 +124,38 @@ export default function BuildingActivityDialog({
       setCurrentUnitNote('');
       setIsSavingUnit(false);
     }
-  }, [visible, initialAddress, initialMode]);
+  }, [visible, initialAddress, initialMode, knownUnitNumbers]);
+
+  // Debounced G-NAF lookup as the user types an address. Skipped when a
+  // register was passed in (building already identified) or after a pick
+  // (until the user edits the address again).
+  useEffect(() => {
+    if (!visible) return;
+    const q = address.trim();
+    const pickLabel = gnafPick ? `${gnafPick.address}, ${gnafPick.locality}` : null;
+    if (
+      q.length < 3 ||
+      (knownUnitNumbers && knownUnitNumbers.length > 0) ||
+      (pickLabel && q === pickLabel)
+    ) {
+      setGnafMatches([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      const results = await searchGnafBuildings(q);
+      setGnafMatches(results);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [visible, address, knownUnitNumbers, gnafPick]);
+
+  const handlePickGnaf = useCallback((b: GnafBuilding) => {
+    setGnafPick(b);
+    setAddress(`${b.address}, ${b.locality}`);
+    setGnafMatches([]);
+    setEstimatedUnitsInput(String(b.unit_count));
+    setDeselectedUnits(new Set());
+    setCreatedCount(null);
+  }, []);
 
   // Clear success chip after 3s
   useEffect(() => {
@@ -132,17 +183,45 @@ export default function BuildingActivityDialog({
   const startNum = parseInt(startingUnit, 10) || 1;
   const count = parseInt(unitCount, 10) || 0;
 
-  const unitsToCreate = useMemo(() => {
+  // Register can arrive via prop (GPS snap / building badge press) or via
+  // the in-dialog address search. Coords likewise prefer the picked building.
+  const effectiveRegister = (knownUnitNumbers && knownUnitNumbers.length > 0)
+    ? knownUnitNumbers
+    : (gnafPick?.unit_numbers && gnafPick.unit_numbers.length > 0 ? gnafPick.unit_numbers : null);
+  const hasRegister = !!effectiveRegister;
+  const effectiveLatitude = gnafPick?.latitude ?? initialLatitude;
+  const effectiveLongitude = gnafPick?.longitude ?? initialLongitude;
+
+  const unitsToCreate = useMemo<string[]>(() => {
+    // G-NAF register available: create the real units (1A, G01, ...) rather
+    // than a generated sequential range. Only the units the user has left
+    // selected — tapping a chip toggles it out.
+    if (effectiveRegister) {
+      return effectiveRegister.filter(u => !existingUnitNumbers.has(u) && !deselectedUnits.has(u));
+    }
     if (count <= 0 || count > 200) return [];
-    const units: number[] = [];
+    const units: string[] = [];
     for (let i = 0; i < count; i++) {
-      const unitNum = startNum + i;
-      if (!existingUnitNumbers.has(String(unitNum))) {
+      const unitNum = String(startNum + i);
+      if (!existingUnitNumbers.has(unitNum)) {
         units.push(unitNum);
       }
     }
     return units;
-  }, [startNum, count, existingUnitNumbers]);
+  }, [effectiveRegister, deselectedUnits, startNum, count, existingUnitNumbers]);
+
+  const toggleRegisterUnit = useCallback((unit: string) => {
+    setCreatedCount(null);
+    setDeselectedUnits(prev => {
+      const next = new Set(prev);
+      if (next.has(unit)) {
+        next.delete(unit);
+      } else {
+        next.add(unit);
+      }
+      return next;
+    });
+  }, []);
 
   const handleCreate = async () => {
     if (unitsToCreate.length === 0 || !address.trim()) return;
@@ -153,13 +232,13 @@ export default function BuildingActivityDialog({
     const finalEstimate =
       Number.isFinite(parsedEstimate) && parsedEstimate > 0
         ? parsedEstimate
-        : unitsToCreate.length;
+        : (effectiveRegister?.length || unitsToCreate.length);
 
-    if (initialLatitude != null && initialLongitude != null) {
+    if (effectiveLatitude != null && effectiveLongitude != null) {
       await upsertDeclaredBuilding({
         address: address.trim(),
-        latitude: initialLatitude,
-        longitude: initialLongitude,
+        latitude: effectiveLatitude,
+        longitude: effectiveLongitude,
         estimatedUnits: finalEstimate,
       });
     }
@@ -167,10 +246,10 @@ export default function BuildingActivityDialog({
     const contacts = unitsToCreate.map(unitNum => ({
       first_name: `Unit ${unitNum}`,
       address: address.trim(),
-      unit_number: String(unitNum),
+      unit_number: unitNum,
       source: 'walk_in' as const,
-      ...(initialLatitude != null && initialLongitude != null
-        ? { latitude: initialLatitude, longitude: initialLongitude }
+      ...(effectiveLatitude != null && effectiveLongitude != null
+        ? { latitude: effectiveLatitude, longitude: effectiveLongitude }
         : {}),
     }));
 
@@ -182,7 +261,12 @@ export default function BuildingActivityDialog({
   const handleDeclareReset = () => {
     setStartingUnit('1');
     setUnitCount('');
-    setEstimatedUnitsInput('');
+    setEstimatedUnitsInput(
+      knownUnitNumbers && knownUnitNumbers.length > 0 ? String(knownUnitNumbers.length) : '',
+    );
+    setDeselectedUnits(new Set());
+    setGnafPick(null);
+    setGnafMatches([]);
     setCreatedCount(null);
   };
 
@@ -196,9 +280,10 @@ export default function BuildingActivityDialog({
         ? `${notePrefix} — ${currentUnitNote.trim()}`
         : notePrefix;
 
-      // Requires lat/lng — dialog won't reach this path without them when sessionId is set
-      const lat = initialLatitude ?? 0;
-      const lng = initialLongitude ?? 0;
+      // Prefer the picked G-NAF building's coords — annotations land on the
+      // building rather than wherever the user happens to be standing.
+      const lat = effectiveLatitude ?? 0;
+      const lng = effectiveLongitude ?? 0;
 
       await createAnnotation({
         session_id: sessionId,
@@ -214,9 +299,9 @@ export default function BuildingActivityDialog({
       setLoggedUnits(newLoggedUnits);
 
       // Auto-bump declared_building.estimated_units if we've logged more distinct units than declared
-      if (initialLatitude != null && initialLongitude != null) {
+      if (effectiveLatitude != null && effectiveLongitude != null) {
         const matchingBuilding = declaredBuildings.find(b =>
-          coordsNear(initialLatitude, initialLongitude, b.latitude, b.longitude),
+          coordsNear(effectiveLatitude, effectiveLongitude, b.latitude, b.longitude),
         );
         if (matchingBuilding) {
           const distinctUnitCount = new Set(newLoggedUnits.map(u => u.unit)).size;
@@ -244,8 +329,8 @@ export default function BuildingActivityDialog({
     currentOutcome,
     currentUnitNote,
     sessionId,
-    initialLatitude,
-    initialLongitude,
+    effectiveLatitude,
+    effectiveLongitude,
     loggedUnits,
     declaredBuildings,
     createAnnotation,
@@ -276,27 +361,86 @@ export default function BuildingActivityDialog({
         </View>
       )}
 
-      <View style={styles.row}>
-        <TextInput
-          label="Starting unit"
-          value={startingUnit}
-          onChangeText={(t) => { setStartingUnit(t); setCreatedCount(null); }}
-          mode="outlined"
-          dense
-          keyboardType="number-pad"
-          style={styles.flex}
-        />
-        <TextInput
-          label="Number of units"
-          value={unitCount}
-          onChangeText={(t) => { setUnitCount(t); setCreatedCount(null); }}
-          mode="outlined"
-          dense
-          keyboardType="number-pad"
-          style={styles.flex}
-          placeholder="e.g. 12"
-        />
-      </View>
+      {hasRegister ? (
+        // G-NAF register known — pick units instead of entering a range.
+        // All units start selected; tap chips to exclude, or use All/None.
+        <View style={styles.fieldGap}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Icon name="database-check" size={16} color="#16a34a" />
+            <Text variant="bodyMedium" style={{ fontWeight: '600', flex: 1 }}>
+              {effectiveRegister!.length} registered units (G-NAF)
+            </Text>
+            <Button
+              compact
+              onPress={() => { setCreatedCount(null); setDeselectedUnits(new Set()); }}
+            >
+              All
+            </Button>
+            <Button
+              compact
+              onPress={() => {
+                setCreatedCount(null);
+                setDeselectedUnits(new Set(
+                  effectiveRegister!.filter(u => !existingUnitNumbers.has(u)),
+                ));
+              }}
+            >
+              None
+            </Button>
+          </View>
+          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+            Tap units to include or exclude them
+          </Text>
+          <View style={[styles.chipsRow, { marginTop: 6 }]}>
+            {effectiveRegister!.map(u => {
+              const exists = existingUnitNumbers.has(u);
+              const isSelected = !exists && !deselectedUnits.has(u);
+              return (
+                <Chip
+                  key={u}
+                  compact
+                  disabled={exists}
+                  selected={isSelected}
+                  mode={isSelected ? 'flat' : 'outlined'}
+                  onPress={exists ? undefined : () => toggleRegisterUnit(u)}
+                  style={isSelected ? { backgroundColor: theme.colors.secondaryContainer } : undefined}
+                  textStyle={{ fontSize: 10 }}
+                >
+                  {u}
+                </Chip>
+              );
+            })}
+          </View>
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 6 }}>
+            {unitsToCreate.length} of {effectiveRegister!.length} unit{effectiveRegister!.length === 1 ? '' : 's'} selected
+            {existingUnitNumbers.size > 0
+              ? ` — ${[...existingUnitNumbers].filter(u => effectiveRegister!.includes(u)).length} already have contacts`
+              : ''}
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.row}>
+          <TextInput
+            label="Starting unit"
+            value={startingUnit}
+            onChangeText={(t) => { setStartingUnit(t); setCreatedCount(null); }}
+            mode="outlined"
+            dense
+            keyboardType="number-pad"
+            style={styles.flex}
+          />
+          <TextInput
+            label="Number of units"
+            value={unitCount}
+            onChangeText={(t) => { setUnitCount(t); setCreatedCount(null); }}
+            mode="outlined"
+            dense
+            keyboardType="number-pad"
+            style={styles.flex}
+            placeholder="e.g. 12"
+          />
+        </View>
+      )}
 
       <View style={styles.fieldGap}>
         <TextInput
@@ -309,11 +453,13 @@ export default function BuildingActivityDialog({
           placeholder="e.g. 24"
         />
         <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
-          Optional — defaults to units created. Used for coverage %.
+          {hasRegister
+            ? 'Prefilled from the G-NAF register. Used for coverage %.'
+            : 'Optional — defaults to units created. Used for coverage %.'}
         </Text>
       </View>
 
-      {count > 0 && existingUnitNumbers.size > 0 && (
+      {!hasRegister && count > 0 && existingUnitNumbers.size > 0 && (
         <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
           {count - unitsToCreate.length} of {count} units already have contacts (will be skipped)
         </Text>
@@ -330,15 +476,71 @@ export default function BuildingActivityDialog({
     </View>
   );
 
+  // Register-aware logging: chips double as the unit picker and the progress
+  // board — tap to prefill, logged units wear their outcome.
+  const loggedByUnit = useMemo(() => {
+    const m = new Map<string, UnitEntry>();
+    // Last log wins for display when a unit is logged twice (re-knock).
+    for (const e of loggedUnits) m.set(e.unit, e);
+    return m;
+  }, [loggedUnits]);
+
+  const offRegisterLogs = useMemo(
+    () => (hasRegister ? loggedUnits.filter(e => !effectiveRegister!.includes(e.unit)) : loggedUnits),
+    [hasRegister, effectiveRegister, loggedUnits],
+  );
+
+  const registerLoggedCount = useMemo(
+    () => (hasRegister ? effectiveRegister!.filter(u => loggedByUnit.has(u)).length : 0),
+    [hasRegister, effectiveRegister, loggedByUnit],
+  );
+
   const logVisitsContent = (
     <View style={styles.content}>
-      {loggedUnits.length > 0 && (
+      {hasRegister && (
+        <View style={styles.chipSection}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Icon name="database-check" size={14} color="#16a34a" />
+            <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              Units (G-NAF) — {registerLoggedCount} of {effectiveRegister!.length} logged
+            </Text>
+          </View>
+          <View style={[styles.chipsRow, { marginTop: 6 }]}>
+            {effectiveRegister!.map(u => {
+              const entry = loggedByUnit.get(u);
+              const opt = entry ? OUTCOME_OPTIONS.find(o => o.value === entry.outcome) : null;
+              const isCurrent = currentUnit.trim() === u;
+              return (
+                <Chip
+                  key={u}
+                  compact
+                  selected={isCurrent}
+                  mode={entry || isCurrent ? 'flat' : 'outlined'}
+                  icon={entry ? () => (
+                    <Icon name={opt?.icon ?? 'check'} size={12} color={opt?.color ?? '#6b7280'} />
+                  ) : undefined}
+                  onPress={() => setCurrentUnit(u)}
+                  style={[
+                    isCurrent ? { backgroundColor: theme.colors.secondaryContainer } : undefined,
+                    entry && !isCurrent ? { borderColor: opt?.color ?? '#6b7280' } : undefined,
+                  ]}
+                  textStyle={{ fontSize: 10 }}
+                >
+                  {u}
+                </Chip>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      {offRegisterLogs.length > 0 && (
         <View style={styles.chipSection}>
           <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 6 }}>
-            Logged ({loggedUnits.length})
+            {hasRegister ? `Logged off-register (${offRegisterLogs.length})` : `Logged (${offRegisterLogs.length})`}
           </Text>
           <View style={styles.chipsRow}>
-            {loggedUnits.map((entry, idx) => {
+            {offRegisterLogs.map((entry, idx) => {
               const opt = OUTCOME_OPTIONS.find(o => o.value === entry.outcome);
               return (
                 <Chip
@@ -364,7 +566,7 @@ export default function BuildingActivityDialog({
         placeholder="e.g., 3, 2B, G01"
         value={currentUnit}
         onChangeText={setCurrentUnit}
-        autoFocus={mode === 'log_visits'}
+        autoFocus={mode === 'log_visits' && !hasRegister}
         dense
       />
 
@@ -423,17 +625,46 @@ export default function BuildingActivityDialog({
   return (
     <Portal>
       <Dialog visible={visible} onDismiss={onDismiss} style={styles.dialog}>
-        <Dialog.Title>{dialogTitle}</Dialog.Title>
+        <Dialog.Title numberOfLines={2}>{dialogTitle}</Dialog.Title>
 
         <View style={styles.sharedFields}>
           <TextInput
             label="Building address"
             value={address}
-            onChangeText={setAddress}
+            onChangeText={(t) => {
+              setAddress(t);
+              // Editing the address invalidates a previous pick — its coords
+              // and register no longer describe what the user is typing.
+              if (gnafPick && t !== `${gnafPick.address}, ${gnafPick.locality}`) {
+                setGnafPick(null);
+              }
+            }}
             mode="outlined"
             dense
             left={<TextInput.Icon icon="map-marker" />}
           />
+          {/* G-NAF matches as-you-type — works from anywhere, unlike the GPS
+              snap which needs the user within ~60 m of the building. */}
+          {gnafMatches.length > 0 && (
+            <View style={[styles.gnafResults, { backgroundColor: theme.colors.surfaceVariant }]}>
+              {gnafMatches.map(b => (
+                <TouchableOpacity
+                  key={b.id}
+                  style={styles.gnafResultRow}
+                  onPress={() => handlePickGnaf(b)}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="office-building" size={16} color={theme.colors.primary} />
+                  <Text variant="bodySmall" numberOfLines={1} style={{ flex: 1, marginLeft: 8 }}>
+                    {b.address}, {b.locality}
+                  </Text>
+                  <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {b.unit_count} units
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
           <View style={styles.segmentGap}>
             <SegmentedButtons
               value={mode}
@@ -507,6 +738,17 @@ const styles = StyleSheet.create({
   },
   segmentGap: {
     marginTop: 12,
+  },
+  gnafResults: {
+    borderRadius: 8,
+    marginTop: 4,
+    overflow: 'hidden',
+  },
+  gnafResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   scrollArea: {
     paddingHorizontal: 0,

@@ -7,7 +7,7 @@ import {
   useTaskStore, usePropertyStore, useCRMStore, useAuthStore, useInspectionStore, useTrackingStore,
   useProspectingMetrics, useComplianceStore,
 } from '@realestate-crm/hooks';
-import { sumPipelineValue } from '@realestate-crm/utils';
+import { sumPipelineValue, formatDistanceMeters, formatDurationSeconds } from '@realestate-crm/utils';
 import type { Task, Property, Contact, Inspection, TrackingSession, ComplianceAlertStatus } from '@realestate-crm/types';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import WeatherStrip from '../../components/WeatherStrip';
@@ -42,19 +42,6 @@ function formatPrice(price: number): string {
 function getContactName(contact: { first_name: string; last_name?: string } | undefined): string {
   if (!contact) return '';
   return [contact.first_name, contact.last_name].filter(Boolean).join(' ');
-}
-
-function formatDuration(seconds: number | undefined): string {
-  if (!seconds) return '0m';
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  if (hrs > 0) return `${hrs}h ${mins}m`;
-  return `${mins}m`;
-}
-
-function formatDistance(meters: number | undefined): string {
-  if (!meters) return '0 km';
-  return `${(meters / 1000).toFixed(1)} km`;
 }
 
 /** Compliance alert statuses that count as "open" — mirrors the compliance tab. */
@@ -190,7 +177,10 @@ export default function TodayScreen() {
     // Use the shared pipeline-value helper so this total agrees with the
     // Pipeline board and Stats screen — see packages/utils/propertyPricing.
     const totalValue = sumPipelineValue(active);
-    return { appraisals, listed, underOffer, totalValue, total: active.length };
+    // Surface how many active properties contribute $0 — otherwise the total
+    // silently under-reports and looks wrong next to the board's card count.
+    const unpriced = active.filter(p => p.advertised_price == null && p.appraisal_price == null).length;
+    return { appraisals, listed, underOffer, totalValue, unpriced, total: active.length };
   }, [properties]);
 
   const recentContacts = useMemo(() => {
@@ -206,6 +196,10 @@ export default function TodayScreen() {
 
   const recentSessions = useMemo(() => {
     return [...sessions]
+      // Hide empty sessions (no distance and under a minute) — accidental
+      // start/stops. New ones are discarded at save time in stopSession, but
+      // historical junk rows still exist in the DB.
+      .filter(s => (s.total_distance_meters ?? 0) > 0 || (s.duration_seconds ?? 0) >= 60)
       .sort((a, b) => {
         const aTime = a.started_at ? new Date(a.started_at).getTime() : 0;
         const bTime = b.started_at ? new Date(b.started_at).getTime() : 0;
@@ -290,7 +284,7 @@ export default function TodayScreen() {
             <ProspectingStatCell
               icon="map-marker-distance"
               label="Distance"
-              value={`${(prospecting.today.distanceMeters / 1000).toFixed(1)} km`}
+              value={formatDistanceMeters(prospecting.today.distanceMeters)}
               color="#f59e0b"
               trend={prospecting.trends.distance}
             />
@@ -371,7 +365,7 @@ export default function TodayScreen() {
                 >
                   <Icon name="map-marker-path" size={14} color={theme.colors.onSurfaceVariant} />
                   <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginLeft: 4 }}>
-                    {formatDistance(session.total_distance_meters)} · {formatDuration(session.duration_seconds)}
+                    {formatDistanceMeters(session.total_distance_meters)} · {formatDurationSeconds(session.duration_seconds)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -515,9 +509,16 @@ export default function TodayScreen() {
             <PipelineStat label="Under Offer / Exchanged" count={pipelineStats.underOffer} color="#f59e0b" />
           </View>
           <View style={[styles.pipelineTotal, { borderTopColor: theme.colors.outlineVariant }]}>
-            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-              Total Pipeline Value
-            </Text>
+            <View>
+              <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                Total Pipeline Value
+              </Text>
+              {pipelineStats.unpriced > 0 && (
+                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.7 }}>
+                  {pipelineStats.unpriced} propert{pipelineStats.unpriced === 1 ? 'y' : 'ies'} without a price not counted
+                </Text>
+              )}
+            </View>
             <Text variant="titleMedium" style={{ color: theme.colors.primary, fontWeight: '700' }}>
               {pipelineStats.totalValue > 0 ? formatPrice(pipelineStats.totalValue) : '$0'}
             </Text>

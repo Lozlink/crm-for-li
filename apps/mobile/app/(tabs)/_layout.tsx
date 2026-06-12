@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
-import { View, StyleSheet, TouchableOpacity, Alert, Pressable } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
 import { useTheme, Text } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {
@@ -13,6 +13,7 @@ import {
 } from '@realestate-crm/hooks';
 import { TrackingBanner } from '@realestate-crm/ui';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ensureTrackingDisclosure } from '../../lib/trackingDisclosure';
 
 // Tab-bar button props come from `@react-navigation/bottom-tabs` (a
 // transitive dep of expo-router) and have a complex GestureResponderEvent
@@ -36,19 +37,17 @@ const TopHeader = memo(function TopHeader() {
     ? 'Demo'
     : profile?.display_name?.split(' ')[0] || 'User';
 
-  const handleTrackingPress = useCallback(() => {
+  const handleTrackingPress = useCallback(async () => {
     if (activeSession) {
       router.push('/(tabs)/map' as never);
       return;
     }
-    Alert.alert(
-      'Start Tracking',
-      'This will record your location in the background for field prospecting. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Start', onPress: () => startSession() },
-      ],
-    );
+    // Same one-time disclosure gate as the Prospecting tab and guided flow —
+    // this header button was a third start-session site that previously
+    // bypassed it and re-showed the per-press confirm dialog.
+    if (!(await ensureTrackingDisclosure())) return;
+    await startSession();
+    router.push('/(tabs)/map' as never);
   }, [activeSession, router, startSession]);
 
   return (

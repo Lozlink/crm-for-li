@@ -11,6 +11,7 @@ import {
   useTrackingStore,
 } from '@realestate-crm/hooks';
 import type { ActivityWithContact, Property, Task, Inspection } from '@realestate-crm/types';
+import { sumPipelineValue } from '@realestate-crm/utils';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -168,9 +169,11 @@ export default function Dashboard() {
 
     const activeListings = properties.filter((p) => p.status === 'available').length;
 
-    const pipelineValue = properties
-      .filter((p) => !TERMINAL_STATUSES.includes(p.status))
-      .reduce((sum, p) => sum + (p.advertised_price ?? p.appraisal_price ?? 0), 0);
+    // Shared helper — keeps this total in lockstep with the mobile dashboard,
+    // Pipeline board and Stats screen (see packages/utils/propertyPricing).
+    const pipelineValue = sumPipelineValue(
+      properties.filter((p) => !TERMINAL_STATUSES.includes(p.status))
+    );
 
     const overdueTasks = tasks.filter(
       (t) => t.status !== 'completed' && t.due_at != null && new Date(t.due_at).getTime() < now
@@ -191,10 +194,7 @@ export default function Dashboard() {
     return PIPELINE_STAGES.map((stage) => {
       const stageProps = properties.filter((p) => p.status === stage.status);
       const count = stageProps.length;
-      const value = stageProps.reduce(
-        (sum, p) => sum + (p.advertised_price ?? p.appraisal_price ?? 0),
-        0
-      );
+      const value = sumPipelineValue(stageProps);
       return { ...stage, count, value };
     });
   }, [properties]);

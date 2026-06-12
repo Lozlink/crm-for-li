@@ -17,6 +17,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import * as Contacts from 'expo-contacts';
 import * as Linking from 'expo-linking';
+import { useBottomSheetPadding } from '@realestate-crm/ui';
 import { useCRMStore, syncContactTags } from '@realestate-crm/hooks';
 import { useAuthStore } from '@realestate-crm/hooks';
 import { findDuplicates, parseContactNameField, batchGeocodeAddresses } from '@realestate-crm/utils';
@@ -40,6 +41,8 @@ const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '';
 
 export default function ImportContactsScreen() {
   const theme = useTheme();
+  // Fixed footer sits below the list — clear the Android nav bar / home indicator.
+  const footerPad = useBottomSheetPadding(16);
   const router = useRouter();
 
   const existingContacts = useCRMStore((s) => s.contacts);
@@ -367,7 +370,7 @@ export default function ImportContactsScreen() {
               contentContainerStyle={styles.list}
             />
 
-            <View style={styles.footer}>
+            <View style={[styles.footer, { paddingBottom: footerPad }]}>
               <Button
                 mode="contained"
                 onPress={handlePreview}
@@ -528,7 +531,7 @@ export default function ImportContactsScreen() {
               contentContainerStyle={styles.list}
             />
 
-            <View style={styles.footer}>
+            <View style={[styles.footer, { paddingBottom: footerPad }]}>
               <Button mode="outlined" onPress={() => setStep('select')} style={{ marginRight: 12 }}>
                 Back
               </Button>

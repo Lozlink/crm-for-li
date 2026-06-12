@@ -182,7 +182,7 @@ export function useSmartSuggestions(): { suggestions: SmartSuggestion[]; isLoadi
         id: 'hot_prospects',
         kind: 'hot_prospects',
         title: 'Hot prospects to call',
-        subtitle: `${topHot.length} lead${topHot.length === 1 ? '' : 's'} scoring above ${HIGH_SCORE_THRESHOLD} are overdue for contact`,
+        subtitle: `${topHot.length} lead${topHot.length === 1 ? '' : 's'} scoring above ${HIGH_SCORE_THRESHOLD} ${topHot.length === 1 ? 'is' : 'are'} overdue for contact`,
         payload: {
           contactIds: topHot.map(x => x.contact.id),
         },

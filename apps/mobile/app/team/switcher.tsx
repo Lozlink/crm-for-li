@@ -4,12 +4,14 @@ import { Text, Surface, useTheme, Button, Avatar, ActivityIndicator } from 'reac
 import { useRouter } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuthStore, useCRMStore } from '@realestate-crm/hooks';
-import { RoleBadge } from '@realestate-crm/ui';
+import { RoleBadge, useBottomSheetPadding } from '@realestate-crm/ui';
 import type { Membership } from '@realestate-crm/types';
 
 export default function TeamSwitcherScreen() {
   const theme = useTheme();
   const router = useRouter();
+  // Fixed footer sits below the list — clear the Android nav bar / home indicator.
+  const footerPad = useBottomSheetPadding(16);
   const memberships = useAuthStore(s => s.memberships);
   const activeTeam = useAuthStore(s => s.activeTeam);
   const switchTeam = useAuthStore(s => s.switchTeam);
@@ -101,7 +103,7 @@ export default function TeamSwitcherScreen() {
         }
       />
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: footerPad }]}>
         <Button
           mode="outlined"
           onPress={() => router.push('/team/create')}

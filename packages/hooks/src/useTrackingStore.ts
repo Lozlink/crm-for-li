@@ -202,6 +202,26 @@ export const useTrackingStore = create<TrackingState>()((set, get) => ({
         (new Date(now).getTime() - new Date(activeSession.started_at).getTime()) / 1000
       );
 
+      // Discard accidental sessions: started and stopped almost immediately
+      // with nothing meaningful recorded. These used to be persisted as
+      // "0 km · 0m" rows that cluttered the dashboard chips and the All
+      // Sessions list. Checked on movement (not breadcrumb count) because a
+      // stationary device still logs an initial GPS fix — a sub-minute
+      // session with <10 m of movement is a misfire, not field work.
+      const isEmptySession = durationSeconds < 60 && totalDistance < 10;
+      if (isEmptySession) {
+        if (!isDemo) {
+          // Best-effort delete of the row created at start — if it fails we
+          // still clear local state; the row will just sit as an orphaned
+          // 'active' session until recoverOrphanedSession handles it.
+          await supabase.from('tracking_sessions').delete().eq('id', activeSession.id);
+        }
+        await AsyncStorage.removeItem(BREADCRUMB_BUFFER_KEY);
+        await AsyncStorage.removeItem(ACTIVE_SESSION_KEY);
+        set({ activeSession: null, isLoading: false });
+        return null;
+      }
+
       const updates = {
         status: 'completed' as const,
         completed_at: now,

@@ -15,6 +15,7 @@ import {
 } from '@realestate-crm/hooks';
 import type { Route } from '@realestate-crm/types';
 import type { TrackingSession } from '@realestate-crm/types';
+import { formatDistanceMeters, formatDurationSeconds } from '@realestate-crm/utils';
 import { ensureTrackingDisclosure } from '../../lib/trackingDisclosure';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { BuildingActivityDialog } from '@realestate-crm/ui';
@@ -22,18 +23,10 @@ import { TIER_COLORS } from '../../components/LeadScoreBadge';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function formatDuration(seconds: number | undefined): string {
-  if (!seconds) return '0m';
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  if (hrs > 0) return `${hrs}h ${mins}m`;
-  return `${mins}m`;
-}
-
-function formatDistance(meters: number | undefined): string {
-  if (!meters) return '0 km';
-  return `${(meters / 1000).toFixed(1)} km`;
-}
+// Shared formatters — keep session distance/duration identical across the
+// dashboard chips, Daily view and All Sessions list.
+const formatDuration = formatDurationSeconds;
+const formatDistance = formatDistanceMeters;
 
 function formatTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -486,7 +479,7 @@ function DailyView({
               <Text variant="titleSmall" style={{ fontWeight: '600' }}>Phone Capture Rate</Text>
             </View>
             <Text variant="titleMedium" style={{ fontWeight: '700', color: '#16a34a' }}>
-              {metrics.today.phoneCaptureRate}%
+              {metrics.today.contactsCreated > 0 ? `${metrics.today.phoneCaptureRate}%` : '—'}
             </Text>
           </View>
           <ProgressBar
@@ -495,7 +488,9 @@ function DailyView({
             style={styles.progressBar}
           />
           <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
-            {metrics.today.phoneCaptures} of {metrics.today.contactsCreated} contacts have a phone number
+            {metrics.today.contactsCreated > 0
+              ? `${metrics.today.phoneCaptures} of ${metrics.today.contactsCreated} contact${metrics.today.contactsCreated === 1 ? '' : 's'} added today ${metrics.today.phoneCaptures === 1 && metrics.today.contactsCreated === 1 ? 'has' : 'have'} a phone number`
+              : 'No contacts added today yet'}
           </Text>
         </View>
       </Surface>
@@ -519,7 +514,9 @@ function DailyView({
               style={styles.progressBar}
             />
             <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
-              {metrics.callMetrics.connected} connected / {metrics.callMetrics.totalCalls} total calls
+              {/* Scope label matters: these are ALL logged calls, not today's —
+                  without it the number reads as contradicting the daily stats. */}
+              {metrics.callMetrics.connected} connected / {metrics.callMetrics.totalCalls} total calls (all time)
             </Text>
 
             {/* WoW Trend */}
@@ -639,7 +636,7 @@ function DailyView({
               <Text variant="titleSmall" style={{ fontWeight: '600' }}>Inspections</Text>
             </View>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
-              {metrics.inspectionMetrics.totalCompleted} completed, avg {metrics.inspectionMetrics.avgAttendees} {metrics.inspectionMetrics.avgAttendees === 1 ? 'attendee' : 'attendees'}
+              {metrics.inspectionMetrics.totalCompleted} completed all time, avg {metrics.inspectionMetrics.avgAttendees} {metrics.inspectionMetrics.avgAttendees === 1 ? 'attendee' : 'attendees'}
             </Text>
           </View>
         </Surface>
@@ -686,7 +683,7 @@ function WeeklyView({ metrics }: { metrics: ReturnType<typeof useProspectingMetr
       current: metrics.thisWeek.distanceMeters,
       previous: metrics.lastWeek.distanceMeters,
       changePercent: metrics.trends.distance.changePercent,
-      formatFn: (v: number) => `${(v / 1000).toFixed(1)} km`,
+      formatFn: (v: number) => formatDistanceMeters(v),
     },
   ];
 
@@ -761,7 +758,11 @@ function WeeklyView({ metrics }: { metrics: ReturnType<typeof useProspectingMetr
                     borderRadius: 4,
                   }}
                 />
-                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4, fontSize: 10 }}>
+                <Text
+                  variant="labelSmall"
+                  numberOfLines={1}
+                  style={{ color: theme.colors.onSurfaceVariant, marginTop: 4, fontSize: 10 }}
+                >
                   {point.weekLabel}
                 </Text>
               </View>
@@ -800,10 +801,17 @@ function FunnelView({
       {/* Conversion Funnel */}
       <Surface style={[styles.card, { backgroundColor: theme.colors.surface }]} elevation={1}>
         <View style={styles.cardInner}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Icon name="filter-variant" size={18} color={theme.colors.primary} />
             <Text variant="titleSmall" style={{ fontWeight: '700' }}>Conversion Funnel</Text>
           </View>
+          {/* Scope note — this funnel only counts contacts captured in the
+              field (with coordinates) and properties linked to them. Without
+              it, "Listed 0" here looks broken next to the Pipeline board's
+              listed count, which covers ALL properties. */}
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2, marginBottom: 12 }}>
+            Door-knock contacts and the listings they led to
+          </Text>
           {funnelData.map((stage, idx) => {
             const barWidth = Math.max((stage.value / maxFunnelValue) * 100, 8);
             return (
@@ -1103,7 +1111,8 @@ function TerritoryView({
                         {row.suburb}
                       </Text>
                       <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 1 }}>
-                        {formatSalePrice(row.medianSalePrice)} med. | {row.housePct}% houses, {row.unitPct}% units
+                        {/* Hide the median entirely when unknown — "- med." read as broken data */}
+                        {row.medianSalePrice != null ? `${formatSalePrice(row.medianSalePrice)} med. | ` : ''}{row.housePct}% houses, {row.unitPct}% units
                       </Text>
                     </View>
                     <Text variant="bodySmall" style={[styles.suburbCol, { textAlign: 'right', color: theme.colors.onSurface }]}>
@@ -1220,19 +1229,37 @@ function TerritoryView({
           <View style={styles.barChartContainer}>
             {metrics.monthlyDoorsTrend.map((point, idx) => (
               <View key={idx} style={styles.barColumn}>
-                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4, fontSize: 9 }}>
-                  {point.value}
-                </Text>
+                {/* Hide zero counts — a row of floating "0"s above dash-bars
+                    read as chart debris at 12-column density. */}
+                {point.value > 0 && (
+                  <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4, fontSize: 9 }}>
+                    {point.value}
+                  </Text>
+                )}
                 <View
                   style={{
                     height: maxBarHeight * (point.value / maxTrendValue) || 2,
                     width: 16,
-                    backgroundColor: '#6366f1',
+                    backgroundColor: point.value > 0 ? '#6366f1' : theme.colors.surfaceVariant,
                     borderRadius: 3,
                   }}
                 />
-                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4, fontSize: 8 }}>
-                  {point.weekLabel}
+                {/* Twelve "23 Mar" labels don't fit a phone column — they
+                    wrapped to two misaligned lines. Label every third week
+                    on a single non-wrapping line; the spacing stays regular
+                    so the gaps still read as one week each. */}
+                <Text
+                  variant="labelSmall"
+                  numberOfLines={1}
+                  style={{
+                    color: theme.colors.onSurfaceVariant,
+                    marginTop: 4,
+                    fontSize: 8,
+                    width: 40,
+                    textAlign: 'center',
+                  }}
+                >
+                  {idx % 3 === 0 || idx === metrics.monthlyDoorsTrend.length - 1 ? point.weekLabel : ' '}
                 </Text>
               </View>
             ))}
@@ -1339,7 +1366,7 @@ function SessionsView({
           <View style={styles.sessionRowInner}>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <Text variant="bodyMedium" style={{ fontWeight: '600' }}>
+                <Text variant="bodyMedium" numberOfLines={1} style={{ fontWeight: '600', flexShrink: 1 }}>
                   {item.name || formatSessionDate(item.date)}
                 </Text>
                 <Chip

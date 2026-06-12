@@ -378,11 +378,6 @@ function computeSuburbContactCounts(contacts: Contact[]): Map<string, number> {
     const key = suburb.toLowerCase();
     counts.set(key, (counts.get(key) || 0) + 1);
   }
-  // Debug
-  if (counts.size > 0) {
-    console.log('[SuburbContactCounts]', Object.fromEntries(counts));
-  }
-  console.log('[SuburbContactCounts] total contacts scanned:', contacts.length, 'suburbs found:', counts.size);
   return counts;
 }
 
@@ -527,11 +522,23 @@ function computeRecommendedAreas(staleStreets: StaleStreet[], properties: Proper
 
     const score = staleness * 0.4 + density * 0.3 + hasSuccess * 0.3;
 
-    let reason = '';
-    if (staleness > 0.5 && density > 0.3) reason = 'High density, needs revisit';
-    else if (hasSuccess) reason = 'Past listings in area';
-    else if (staleness > 0.7) reason = 'Getting stale';
-    else reason = 'Good prospects';
+    // Reason picks the street's strongest signal so adjacent rows don't all
+    // read identically. Most specific first: past success > long-overdue >
+    // contact-dense > default. Include the day count where we have it —
+    // "No visit in 31 days" is actionable; "needs revisit" is wallpaper.
+    const days = street.daysSinceLastContact;
+    let reason: string;
+    if (hasSuccess) {
+      reason = 'Past listings in this suburb';
+    } else if (days !== null && days > 42) {
+      reason = `No contact in ${days} days`;
+    } else if (density > 0.6 && staleness > 0.5) {
+      reason = `${street.contactCount} contact${street.contactCount === 1 ? '' : 's'} here, due a revisit`;
+    } else if (days !== null) {
+      reason = `Last visited ${days} day${days === 1 ? '' : 's'} ago`;
+    } else {
+      reason = 'Not yet visited';
+    }
 
     return {
       streetName: street.streetName,
@@ -544,7 +551,13 @@ function computeRecommendedAreas(staleStreets: StaleStreet[], properties: Proper
       averageLongitude: street.averageLongitude,
     };
   })
-  .sort((a, b) => b.score - a.score)
+  .sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    // Deterministic tiebreak: more contacts first, then name — equal-score
+    // streets used to land in arbitrary order between renders.
+    if (b.contactCount !== a.contactCount) return b.contactCount - a.contactCount;
+    return a.streetName.localeCompare(b.streetName);
+  })
   .slice(0, 10);
 }
 
@@ -625,13 +638,18 @@ function computeMultiDwellingBuildings(
     );
 
     const declaredAddrKey = normalizeAddress(declared.address);
+    // ALL contacts at this address — unit-numbered or not. The previous
+    // filter required unit_number, which made the no-unit fallback below
+    // permanently zero and left Territory showing "0/10 units" while the
+    // coverage-gap suggestion (which counts all contacts) said "2 of 10".
     const contactsAtAddr = contacts.filter(c =>
-      !!c.unit_number
-      && !!c.address
+      !!c.address
       && normalizeAddress(c.address) === declaredAddrKey,
     );
     const contactUnits = new Set<string>(
-      contactsAtAddr.map(c => (c.unit_number as string).trim()).filter(Boolean),
+      contactsAtAddr
+        .map(c => c.unit_number?.trim())
+        .filter((u): u is string => !!u),
     );
     const contactLastCreated = contactsAtAddr
       .map(c => c.created_at || null)
@@ -658,14 +676,20 @@ function computeMultiDwellingBuildings(
         declaredBuildingId: declared.id,
       });
     } else {
+      // Coverage fallback: when contacts at this address have no unit_number
+      // recorded, count the contacts themselves as visited units. Keeps this
+      // number consistent with the whiteboard coverage-gap suggestion
+      // (useSmartSuggestions), which uses the same fallback — previously the
+      // Territory view said "0/10 units" while the suggestion said "2 of 10".
+      const visitedCount = contactUnits.size > 0 ? contactUnits.size : contactsAtAddr.length;
       merged.push({
         address: declared.address,
-        totalUnitsVisited: contactUnits.size,
+        totalUnitsVisited: visitedCount,
         uniqueUnits: [...contactUnits].sort(),
         lastVisited: contactLastCreated,
         latitude: declared.latitude,
         longitude: declared.longitude,
-        estimatedUnits: Math.max(declared.estimated_units, contactUnits.size),
+        estimatedUnits: Math.max(declared.estimated_units, visitedCount),
         source: 'declared',
         declaredBuildingId: declared.id,
       });

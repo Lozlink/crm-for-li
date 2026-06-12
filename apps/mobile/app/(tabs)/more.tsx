@@ -90,6 +90,12 @@ export default function MoreScreen() {
                 </Surface>
               </TouchableOpacity>
             ))}
+            {/* Invisible spacers pad the last row out to a multiple of 3 so a
+                lone trailing card (e.g. Contacts in Manage) keeps the 3-column
+                grid rectangular instead of reading as orphaned. */}
+            {Array.from({ length: (3 - (section.items.length % 3)) % 3 }).map((_, i) => (
+              <View key={`spacer-${i}`} style={styles.cardWrapper} aria-hidden />
+            ))}
           </View>
         </View>
       ))}

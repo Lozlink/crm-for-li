@@ -1,7 +1,8 @@
-import { StyleSheet, View, Dimensions } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Modal, Text, Button, useTheme, Surface, Chip } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { Property, PropertyStatus } from '@realestate-crm/types';
+import { useBottomSheetPadding } from './useBottomSheetPadding';
 
 const STATUS_LABELS: Record<PropertyStatus, string> = {
   appraisal: 'Appraisal',
@@ -46,6 +47,9 @@ export default function PropertyPreview({
   onViewDetails,
 }: PropertyPreviewProps) {
   const theme = useTheme();
+  // Bottom-anchored sheet: clear the Android nav bar / home indicator. Keep the
+  // prior 100px gap as the floor so non-inset platforms are unchanged.
+  const bottomGap = useBottomSheetPadding(100);
 
   if (!property) return null;
 
@@ -58,7 +62,10 @@ export default function PropertyPreview({
     <Modal
       visible={visible}
       onDismiss={onDismiss}
-      contentContainerStyle={[styles.container, { backgroundColor: theme.colors.surface }]}
+      contentContainerStyle={[
+        styles.container,
+        { backgroundColor: theme.colors.surface, marginBottom: bottomGap },
+      ]}
     >
       <Surface style={styles.card} elevation={0}>
         <View style={styles.headerRow}>
@@ -138,7 +145,7 @@ const styles = StyleSheet.create({
   container: {
     margin: 20,
     marginTop: 'auto',
-    marginBottom: 100,
+    // marginBottom is set inline (insets-aware) — see useBottomSheetPadding.
     borderRadius: 16,
     overflow: 'hidden',
   },

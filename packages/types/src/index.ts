@@ -58,7 +58,7 @@ export type {
 } from './compliance';
 
 // Map types
-export type { MapRegion, SavedSuburb, SuburbBoundary, OSMBuilding } from './map';
+export type { MapRegion, SavedSuburb, SuburbBoundary, OSMBuilding, GnafBuilding } from './map';
 
 // Google Places types
 export type { PlacePrediction, PlaceDetails, PlaceAddressComponent } from './google-places';

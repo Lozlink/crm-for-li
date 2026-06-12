@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { StyleSheet, View, Dimensions, Linking, TouchableOpacity, ScrollView, LayoutAnimation } from 'react-native';
+import { StyleSheet, View, Linking, TouchableOpacity, ScrollView, LayoutAnimation } from 'react-native';
 import { FAB, Portal, useTheme, Chip, Surface, Text, Dialog, Button, Switch, Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -11,14 +11,12 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useCRMStore, useStreetStats, usePropertyStore, useTrackingStore, useBuyerMatchStore, useProspectingMetrics, useProspectingMatcher, useLeadScoringEngine, useDeclaredBuildingsStore, useWhiteboardStore } from '@realestate-crm/hooks';
 import type { MultiDwellingBuilding, NearbyContact } from '@realestate-crm/hooks';
 import type { Contact, Property, ActivityWithContact, ContactRequirement, OSMBuilding, DeclaredBuilding } from '@realestate-crm/types';
-import { fetchSuburbByName, decodePolyline, fetchMultiDwellingBuildings } from '@realestate-crm/api';
+import { fetchSuburbByName, decodePolyline, fetchMultiDwellingBuildings, fetchGnafBuildings, isGnafLoaded } from '@realestate-crm/api';
 import { formatRelativeDate } from '@realestate-crm/utils';
 import type { SuburbBoundary } from '@realestate-crm/types';
 import { FilterSheet, ContactPreview, MapSearchBar, PropertyPreview, BuildingActivityDialog } from '@realestate-crm/ui';
 import TerritoryBriefingCard from '../../components/TerritoryBriefingCard';
 import { TIER_COLORS } from '../../components/LeadScoreBadge';
-
-const { width, height } = Dimensions.get('window');
 
 const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.googleMapsApiKey ||
   process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
@@ -133,6 +131,8 @@ export default function MapScreen() {
     latitude: number;
     longitude: number;
     address: string;
+    /** Real unit register from G-NAF when declared via a building press. */
+    knownUnitNumbers?: string[];
   }>({ visible: false, latitude: 0, longitude: 0, address: '' });
 
   const [fieldActivityWindow, setFieldActivityWindow] = useState<FieldActivityWindow>('30d');
@@ -245,15 +245,20 @@ export default function MapScreen() {
     const timer = setTimeout(async () => {
       const { latitude, longitude, latitudeDelta, longitudeDelta } = mapRegion;
       try {
-        const buildings = await fetchMultiDwellingBuildings(
-          latitude - latitudeDelta / 2,
-          longitude - longitudeDelta / 2,
-          latitude + latitudeDelta / 2,
-          longitude + longitudeDelta / 2,
-        );
+        const minLat = latitude - latitudeDelta / 2;
+        const minLng = longitude - longitudeDelta / 2;
+        const maxLat = latitude + latitudeDelta / 2;
+        const maxLng = longitude + longitudeDelta / 2;
+
+        // Prefer G-NAF (authoritative unit counts, our own DB — no flaky
+        // third-party servers). Falls back to OSM Overpass only when the
+        // gnaf_buildings table hasn't been loaded yet (scripts/import-gnaf.ts).
+        const buildings = (await isGnafLoaded())
+          ? await fetchGnafBuildings(minLat, minLng, maxLat, maxLng)
+          : await fetchMultiDwellingBuildings(minLat, minLng, maxLat, maxLng);
         setOsmBuildings(buildings);
       } catch (error) {
-        console.error('Failed to fetch OSM buildings:', error);
+        console.error('Failed to fetch buildings:', error);
       }
     }, 1000); // 1s debounce
 
@@ -265,6 +270,14 @@ export default function MapScreen() {
   const activeLayerCount = useMemo(() => {
     return Object.values(visibleLayers).filter(Boolean).length;
   }, [visibleLayers]);
+
+  // The buildings layer activates at latitudeDelta < 0.02. Near that upper
+  // (zoomed-out) end, unit-dense areas pack badges close enough that the
+  // unit-count pill overlaps its neighbours. Below this threshold we render
+  // icon-only badges (no count text) so the smaller pills stop colliding;
+  // the count returns once the user zooms in past it.
+  const BUILDING_BADGE_COUNT_DELTA = 0.012;
+  const showBuildingBadgeCounts = mapRegion.latitudeDelta < BUILDING_BADGE_COUNT_DELTA;
 
   const mappedContacts = useMemo(() => {
     // Compute viewport bounds with a 100% buffer so contacts near the edge don't pop in when panning
@@ -452,6 +465,32 @@ export default function MapScreen() {
     setTimeout(() => setPendingMarker(null), 500);
   }, [longPressDialog]);
 
+  // Building info dialog → "Add Unit Contacts": opens the declare flow with
+  // the building's address/coords, carrying the G-NAF unit register when the
+  // buildings layer knows it so real unit numbers get created.
+  const handleDeclareFromBuilding = useCallback(() => {
+    if (!selectedBuildingView) return;
+    setBuildingDialogVisible(false);
+    if (selectedBuildingView.kind === 'osm') {
+      const b = selectedBuildingView.building;
+      setMultiDwellingDialog({
+        visible: true,
+        latitude: b.center.latitude,
+        longitude: b.center.longitude,
+        address: b.address || b.name || '',
+        knownUnitNumbers: b.unitNumbers && b.unitNumbers.length > 0 ? b.unitNumbers : undefined,
+      });
+    } else {
+      const b = selectedBuildingView.building;
+      setMultiDwellingDialog({
+        visible: true,
+        latitude: b.latitude,
+        longitude: b.longitude,
+        address: b.address,
+      });
+    }
+  }, [selectedBuildingView]);
+
   const handleViewContact = useCallback(() => {
     if (selectedContact) {
       setPreviewVisible(false);
@@ -549,14 +588,26 @@ export default function MapScreen() {
     return 'rgba(239, 68, 68, 0.2)';                       // red, barely touched
   }, [findBuildingCoverage]);
 
-  const getDeclaredBuildingFillColor = useCallback((declared: DeclaredBuilding): string => {
+  // Solid variants for icon markers (point-based buildings) — same coverage
+  // tiers as the polygon fills, opaque so the badge reads at a glance.
+  const getBuildingMarkerColor = useCallback((building: OSMBuilding): string => {
+    const coverage = findBuildingCoverage(building);
+    const effectiveUnits = coverage?.estimatedUnits ?? building.estimatedUnits;
+    if (!coverage || coverage.totalUnitsVisited === 0) return '#7c3aed'; // purple, unvisited
+    const percent = (coverage.totalUnitsVisited / Math.max(1, effectiveUnits)) * 100;
+    if (percent >= 75) return '#16a34a';
+    if (percent >= 25) return '#d97706';
+    return '#dc2626';
+  }, [findBuildingCoverage]);
+
+  const getDeclaredMarkerColor = useCallback((declared: DeclaredBuilding): string => {
     const coverage = findDeclaredCoverage(declared);
     const visited = coverage?.totalUnitsVisited ?? 0;
-    if (visited === 0) return 'rgba(124, 58, 237, 0.1)';
+    if (visited === 0) return '#7c3aed';
     const percent = (visited / Math.max(1, declared.estimated_units)) * 100;
-    if (percent >= 75) return 'rgba(34, 197, 94, 0.3)';
-    if (percent >= 25) return 'rgba(234, 179, 8, 0.3)';
-    return 'rgba(239, 68, 68, 0.2)';
+    if (percent >= 75) return '#16a34a';
+    if (percent >= 25) return '#d97706';
+    return '#dc2626';
   }, [findDeclaredCoverage]);
 
   // Declared buildings already covered by an OSM polygon get drawn as polygons (polygon wins visually).
@@ -586,32 +637,15 @@ export default function MapScreen() {
     setBuildingDialogVisible(true);
   }, [findDeclaredCoverage]);
 
+  // "Start Prospecting" goes to the session chooser on the Prospecting tab
+  // (guided vs free tracking) — same single entry point as the Today card.
+  // It previously deep-linked to /contact/new in quick-note mode, which is
+  // not what a button named "Start Prospecting" should do; contact creation
+  // from a building now lives behind "Add Unit Contacts".
   const handleStartProspectingBuilding = useCallback(() => {
     if (!selectedBuildingView) return;
     setBuildingDialogVisible(false);
-    if (selectedBuildingView.kind === 'osm') {
-      const b = selectedBuildingView.building;
-      router.push({
-        pathname: '/contact/new',
-        params: {
-          lat: b.center.latitude.toString(),
-          lng: b.center.longitude.toString(),
-          address: b.address || '',
-          quickNote: 'true',
-        },
-      });
-    } else {
-      const b = selectedBuildingView.building;
-      router.push({
-        pathname: '/contact/new',
-        params: {
-          lat: b.latitude.toString(),
-          lng: b.longitude.toString(),
-          address: b.address,
-          quickNote: 'true',
-        },
-      });
-    }
+    router.push('/(tabs)/prospecting' as never);
   }, [selectedBuildingView, router]);
 
   const handleSearchLocationSelect = useCallback((lat: number, lng: number, name: string) => {
@@ -755,43 +789,70 @@ export default function MapScreen() {
           />
         ))}
 
-        {/* Building footprint polygons (buildings layer) */}
-        {visibleLayers.buildings && osmBuildings.map((building) => (
-          <Polygon
-            key={`bldg-${building.id}`}
-            coordinates={building.coordinates}
-            strokeColor="#7c3aed"
-            strokeWidth={2}
-            fillColor={getBuildingFillColor(building)}
-            tappable
-            onPress={() => handleBuildingPress(building)}
-          />
-        ))}
+        {/* Buildings layer. G-NAF buildings are address POINTS — rendered as
+            building-icon badges (icon + unit count, coloured by coverage).
+            OSM footprints (Overpass fallback) keep their real polygon shape. */}
+        {visibleLayers.buildings && osmBuildings.map((building) => {
+          const isPoint = building.id.startsWith('gnaf-');
+          if (isPoint) {
+            return (
+              <Marker
+                // Badge-mode in the key remounts the marker when the
+                // count-visibility threshold flips — tracksViewChanges={false}
+                // snapshots the view once, so without a remount the cached
+                // bitmap would keep showing the old (count vs icon-only) badge.
+                key={`bldg-${building.id}-${showBuildingBadgeCounts ? 'n' : 'i'}`}
+                coordinate={building.center}
+                onPress={() => handleBuildingPress(building)}
+                anchor={{ x: 0.5, y: 0.5 }}
+                tracksViewChanges={false}
+                // @ts-expect-error react-native-map-clustering reads this prop via duck typing
+                cluster={false}
+              >
+                <View style={[styles.buildingBadge, !showBuildingBadgeCounts && styles.buildingBadgeIconOnly, { backgroundColor: getBuildingMarkerColor(building) }]}>
+                  <Icon name="office-building" size={13} color="#fff" />
+                  {showBuildingBadgeCounts && (
+                    <Text style={styles.buildingBadgeText}>{building.estimatedUnits}</Text>
+                  )}
+                </View>
+              </Marker>
+            );
+          }
+          return (
+            <Polygon
+              key={`bldg-${building.id}`}
+              coordinates={building.coordinates}
+              strokeColor="#7c3aed"
+              strokeWidth={2}
+              fillColor={getBuildingFillColor(building)}
+              tappable
+              onPress={() => handleBuildingPress(building)}
+            />
+          );
+        })}
 
-        {/* Declared buildings (buildings layer) — user-declared buildings without an OSM polygon overlap */}
-        {visibleLayers.buildings && declaredBuildingsWithoutPolygons.map((declared) => (
-          <Circle
-            key={`declared-${declared.id}`}
-            center={{ latitude: declared.latitude, longitude: declared.longitude }}
-            radius={25}
-            strokeColor="#7c3aed"
-            strokeWidth={2}
-            fillColor={getDeclaredBuildingFillColor(declared)}
-          />
-        ))}
-        {/* Invisible tap target markers for declared-building circles (Circle doesn't expose onPress reliably) */}
-        {/* cluster={false} keeps each tap target individually addressable — otherwise the
-            clustering library would merge them and tap targets would silently disappear. */}
+        {/* Declared buildings without an overlapping layer building — same
+            icon-badge treatment (replaces the old Circle + invisible tap
+            marker pair; the visible marker IS the tap target now). */}
         {visibleLayers.buildings && declaredBuildingsWithoutPolygons.map((declared) => (
           <Marker
-            key={`declared-tap-${declared.id}`}
+            // Badge-mode in the key remounts on threshold flip — see the
+            // matching note on the G-NAF marker above (tracksViewChanges={false}).
+            key={`declared-${declared.id}-${showBuildingBadgeCounts ? 'n' : 'i'}`}
             coordinate={{ latitude: declared.latitude, longitude: declared.longitude }}
             onPress={() => handleDeclaredBuildingPress(declared)}
-            opacity={0}
             anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={false}
             // @ts-expect-error react-native-map-clustering reads this prop via duck typing
             cluster={false}
-          />
+          >
+            <View style={[styles.buildingBadge, !showBuildingBadgeCounts && styles.buildingBadgeIconOnly, { backgroundColor: getDeclaredMarkerColor(declared) }]}>
+              <Icon name="office-building-marker" size={13} color="#fff" />
+              {showBuildingBadgeCounts && (
+                <Text style={styles.buildingBadgeText}>{declared.estimated_units}</Text>
+              )}
+            </View>
+          </Marker>
         ))}
       </ClusterMapView>
 
@@ -1042,7 +1103,7 @@ export default function MapScreen() {
           <Dialog.Title>
             <View style={styles.buildingDialogTitleRow}>
               <Icon name="office-building" size={20} color="#7c3aed" />
-              <Text variant="titleMedium" style={styles.buildingDialogTitleText}>
+              <Text variant="titleMedium" style={styles.buildingDialogTitleText} numberOfLines={2}>
                 {selectedBuildingView?.kind === 'osm'
                   ? (selectedBuildingView.building.name || selectedBuildingView.building.address || 'Building')
                   : selectedBuildingView?.kind === 'declared'
@@ -1071,7 +1132,7 @@ export default function MapScreen() {
                   {addressText ? (
                     <View style={styles.buildingDetailRow}>
                       <Icon name="map-marker" size={16} color={theme.colors.onSurfaceVariant} />
-                      <Text variant="bodyMedium" style={styles.buildingDetailText}>
+                      <Text variant="bodyMedium" style={styles.buildingDetailText} numberOfLines={2}>
                         {addressText}
                       </Text>
                     </View>
@@ -1080,7 +1141,14 @@ export default function MapScreen() {
                   <View style={styles.buildingDetailRow}>
                     <Icon name="door" size={16} color={theme.colors.onSurfaceVariant} />
                     <Text variant="bodyMedium" style={styles.buildingDetailText}>
-                      {isDeclared ? 'Total units: ' : 'Estimated units: '}{effectiveUnits}
+                      {/* G-NAF buildings carry the real unit register — say so
+                          instead of presenting registered counts as estimates. */}
+                      {isDeclared
+                        ? 'Total units: '
+                        : (selectedBuildingView.building.unitNumbers?.length
+                          ? 'Registered units (G-NAF): '
+                          : 'Estimated units: ')}
+                      {effectiveUnits}
                     </Text>
                   </View>
 
@@ -1205,6 +1273,9 @@ export default function MapScreen() {
             >
               Pin to whiteboard
             </Button>
+            <Button icon="office-building-plus" onPress={handleDeclareFromBuilding}>
+              Add Unit Contacts
+            </Button>
             <Button icon="walk" mode="contained" onPress={handleStartProspectingBuilding}>
               Start Prospecting
             </Button>
@@ -1214,7 +1285,7 @@ export default function MapScreen() {
         <Dialog visible={longPressDialog.visible} onDismiss={dismissLongPressDialog}>
           <Dialog.Title>Add to Map</Dialog.Title>
           <Dialog.Content>
-            <Text variant="bodyMedium" style={{ marginBottom: 8 }}>
+            <Text variant="bodyMedium" style={{ marginBottom: 8 }} numberOfLines={3}>
               {longPressDialog.address || 'Loading address...'}
             </Text>
           </Dialog.Content>
@@ -1234,6 +1305,7 @@ export default function MapScreen() {
           initialLongitude={multiDwellingDialog.longitude}
           sessionId={null}
           initialMode="declare"
+          knownUnitNumbers={multiDwellingDialog.knownUnitNumbers}
         />
       </Portal>
 
@@ -1262,8 +1334,42 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   map: {
-    width,
-    height,
+    // flex: 1 — NOT Dimensions.get('window') captured at module load. The
+    // static size left the map rendering at the stale window size after a
+    // resize on Catalyst/desktop (map tiles in the top-left corner, dead
+    // grey space elsewhere).
+    flex: 1,
+  },
+
+  // Building icon badges (G-NAF + declared buildings)
+  buildingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  buildingBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  // Zoomed-out variant: no count text, so collapse to a tight round chip
+  // with equal padding around the icon. Smaller footprint = fewer collisions
+  // between neighbouring buildings in unit-dense areas.
+  buildingBadgeIconOnly: {
+    gap: 0,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    borderRadius: 14,
   },
 
   // Tag chips below search
@@ -1271,8 +1377,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 64,
     left: 0,
-    right: 0,
-    paddingHorizontal: 12,
+    // Clear the GPS button (top: 72, right: 12, 40 wide) so the chip row
+    // doesn't scroll under it — the button has a raised zIndex and would
+    // otherwise overlap/occlude the rightmost chip.
+    right: 60,
+    paddingLeft: 12,
   },
   tagChipScroll: {
     gap: 6,
@@ -1301,6 +1410,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
+    // Above all map content (markers/badges/polygons paint inside the map
+    // surface at z 0) but below the search dropdown (zIndex 1000) so an open
+    // suggestion list still covers this button rather than poking through.
+    zIndex: 10,
   },
 
   // Layers pill
@@ -1317,6 +1430,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
+    zIndex: 10,
   },
   layerBadge: {
     marginLeft: 6,
@@ -1477,6 +1591,7 @@ const styles = StyleSheet.create({
   fabGroup: {
     position: 'absolute',
     right: 0,
+    zIndex: 10,
   },
   dialogActions: {
     flexWrap: 'wrap',

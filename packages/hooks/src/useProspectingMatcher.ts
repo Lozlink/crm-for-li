@@ -99,9 +99,19 @@ export function useProspectingMatcher(
   const matchContactByAddress = useCallback(
     (address: string): Contact[] => {
       if (!address || address.trim().length < 3) return [];
-      return contacts.filter(
-        (c) => c.address && fuzzyTokenMatch(address, c.address),
-      );
+      return contacts.filter((c) => {
+        if (!c.address) return false;
+        // All query tokens must appear somewhere in the candidate (so a
+        // suburb in the query still disambiguates same-named streets)...
+        if (!fuzzyTokenMatch(address, c.address)) return false;
+        // ...but at least one token must also hit the STREET line (before
+        // the first comma). Without this, typing just a suburb
+        // ("Parramatta") matched every contact in that suburb as
+        // "at this address".
+        const streetLine = normalizeForMatch(c.address.split(',')[0] ?? '');
+        const tokens = normalizeForMatch(address).split(' ').filter(Boolean);
+        return tokens.some((t) => streetLine.includes(t));
+      });
     },
     [contacts],
   );

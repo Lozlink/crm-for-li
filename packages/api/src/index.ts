@@ -1,5 +1,6 @@
 export { supabase, isDemoMode, generateUUID } from './supabase';
 export { fetchSuburbBoundaries, fetchSuburbByName, fetchMultiDwellingBuildings } from './overpass';
+export { fetchGnafBuildings, isGnafLoaded, searchGnafBuildings } from './gnaf';
 
 // Auth
 export {

@@ -284,8 +284,10 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   chipsContainer: {
+    // No fixed maxHeight — `maxHeight: 40` clipped the bottom of `compact`
+    // outlined chips, cutting descenders off suburb names (Sydney, Penrith).
+    // The horizontal ScrollView sizes to its single chip row's content.
     marginTop: 8,
-    maxHeight: 40,
   },
   chipsContent: {
     gap: 8,

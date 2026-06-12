@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View, ScrollView, Dimensions, RefreshControl, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, ScrollView, RefreshControl, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { useTheme, Text, Chip, ActivityIndicator, Surface } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -91,13 +91,15 @@ const DAYS_BAND_COLORS: Record<DaysColorBand, { bg: string; text: string }> = {
 };
 
 const COLUMN_WIDTH = 260;
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // --- Component ---
 
 export default function PipelineScreen() {
   const theme = useTheme();
   const router = useRouter();
+  // Live window width so the kanban board's min-width floor tracks a Catalyst
+  // window resize (module-scope Dimensions.get captured a stale width).
+  const { width: screenWidth } = useWindowDimensions();
 
   const properties = usePropertyStore(state => state.properties);
   const isLoading = usePropertyStore(state => state.isLoading);
@@ -338,7 +340,7 @@ export default function PipelineScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[
           styles.boardContainer,
-          { minWidth: Math.max(stages.length * COLUMN_WIDTH, SCREEN_WIDTH) },
+          { minWidth: Math.max(stages.length * COLUMN_WIDTH, screenWidth) },
         ]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
